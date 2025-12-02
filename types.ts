@@ -51,6 +51,7 @@ declare global {
         mapTypeControl?: boolean;
         streetViewControl?: boolean;
         styles?: any[];
+        gestureHandling?: string;
       }
 
       // Coordinates

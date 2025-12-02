@@ -1,13 +1,13 @@
-
 import React from 'react';
-import { X, MapPin, Camera, Sparkles } from 'lucide-react';
+import { X, MapPin, Camera, Sparkles, Trash2 } from 'lucide-react';
 import { GRADES, getGradeColor, getGradeDescription } from '../utils/rating';
 
 interface InfoModalProps {
   onClose: () => void;
+  onClearDatabase?: () => void;
 }
 
-const InfoModal: React.FC<InfoModalProps> = ({ onClose }) => {
+const InfoModal: React.FC<InfoModalProps> = ({ onClose, onClearDatabase }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
       <div className="bg-gray-800 w-full max-w-lg rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
@@ -21,7 +21,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ onClose }) => {
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-6 text-gray-300">
+        <div className="p-6 overflow-y-auto space-y-6 text-gray-300 flex-1">
           
           <section>
             <h3 className="text-white font-semibold mb-2">How it works</h3>
@@ -55,15 +55,21 @@ const InfoModal: React.FC<InfoModalProps> = ({ onClose }) => {
              </div>
           </section>
 
-          <section className="bg-blue-900/20 p-4 rounded-xl border border-blue-500/20 text-xs">
-            <p>
-              <strong>Privacy Note:</strong> Your photos and data are stored locally in your browser. API Keys are used only for Google Maps and Gemini services and are not saved to any external server.
-            </p>
-          </section>
-
           <div className="text-center pt-4">
              <p className="text-xs text-gray-500">Version 1.2.0 • Powered by Gemini AI</p>
           </div>
+
+          {onClearDatabase && (
+            <div className="pt-8 border-t border-gray-700 mt-4">
+               <button 
+                 onClick={onClearDatabase}
+                 className="w-full flex items-center justify-center gap-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 text-xs border border-red-900 p-3 rounded-lg transition"
+               >
+                 <Trash2 size={14} />
+                 Reset Database (Delete All Data)
+               </button>
+            </div>
+          )}
 
         </div>
       </div>

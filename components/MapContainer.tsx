@@ -64,6 +64,9 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         disableDefaultUI: false,
         mapTypeControl: false,
         streetViewControl: false,
+        // 'greedy' allows 1-finger panning on mobile and scroll-to-zoom on desktop
+        // without the "Use two fingers to move the map" overlay.
+        gestureHandling: 'greedy', 
       });
 
       setMapInstance(map);

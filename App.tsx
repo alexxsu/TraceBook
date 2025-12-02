@@ -55,8 +55,16 @@ function App() {
     // Subscribe to 'restaurants' collection
     const unsubscribe = onSnapshot(collection(db, "restaurants"), (snapshot) => {
       const fetchedRestaurants: Restaurant[] = [];
-      snapshot.forEach((doc) => {
-        fetchedRestaurants.push(doc.data() as Restaurant);
+      snapshot.forEach((docSnapshot) => {
+        const data = docSnapshot.data() as Restaurant;
+        
+        // Auto-cleanup: If a restaurant has no visits, it shouldn't exist.
+        // This removes "ghost" spots from the map and cleans the DB.
+        if (!data.visits || data.visits.length === 0) {
+          deleteDoc(docSnapshot.ref).catch(e => console.error("Auto-cleanup error:", e));
+        } else {
+          fetchedRestaurants.push(data);
+        }
       });
       setRestaurants(fetchedRestaurants);
       
@@ -179,6 +187,24 @@ function App() {
     } catch (e) {
       console.error("Error deleting visit:", e);
       alert("Failed to delete memory.");
+    }
+  };
+
+  // 5. Clear Entire Database
+  const handleClearDatabase = async () => {
+    if (!window.confirm("WARNING: This will delete ALL experiences from the database. This action cannot be undone. Are you sure?")) {
+      return;
+    }
+
+    try {
+      // Loop through all restaurants and delete them
+      const deletePromises = restaurants.map(r => deleteDoc(doc(db, "restaurants", r.id)));
+      await Promise.all(deletePromises);
+      alert("Database has been reset successfully.");
+      setViewState(ViewState.MAP);
+    } catch (e) {
+      console.error("Error clearing database:", e);
+      alert("Failed to clear database. Please check permissions.");
     }
   };
 
@@ -328,7 +354,10 @@ function App() {
       )}
 
       {viewState === ViewState.INFO && (
-        <InfoModal onClose={() => setViewState(ViewState.MAP)} />
+        <InfoModal 
+          onClose={() => setViewState(ViewState.MAP)} 
+          onClearDatabase={handleClearDatabase}
+        />
       )}
 
       {viewState === ViewState.USER_HISTORY && user && (
