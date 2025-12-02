@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon } from 'lucide-react';
+import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon, BarChart2 } from 'lucide-react';
 import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID } from './types';
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
@@ -8,6 +8,7 @@ import RestaurantDetail from './components/RestaurantDetail';
 import InfoModal from './components/InfoModal';
 import UserHistoryModal from './components/UserHistoryModal';
 import EditVisitModal from './components/EditVisitModal';
+import StatsModal from './components/StatsModal';
 
 // Firebase Imports
 import { auth, googleProvider, db } from './firebaseConfig';
@@ -30,12 +31,8 @@ function App() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
   
-  // New state to hold data being edited
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant, visit: Visit } | null>(null);
-
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
-  
-  // Default fallback location (Toronto)
   const [currentMapCenter, setCurrentMapCenter] = useState<Coordinates>({ lat: 43.6532, lng: -79.3832 });
 
   // 1. Auth Listener
@@ -45,7 +42,6 @@ function App() {
         setUser(currentUser);
         setViewState(ViewState.MAP);
       } else {
-        // Only reset to login if we aren't already in guest mode
         setUser((prev) => (prev?.uid === GUEST_ID ? prev : null));
         setViewState((prev) => (prev === ViewState.MAP && user?.uid === GUEST_ID ? ViewState.MAP : ViewState.LOGIN));
       }
@@ -53,18 +49,14 @@ function App() {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // 2. Firestore Real-time Sync (Only when logged in or guest)
+  // 2. Firestore Real-time Sync
   useEffect(() => {
     if (!user) return;
 
-    // Subscribe to 'restaurants' collection
     const unsubscribe = onSnapshot(collection(db, "restaurants"), (snapshot) => {
       const fetchedRestaurants: Restaurant[] = [];
       snapshot.forEach((docSnapshot) => {
         const data = docSnapshot.data() as Restaurant;
-        
-        // Auto-cleanup: If a restaurant has no visits, it shouldn't exist.
-        // This removes "ghost" spots from the map and cleans the DB.
         if (!data.visits || data.visits.length === 0) {
           deleteDoc(docSnapshot.ref).catch(e => console.error("Auto-cleanup error:", e));
         } else {
@@ -73,13 +65,11 @@ function App() {
       });
       setRestaurants(fetchedRestaurants);
       
-      // Update selectedRestaurant if it exists to reflect real-time changes (e.g. deletions)
       if (selectedRestaurant) {
         const updated = fetchedRestaurants.find(r => r.id === selectedRestaurant.id);
         if (updated) {
           setSelectedRestaurant(updated);
         } else {
-          // If the selected restaurant is no longer in the fetched list (it was deleted), close the view
           setSelectedRestaurant(null);
           setViewState(ViewState.MAP);
         }
@@ -101,11 +91,7 @@ function App() {
   };
 
   const handleGuestLogin = () => {
-    setUser({
-      uid: GUEST_ID,
-      displayName: 'Guest',
-      photoURL: null
-    });
+    setUser({ uid: GUEST_ID, displayName: 'Guest', photoURL: null });
     setViewState(ViewState.MAP);
   };
 
@@ -128,35 +114,24 @@ function App() {
     });
   }, []);
 
-  // 3. Save to Firestore
   const handleSaveVisit = async (restaurantInfo: Restaurant, visit: Visit) => {
     if (!user) return;
 
-    // Add creator info
     const fullVisit: Visit = {
       ...visit,
       createdBy: user.uid,
       creatorName: user.displayName || 'Anonymous',
-      creatorPhotoURL: user.photoURL // Pass photo URL here
+      creatorPhotoURL: user.photoURL 
     };
 
     const restaurantRef = doc(db, "restaurants", restaurantInfo.id);
-    
-    // Check if restaurant already exists in our local state (which reflects DB)
     const exists = restaurants.some(r => r.id === restaurantInfo.id);
 
     try {
       if (exists) {
-        // Update existing doc
-        await updateDoc(restaurantRef, {
-          visits: arrayUnion(fullVisit)
-        });
+        await updateDoc(restaurantRef, { visits: arrayUnion(fullVisit) });
       } else {
-        // Create new doc
-        const newRestaurant = {
-          ...restaurantInfo,
-          visits: [fullVisit]
-        };
+        const newRestaurant = { ...restaurantInfo, visits: [fullVisit] };
         await setDoc(restaurantRef, newRestaurant);
       }
       setViewState(ViewState.MAP);
@@ -166,25 +141,15 @@ function App() {
     }
   };
 
-  // 4. Update Visit
   const handleUpdateVisit = async (restaurantId: string, oldVisit: Visit, newVisit: Visit) => {
     if (!user) return;
-
     try {
       const restaurantRef = doc(db, "restaurants", restaurantId);
       const restaurantDoc = await getDoc(restaurantRef);
-      
       if (restaurantDoc.exists()) {
         const currentData = restaurantDoc.data() as Restaurant;
-        
-        // Find and replace the visit
         const updatedVisits = currentData.visits.map(v => v.id === oldVisit.id ? newVisit : v);
-        
-        await updateDoc(restaurantRef, {
-          visits: updatedVisits
-        });
-        
-        // If we are editing, close the edit modal and return to detail
+        await updateDoc(restaurantRef, { visits: updatedVisits });
         setEditingData(null);
         setViewState(ViewState.RESTAURANT_DETAIL);
       }
@@ -194,28 +159,19 @@ function App() {
     }
   };
 
-  // 5. Delete Visit
   const handleDeleteVisit = async (restaurant: Restaurant, visitToDelete: Visit) => {
     try {
       const restaurantRef = doc(db, "restaurants", restaurant.id);
       const restaurantDoc = await getDoc(restaurantRef);
-      
       if (restaurantDoc.exists()) {
         const currentData = restaurantDoc.data() as Restaurant;
-        // Filter out the visit by ID
         const updatedVisits = currentData.visits.filter(v => v.id !== visitToDelete.id);
-        
         if (updatedVisits.length === 0) {
-          // If no visits remain, delete the entire restaurant document
           await deleteDoc(restaurantRef);
-          // Close the detail view immediately
           setSelectedRestaurant(null);
           setViewState(ViewState.MAP);
         } else {
-          // Otherwise, just update the visits array
-          await updateDoc(restaurantRef, {
-            visits: updatedVisits
-          });
+          await updateDoc(restaurantRef, { visits: updatedVisits });
         }
       }
     } catch (e) {
@@ -224,27 +180,22 @@ function App() {
     }
   };
 
-  // 6. Clear Entire Database
   const handleClearDatabase = async () => {
     if (!window.confirm("WARNING: This will delete ALL experiences from the database. This action cannot be undone. Are you sure?")) {
       return;
     }
-
     try {
-      // Loop through all restaurants and delete them
       const deletePromises = restaurants.map(r => deleteDoc(doc(db, "restaurants", r.id)));
       await Promise.all(deletePromises);
       alert("Database has been reset successfully.");
       setViewState(ViewState.MAP);
     } catch (e) {
       console.error("Error clearing database:", e);
-      alert("Failed to clear database. Please check permissions.");
+      alert("Failed to clear database.");
     }
   };
 
-  const openAddModal = () => {
-    setViewState(ViewState.ADD_ENTRY);
-  };
+  const openAddModal = () => setViewState(ViewState.ADD_ENTRY);
 
   const handleMarkerClick = useCallback((r: Restaurant) => {
     setSelectedRestaurant(r);
@@ -256,16 +207,13 @@ function App() {
     setViewState(ViewState.EDIT_ENTRY);
   };
 
-  // --- Login Screen ---
   if (viewState === ViewState.LOGIN) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 p-6 relative overflow-hidden">
-         {/* Background Decoration */}
          <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
             <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600 rounded-full blur-[100px]"></div>
             <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600 rounded-full blur-[100px]"></div>
          </div>
-
         <div className="bg-gray-800/80 backdrop-blur p-8 rounded-2xl shadow-2xl max-w-md w-full border border-gray-700 z-10 text-center">
           <div className="flex justify-center mb-6">
             <div className="bg-gradient-to-tr from-blue-600 to-purple-600 p-4 rounded-2xl shadow-lg">
@@ -276,7 +224,6 @@ function App() {
           <p className="text-gray-400 mb-8 leading-relaxed">
             Map your culinary journey. Share food memories with your partner in real-time.
           </p>
-          
           <button 
             onClick={handleLogin}
             className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-6 rounded-xl transition shadow-lg transform hover:scale-[1.02] mb-4"
@@ -289,7 +236,6 @@ function App() {
             </svg>
             Sign in with Google
           </button>
-
           <button 
             onClick={handleGuestLogin}
             className="text-sm text-gray-400 hover:text-white transition underline decoration-gray-600 hover:decoration-white"
@@ -301,10 +247,8 @@ function App() {
     );
   }
 
-  // --- Main App ---
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-gray-900">
-      {/* Map Layer */}
       <MapContainer 
         apiKey={GOOGLE_MAPS_KEY} 
         restaurants={restaurants}
@@ -312,7 +256,7 @@ function App() {
         onMarkerClick={handleMarkerClick}
       />
 
-      {/* Top Left Controls */}
+      {/* Top Controls */}
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 items-start">
         <div className="flex gap-2">
           <div className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-lg shadow-lg">
@@ -328,7 +272,6 @@ function App() {
           </button>
         </div>
         
-        {/* User Info & Logout */}
         {user && (
           <div className="bg-gray-800/90 backdrop-blur border border-gray-700 p-1.5 pl-3 pr-1.5 rounded-full shadow-lg flex items-center gap-2">
              <div 
@@ -349,6 +292,17 @@ function App() {
              </button>
           </div>
         )}
+      </div>
+
+      {/* Stats Button - Top Right - Moved down to top-24 to avoid map controls */}
+      <div className="absolute top-24 right-4 z-10">
+        <button 
+          onClick={() => setViewState(ViewState.STATS)}
+          className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
+          title="Rankings"
+        >
+          <BarChart2 size={24} className="group-hover:text-blue-400 transition" />
+        </button>
       </div>
 
       {/* Add Button */}
@@ -397,9 +351,7 @@ function App() {
             setSelectedRestaurant(null);
             setViewState(ViewState.MAP);
           }}
-          onAddAnotherVisit={() => {
-            setViewState(ViewState.ADD_ENTRY);
-          }}
+          onAddAnotherVisit={() => setViewState(ViewState.ADD_ENTRY)}
           onDeleteVisit={handleDeleteVisit}
           onEditVisit={handleEditTrigger}
         />
@@ -421,6 +373,13 @@ function App() {
             setSelectedRestaurant(r);
             setViewState(ViewState.RESTAURANT_DETAIL);
           }}
+        />
+      )}
+
+      {viewState === ViewState.STATS && (
+        <StatsModal 
+          restaurants={restaurants}
+          onClose={() => setViewState(ViewState.MAP)}
         />
       )}
     </div>

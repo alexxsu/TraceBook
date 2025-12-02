@@ -165,4 +165,5 @@ export enum ViewState {
   INFO = 'INFO',
   USER_HISTORY = 'USER_HISTORY',
   EDIT_ENTRY = 'EDIT_ENTRY',
+  STATS = 'STATS',
 }

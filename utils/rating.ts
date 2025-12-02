@@ -40,8 +40,8 @@ export const getGradeDescription = (grade: string): string => {
     case 'A': return 'Excellent, value exceeds price';
     case 'B': return 'Good, value matches price';
     case 'C': return 'Bad, value mismatch';
-    case 'D': return 'Scam, avoid at all cost';
-    case 'E': return 'Inedible';
+    case 'D': return 'Terrible, need to avoid';
+    case 'E': return 'Hell, recommend to someone you hate';
     default: return '';
   }
 };

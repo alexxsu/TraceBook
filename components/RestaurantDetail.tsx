@@ -1,10 +1,10 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { X, Calendar, MapPin, Share2, User, Trash2, ChevronLeft, ChevronRight, Download, Loader2, Pencil } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Calendar, MapPin, Share2, User, Trash2, Pencil, Loader2, ExternalLink } from 'lucide-react';
 import { Restaurant, Visit, GUEST_ID } from '../types';
 import { getGradeColor, gradeToScore, scoreToGrade } from '../utils/rating';
 import html2canvas from 'html2canvas';
+import ImageSlider from './ImageSlider';
 
 interface RestaurantDetailProps {
   restaurant: Restaurant;
@@ -15,193 +15,6 @@ interface RestaurantDetailProps {
   onEditVisit: (restaurant: Restaurant, visit: Visit) => void;
 }
 
-// Sub-component for Image Slider
-const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
-  const [index, setIndex] = useState(0);
-  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
-  
-  // Touch state for swipe detection
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-
-  if (!photos || photos.length === 0) return <div className="h-48 bg-gray-800" />;
-
-  const next = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setIndex((prev) => (prev + 1) % photos.length);
-  };
-
-  const prev = (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setIndex((prev) => (prev - 1 + photos.length) % photos.length);
-  };
-
-  // Keyboard navigation for lightbox
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isLightboxOpen) return;
-      
-      if (e.key === 'ArrowRight') {
-        setIndex((prev) => (prev + 1) % photos.length);
-      } else if (e.key === 'ArrowLeft') {
-        setIndex((prev) => (prev - 1 + photos.length) % photos.length);
-      } else if (e.key === 'Escape') {
-        setIsLightboxOpen(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLightboxOpen, photos.length]);
-
-  // Touch Handlers
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    const minSwipeDistance = 50;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-    
-    if (isLeftSwipe) {
-      setIndex((prev) => (prev + 1) % photos.length);
-    } else if (isRightSwipe) {
-      setIndex((prev) => (prev - 1 + photos.length) % photos.length);
-    }
-  };
-
-  return (
-    <>
-      <div 
-        className="h-48 w-full relative group overflow-hidden bg-gray-900 cursor-zoom-in"
-        onClick={() => setIsLightboxOpen(true)}
-      >
-        {/* Carousel Container */}
-        <div 
-          className="flex h-full transition-transform duration-300 ease-out"
-          style={{ transform: `translateX(-${index * 100}%)` }}
-        >
-          {photos.map((photo, i) => (
-            <img 
-              key={i}
-              src={photo} 
-              className="w-full h-full object-cover flex-shrink-0" 
-              alt={`Food ${i + 1}`} 
-            />
-          ))}
-        </div>
-        
-        {photos.length > 1 && (
-          <>
-            <div className="absolute inset-0 flex items-center justify-between p-2 opacity-0 group-hover:opacity-100 transition z-10 pointer-events-none">
-              <button onClick={prev} className="pointer-events-auto bg-black/50 hover:bg-black/70 p-1 rounded-full text-white backdrop-blur-sm">
-                <ChevronLeft size={16} />
-              </button>
-              <button onClick={next} className="pointer-events-auto bg-black/50 hover:bg-black/70 p-1 rounded-full text-white backdrop-blur-sm">
-                <ChevronRight size={16} />
-              </button>
-            </div>
-            <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1 z-20 pointer-events-none">
-               {photos.map((_, i) => (
-                 <div key={i} className={`w-1.5 h-1.5 rounded-full shadow-sm transition-colors ${i === index ? 'bg-white' : 'bg-white/40'}`} />
-               ))}
-            </div>
-            <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-white z-10 border border-white/10 pointer-events-none">
-              {index + 1}/{photos.length}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Fullscreen Lightbox Portal */}
-      {isLightboxOpen && createPortal(
-        <div 
-          className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-200"
-          onClick={() => setIsLightboxOpen(false)}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-        >
-          {/* Close Button - Top Right (Fixed Position) */}
-          <button 
-             className="absolute top-4 right-4 z-[60] p-3 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all cursor-pointer hover:scale-105"
-             onClick={(e) => {
-               e.stopPropagation();
-               setIsLightboxOpen(false);
-             }}
-          >
-            <X size={32} />
-          </button>
-
-          {/* Navigation - Left */}
-          {photos.length > 1 && (
-             <button 
-               onClick={prev} 
-               className="hidden md:block absolute left-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
-             >
-               <ChevronLeft size={40} />
-             </button>
-          )}
-
-           {/* Navigation - Right */}
-          {photos.length > 1 && (
-             <button 
-               onClick={next} 
-               className="hidden md:block absolute right-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
-             >
-               <ChevronRight size={40} />
-             </button>
-          )}
-
-          {/* Main Image Slider Track */}
-          <div className="w-full h-full overflow-hidden">
-            <div 
-              className="flex h-full transition-transform duration-300 ease-out"
-              style={{ transform: `translateX(-${index * 100}%)` }}
-            >
-              {photos.map((photo, i) => (
-                <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center p-2 md:p-12">
-                   <img 
-                     src={photo} 
-                     className="max-w-full max-h-full object-contain shadow-2xl select-none"
-                     alt={`Full view ${i + 1}`}
-                     onClick={(e) => {
-                        // Prevent click on image from closing the lightbox
-                        e.stopPropagation();
-                     }}
-                   />
-                </div>
-              ))}
-            </div>
-          </div>
-
-           {/* Pagination Dots - Bottom */}
-           {photos.length > 1 && (
-             <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-3 z-50" onClick={(e) => e.stopPropagation()}>
-                {photos.map((_, i) => (
-                  <button 
-                    key={i} 
-                    onClick={() => setIndex(i)}
-                    className={`w-3 h-3 rounded-full transition-all cursor-pointer ${i === index ? 'bg-white scale-125' : 'bg-white/30 hover:bg-white/50'}`} 
-                  />
-                ))}
-             </div>
-          )}
-        </div>,
-        document.body
-      )}
-    </>
-  );
-};
-
 const RestaurantDetail: React.FC<RestaurantDetailProps> = ({ 
   restaurant, 
   currentUserUid, 
@@ -210,11 +23,11 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   onDeleteVisit,
   onEditVisit
 }) => {
+  const [activeTab, setActiveTab] = useState<'timeline' | 'info'>('timeline');
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [shareBase64Map, setShareBase64Map] = useState<Record<string, string>>({});
   const shareRef = useRef<HTMLDivElement>(null);
   
-  // Calculate this at the top level so it's available for both the main render and the share handler
   const sortedVisits = [...restaurant.visits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const formatDate = (dateStr: string) => {
@@ -230,20 +43,16 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     setIsGeneratingShare(true);
 
     try {
-      // 1. Pre-process images to Base64 to bypass CORS issues in html2canvas
       const urls = sortedVisits.map(v => v.photoDataUrl).filter(url => url);
       const uniqueUrls = [...new Set(urls)];
-      
       const newBase64Map: Record<string, string> = {};
 
       await Promise.all(uniqueUrls.map(async (url) => {
         try {
-          // If it's already a data URL, skip fetch
           if (url.startsWith('data:')) {
              newBase64Map[url] = url;
              return;
           }
-
           const response = await fetch(url);
           const blob = await response.blob();
           const base64 = await new Promise<string>((resolve, reject) => {
@@ -255,28 +64,22 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
           newBase64Map[url] = base64;
         } catch (err) {
           console.warn("Error converting image for share:", url, err);
-          // Fallback to original URL
           newBase64Map[url] = url;
         }
       }));
 
       setShareBase64Map(newBase64Map);
-
-      // Wait for state update and re-render of the hidden div
       await new Promise(resolve => setTimeout(resolve, 500));
 
       const canvas = await html2canvas(shareRef.current, {
         useCORS: true,
         allowTaint: true,
-        backgroundColor: '#111827', // Match gray-900
-        scale: 2, // Higher resolution
+        backgroundColor: '#111827',
+        scale: 2,
       });
 
       canvas.toBlob(async (blob: Blob | null) => {
-        if (!blob) {
-          throw new Error('Canvas is empty');
-        }
-
+        if (!blob) throw new Error('Canvas is empty');
         const file = new File([blob], `${restaurant.name.replace(/\s+/g, '_')}_Experience.png`, { type: 'image/png' });
 
         if (navigator.share) {
@@ -287,7 +90,6 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
               text: `Check out my experience at ${restaurant.name} on 宝宝少爷寻味地图!`
             });
           } catch (shareError) {
-             console.log("Share API cancelled or failed, falling back to download", shareError);
              downloadImage(canvas);
           }
         } else {
@@ -316,36 +118,32 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     }
   };
 
-  // Check if current user has permission to delete specific visit
   const canEditOrDeleteVisit = (visit: Visit): boolean => {
     if (!currentUserUid) return false;
-    
-    // 1. User can delete their own post
     if (visit.createdBy === currentUserUid) return true;
-
-    // 2. Real Google Logged In Users (not guests) can delete Guest posts
     const isRealUser = currentUserUid !== GUEST_ID;
     const isGuestPost = visit.createdBy === GUEST_ID;
-
     if (isRealUser && isGuestPost) return true;
-
     return false;
   };
 
-  // Calculate average grade
   const calculateAverageGrade = () => {
     if (restaurant.visits.length === 0) return 'N/A';
-    
     let totalScore = 0;
     restaurant.visits.forEach(v => {
       totalScore += gradeToScore(v.rating);
     });
-    
     const avgScore = totalScore / restaurant.visits.length;
     return scoreToGrade(avgScore);
   };
 
   const avgGrade = calculateAverageGrade();
+
+  const handleOpenGoogleMaps = () => {
+    const query = encodeURIComponent(`${restaurant.name} ${restaurant.address}`);
+    const url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+    window.open(url, '_blank');
+  };
 
   return (
     <>
@@ -390,104 +188,161 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
           </div>
         </div>
 
-        {/* Visits Feed */}
+        {/* Tabs Navigation */}
+        <div className="flex border-b border-gray-800 bg-gray-900">
+          <button 
+            onClick={() => setActiveTab('timeline')}
+            className={`flex-1 py-3 text-sm font-medium transition ${activeTab === 'timeline' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+          >
+            Timeline
+          </button>
+          <button 
+            onClick={() => setActiveTab('info')}
+            className={`flex-1 py-3 text-sm font-medium transition ${activeTab === 'info' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
+          >
+            Info
+          </button>
+        </div>
+
+        {/* Tab Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Timeline</h3>
-              <button 
-                onClick={handleShareAsImage} 
-                disabled={isGeneratingShare}
-                className="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-xs bg-blue-900/20 px-2 py-1 rounded transition disabled:opacity-50"
-              >
-                {isGeneratingShare ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />}
-                Share Card
-              </button>
-          </div>
+          
+          {/* TIMELINE TAB */}
+          {activeTab === 'timeline' && (
+            <>
+              <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Memories</h3>
+                  <button 
+                    onClick={handleShareAsImage} 
+                    disabled={isGeneratingShare}
+                    className="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-xs bg-blue-900/20 px-2 py-1 rounded transition disabled:opacity-50"
+                  >
+                    {isGeneratingShare ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />}
+                    Share Card
+                  </button>
+              </div>
 
-          {restaurant.visits.length === 0 ? (
-             <div className="text-center text-gray-500 py-10">
-               <p>No visits recorded.</p>
-             </div>
-          ) : (
-            sortedVisits.map((visit) => {
-              // Normalize photos list (legacy support)
-              const photos = visit.photos && visit.photos.length > 0 ? visit.photos : [visit.photoDataUrl];
-              
-              return (
-                <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm group">
+              {restaurant.visits.length === 0 ? (
+                 <div className="text-center text-gray-500 py-10">
+                   <p>No visits recorded.</p>
+                 </div>
+              ) : (
+                sortedVisits.map((visit) => {
+                  const photos = visit.photos && visit.photos.length > 0 ? visit.photos : [visit.photoDataUrl];
                   
-                  {/* Image Section Container - Relative for absolute positioning of overlays */}
-                  <div className="relative">
-                    {/* Action Buttons (Edit/Delete) */}
-                    {canEditOrDeleteVisit(visit) && (
-                      <div className="absolute top-2 right-2 z-20 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button 
-                          onClick={() => onEditVisit(restaurant, visit)}
-                          className="bg-blue-600/80 hover:bg-blue-500 p-1.5 rounded-full text-white"
-                          title="Edit"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(visit)}
-                          className="bg-red-600/80 hover:bg-red-500 p-1.5 rounded-full text-white"
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Image Slider */}
-                    <ImageSlider photos={photos} />
-
-                    {/* Creator Badge - Positioned relative to image, with truncation and PFP */}
-                    {visit.creatorName && (
-                      <div className="absolute bottom-2 left-2 z-10 bg-black/60 backdrop-blur-md pl-1 pr-3 py-1 rounded-full flex items-center gap-2 max-w-[85%] border border-white/10 pointer-events-none">
-                        {visit.creatorPhotoURL ? (
-                           <img src={visit.creatorPhotoURL} alt="User" className="w-5 h-5 rounded-full object-cover border border-gray-400" />
-                        ) : (
-                          <div className="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center border border-gray-500">
-                            <User size={10} className="text-gray-300" />
+                  return (
+                    <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm group">
+                      
+                      <div className="relative">
+                        {canEditOrDeleteVisit(visit) && (
+                          <div className="absolute top-2 right-2 z-20 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                             <button 
+                              onClick={() => onEditVisit(restaurant, visit)}
+                              className="bg-blue-600/80 hover:bg-blue-500 p-1.5 rounded-full text-white"
+                              title="Edit"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(visit)}
+                              className="bg-red-600/80 hover:bg-red-500 p-1.5 rounded-full text-white"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         )}
-                        <span className="text-[10px] text-white font-medium truncate">
-                          {visit.creatorName}
-                        </span>
+
+                        <ImageSlider photos={photos} />
+
+                        {visit.creatorName && (
+                          <div className="absolute bottom-2 left-2 z-10 bg-black/60 backdrop-blur-md pl-1 pr-3 py-1 rounded-full flex items-center gap-2 max-w-[85%] border border-white/10 pointer-events-none">
+                            {visit.creatorPhotoURL ? (
+                               <img src={visit.creatorPhotoURL} alt="User" className="w-5 h-5 rounded-full object-cover border border-gray-400" />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center border border-gray-500">
+                                <User size={10} className="text-gray-300" />
+                              </div>
+                            )}
+                            <span className="text-[10px] text-white font-medium truncate">
+                              {visit.creatorName}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  
-                  <div className="p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-gray-700 font-bold ${getGradeColor(visit.rating)}`}>
-                        {visit.rating}
-                      </div>
-                      <div className="flex items-center gap-1 text-gray-500 text-xs mt-1">
-                        <Calendar size={12} />
-                        <span>{formatDate(visit.date)}</span>
+                      
+                      <div className="p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-gray-700 font-bold ${getGradeColor(visit.rating)}`}>
+                            {visit.rating}
+                          </div>
+                          <div className="flex items-center gap-1 text-gray-500 text-xs mt-1">
+                            <Calendar size={12} />
+                            <span>{formatDate(visit.date)}</span>
+                          </div>
+                        </div>
+                        
+                        {visit.comment && (
+                          <p className="text-gray-300 text-sm mb-3">"{visit.comment}"</p>
+                        )}
                       </div>
                     </div>
-                    
-                    {visit.comment && (
-                      <p className="text-gray-300 text-sm mb-3">"{visit.comment}"</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+                  );
+                })
+              )}
+            </>
           )}
+
+          {/* INFO TAB */}
+          {activeTab === 'info' && (
+            <div className="space-y-6">
+               <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Location Details</h3>
+                 
+                 <div className="space-y-4">
+                   <div>
+                     <label className="text-xs text-gray-500">Name</label>
+                     <p className="text-white font-medium">{restaurant.name}</p>
+                   </div>
+                   
+                   <div>
+                     <label className="text-xs text-gray-500">Address</label>
+                     <p className="text-white font-medium">{restaurant.address}</p>
+                   </div>
+
+                   <div>
+                      <label className="text-xs text-gray-500">Coordinates</label>
+                      <p className="text-gray-400 font-mono text-xs">
+                        {restaurant.location.lat.toFixed(5)}, {restaurant.location.lng.toFixed(5)}
+                      </p>
+                   </div>
+
+                   <button 
+                     onClick={handleOpenGoogleMaps}
+                     className="w-full flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-lg transition border border-gray-600"
+                   >
+                     <MapPin size={18} />
+                     Open in Google Maps
+                     <ExternalLink size={14} className="opacity-70" />
+                   </button>
+                 </div>
+               </div>
+            </div>
+          )}
+
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-gray-800 bg-gray-900 flex-shrink-0">
-          <button 
-            onClick={onAddAnotherVisit}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg transition"
-          >
-            Add Another Visit Here
-          </button>
-        </div>
+        {activeTab === 'timeline' && (
+          <div className="p-4 border-t border-gray-800 bg-gray-900 flex-shrink-0">
+            <button 
+              onClick={onAddAnotherVisit}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg transition"
+            >
+              Add Another Visit Here
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Hidden Share Receipt Render */}
@@ -518,7 +373,6 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
         <div className="space-y-6">
            {sortedVisits.map((visit, i) => (
              <div key={i} className="flex gap-4">
-                {/* Timeline Line */}
                 <div className="relative flex flex-col items-center">
                    <div className="w-3 h-3 rounded-full bg-gray-600 z-10"></div>
                    {i !== sortedVisits.length - 1 && <div className="w-0.5 h-full bg-gray-800 absolute top-3"></div>}
