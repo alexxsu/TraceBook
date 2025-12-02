@@ -4,7 +4,7 @@ import { Camera, MapPin, Search, Loader2, X, Image as ImageIcon, ChevronLeft, Ch
 import { Coordinates, PlaceResult, Restaurant, Visit } from '../types';
 import { getGPSFromImage } from '../utils/exif';
 import { compressImage } from '../utils/image';
-import { GRADES } from '../utils/rating';
+import { GRADES, getGradeDescription, getGradeColor } from '../utils/rating';
 import { storage } from '../firebaseConfig';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 // Import heic2any properly
@@ -411,6 +411,9 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
                       {grade}
                     </button>
                   ))}
+                </div>
+                <div className={`text-center mt-3 text-sm font-medium transition-colors ${getGradeColor(rating)}`}>
+                  {getGradeDescription(rating)}
                 </div>
               </div>
 

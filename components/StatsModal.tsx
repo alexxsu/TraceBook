@@ -2,7 +2,7 @@
 import React from 'react';
 import { X, MapPin, Calendar, User as UserIcon } from 'lucide-react';
 import { Restaurant, Visit } from '../types';
-import { GRADES, getGradeColor } from '../utils/rating';
+import { GRADES, getGradeColor, getGradeDescription } from '../utils/rating';
 import ImageSlider from './ImageSlider';
 
 interface StatsModalProps {
@@ -64,11 +64,16 @@ const StatsModal: React.FC<StatsModalProps> = ({ restaurants, onClose }) => {
             return (
               <div key={grade} className="space-y-4">
                 <div className="flex items-center gap-4 border-b border-gray-700 pb-2">
-                  <div className={`text-3xl font-black ${getGradeColor(grade)} w-12 text-center`}>
+                  <div className={`text-4xl font-black ${getGradeColor(grade)} w-16 text-center`}>
                     {grade}
                   </div>
-                  <div className="text-gray-400 text-sm font-medium uppercase tracking-widest">
-                    {visits.length} Experiences
+                  <div className="flex flex-col justify-center">
+                    <span className={`font-bold text-lg ${getGradeColor(grade)}`}>
+                      {getGradeDescription(grade)}
+                    </span>
+                    <span className="text-gray-400 text-xs font-medium uppercase tracking-widest mt-0.5">
+                      {visits.length} Experiences
+                    </span>
                   </div>
                 </div>
 
