@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { X, Loader2, Camera, Trash2, Save } from 'lucide-react';
 import { Visit, Restaurant } from '../types';
 import { GRADES } from '../utils/rating';
+import { compressImage } from '../utils/image';
 import { storage } from '../firebaseConfig';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import heic2any from 'heic2any';
@@ -35,6 +36,9 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
   const [isProcessingImg, setIsProcessingImg] = useState(false);
 
   const processFile = async (file: File): Promise<Blob> => {
+    let fileToProcess: Blob = file;
+    
+    // 1. Convert HEIC
     const isHeic = file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic';
     if (isHeic) {
       try {
@@ -43,13 +47,19 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
           toType: "image/jpeg",
           quality: 0.8
         });
-        return Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+        fileToProcess = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
       } catch (err) {
         console.error("HEIC conversion failed", err);
-        return file;
       }
     }
-    return file;
+
+    // 2. Compress
+    try {
+      return await compressImage(fileToProcess);
+    } catch (err) {
+      console.error("Compression failed", err);
+      return fileToProcess;
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,9 +68,11 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
       const files = Array.from(e.target.files) as File[];
       
       try {
-        // Process HEIC if needed
+        // Process HEIC and Compress
         const blobs = await Promise.all(files.map(f => processFile(f)));
-        const filesToUpload = blobs.map((b, i) => new File([b], files[i].name, { type: b.type }));
+        
+        // Convert back to File objects for state (optional, but consistent) or keep as Blobs
+        const filesToUpload = blobs.map((b, i) => new File([b], files[i].name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' }));
         const previewUrls = blobs.map(b => URL.createObjectURL(b));
 
         setNewFiles(prev => [...prev, ...filesToUpload]);

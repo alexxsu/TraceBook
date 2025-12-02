@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Camera, MapPin, Search, Loader2, X, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Coordinates, PlaceResult, Restaurant, Visit } from '../types';
 import { getGPSFromImage } from '../utils/exif';
+import { compressImage } from '../utils/image';
 import { GRADES } from '../utils/rating';
 import { storage } from '../firebaseConfig';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -54,6 +55,9 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
 
   const processFile = async (file: File): Promise<Blob> => {
+    let fileToProcess: Blob = file;
+
+    // 1. Handle HEIC conversion if necessary
     const isHeic = file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic';
     if (isHeic) {
       try {
@@ -62,13 +66,20 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
           toType: "image/jpeg",
           quality: 0.8
         });
-        return Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+        fileToProcess = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
       } catch (err) {
         console.error("HEIC conversion failed for file", file.name, err);
-        return file; // Fallback to original
+        // Fallback to original if HEIC fails (though browser might not show it)
       }
     }
-    return file;
+
+    // 2. Compress the image (Resize to max 1600px, JPEG 80%)
+    try {
+      return await compressImage(fileToProcess);
+    } catch (err) {
+      console.error("Compression failed", err);
+      return fileToProcess;
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,10 +90,10 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
       const firstFile = files[0];
 
       try {
-        // 1. Get GPS from the FIRST image only
+        // 1. Get GPS from the FIRST image only (Must be done on original file before compression strips EXIF)
         const coords = await getGPSFromImage(firstFile);
         
-        // 2. Process ALL images (HEIC -> JPG if needed)
+        // 2. Process ALL images (HEIC -> JPG -> Compress)
         const blobs = await Promise.all(files.map(f => processFile(f)));
         const urls = blobs.map(b => URL.createObjectURL(b));
 
@@ -269,7 +280,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
               {isProcessingImg ? (
                 <div className="flex flex-col items-center text-blue-400">
                   <Loader2 className="animate-spin mb-2" size={32} />
-                  <span className="text-sm">Processing {previewUrls.length > 0 ? previewUrls.length : ''} images...</span>
+                  <span className="text-sm">Compressing {previewUrls.length > 0 ? previewUrls.length : ''} images...</span>
                 </div>
               ) : (
                 <>
