@@ -10,7 +10,9 @@ export const generateFoodDescription = async (
   restaurantName: string
 ): Promise<string> => {
   try {
-    const apiKey = process.env.API_KEY;
+    // Hardcoded API Key as requested
+    const apiKey = "AIzaSyCEkyuS7zuWqXm543Pcus6gEhrIpLwbCwU";
+
     if (!apiKey) {
       console.error("API Key is missing");
       return "Error: API Key missing.";

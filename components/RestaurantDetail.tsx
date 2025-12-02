@@ -18,6 +18,10 @@ interface RestaurantDetailProps {
 const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
   const [index, setIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  
+  // Touch state for swipe detection
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
 
   if (!photos || photos.length === 0) return <div className="h-48 bg-gray-800" />;
 
@@ -48,6 +52,30 @@ const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isLightboxOpen, photos.length]);
+
+  // Touch Handlers
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const minSwipeDistance = 50;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    if (isLeftSwipe) {
+      setIndex((prev) => (prev + 1) % photos.length);
+    } else if (isRightSwipe) {
+      setIndex((prev) => (prev - 1 + photos.length) % photos.length);
+    }
+  };
 
   return (
     <>
@@ -97,6 +125,9 @@ const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
         <div 
           className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-200"
           onClick={() => setIsLightboxOpen(false)}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
         >
           {/* Close Button - Top Right (Fixed Position) */}
           <button 
@@ -113,7 +144,7 @@ const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
           {photos.length > 1 && (
              <button 
                onClick={prev} 
-               className="absolute left-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
+               className="hidden md:block absolute left-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
              >
                <ChevronLeft size={40} />
              </button>
@@ -123,27 +154,32 @@ const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
           {photos.length > 1 && (
              <button 
                onClick={next} 
-               className="absolute right-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
+               className="hidden md:block absolute right-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
              >
                <ChevronRight size={40} />
              </button>
           )}
 
-          {/* Main Image Container */}
-          <div 
-            className="w-full h-full p-2 md:p-12 flex items-center justify-center relative z-10" 
-            onClick={(e) => e.stopPropagation()} // Clicking image area shouldn't close it
-          >
-             <img 
-               src={photos[index]} 
-               className="max-w-full max-h-full object-contain shadow-2xl select-none"
-               alt={`Full view ${index + 1}`}
-               onClick={(e) => {
-                  // Optional: Click image to go to next
-                  e.stopPropagation();
-                  // next(); 
-               }}
-             />
+          {/* Main Image Slider Track */}
+          <div className="w-full h-full overflow-hidden">
+            <div 
+              className="flex h-full transition-transform duration-300 ease-out"
+              style={{ transform: `translateX(-${index * 100}%)` }}
+            >
+              {photos.map((photo, i) => (
+                <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center p-2 md:p-12">
+                   <img 
+                     src={photo} 
+                     className="max-w-full max-h-full object-contain shadow-2xl select-none"
+                     alt={`Full view ${i + 1}`}
+                     onClick={(e) => {
+                        // Prevent click on image from closing the lightbox
+                        e.stopPropagation();
+                     }}
+                   />
+                </div>
+              ))}
+            </div>
           </div>
 
            {/* Pagination Dots - Bottom */}
@@ -173,8 +209,12 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   onDeleteVisit
 }) => {
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [shareBase64Map, setShareBase64Map] = useState<Record<string, string>>({});
   const shareRef = useRef<HTMLDivElement>(null);
   
+  // Calculate this at the top level so it's available for both the main render and the share handler
+  const sortedVisits = [...restaurant.visits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -188,8 +228,40 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     setIsGeneratingShare(true);
 
     try {
-      // Small delay to ensure render
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // 1. Pre-process images to Base64 to bypass CORS issues in html2canvas
+      const urls = sortedVisits.map(v => v.photoDataUrl).filter(url => url);
+      const uniqueUrls = [...new Set(urls)];
+      
+      const newBase64Map: Record<string, string> = {};
+
+      await Promise.all(uniqueUrls.map(async (url) => {
+        try {
+          // If it's already a data URL, skip fetch
+          if (url.startsWith('data:')) {
+             newBase64Map[url] = url;
+             return;
+          }
+
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          newBase64Map[url] = base64;
+        } catch (err) {
+          console.warn("Error converting image for share:", url, err);
+          // Fallback to original URL
+          newBase64Map[url] = url;
+        }
+      }));
+
+      setShareBase64Map(newBase64Map);
+
+      // Wait for state update and re-render of the hidden div
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const canvas = await html2canvas(shareRef.current, {
         useCORS: true,
@@ -272,7 +344,6 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   };
 
   const avgGrade = calculateAverageGrade();
-  const sortedVisits = [...restaurant.visits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
     <>
@@ -461,7 +532,12 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
                    </div>
 
                    <div className="rounded-lg overflow-hidden mb-2 border border-gray-700">
-                     <img src={visit.photoDataUrl} className="w-full h-32 object-cover" crossOrigin="anonymous" />
+                     <img 
+                       src={shareBase64Map[visit.photoDataUrl] || visit.photoDataUrl} 
+                       className="w-full h-32 object-cover" 
+                       crossOrigin="anonymous" 
+                       alt="Food"
+                     />
                    </div>
                    
                    {visit.comment && <p className="text-sm text-gray-300 italic mb-1">"{visit.comment}"</p>}
