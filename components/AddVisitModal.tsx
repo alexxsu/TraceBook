@@ -1,0 +1,427 @@
+
+import React, { useState } from 'react';
+import { Camera, MapPin, Search, Loader2, Sparkles, X, Image as ImageIcon } from 'lucide-react';
+import { Coordinates, PlaceResult, Restaurant, Visit } from '../types';
+import { getGPSFromImage } from '../utils/exif';
+import { generateFoodDescription } from '../services/geminiService';
+import { GRADES } from '../utils/rating';
+import { storage } from '../firebaseConfig';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
+// Declare heic2any on window since we loaded it via script tag
+declare const heic2any: any;
+
+interface AddVisitModalProps {
+  mapInstance: google.maps.Map | null;
+  currentLocation: Coordinates;
+  existingRestaurants: Restaurant[];
+  onClose: () => void;
+  onSave: (restaurant: Restaurant, visit: Visit) => void;
+}
+
+interface SuggestionItem {
+  place_id: string;
+  name: string;
+  description: string;
+  isPrediction: boolean;
+  geometry?: { location: any };
+}
+
+const AddVisitModal: React.FC<AddVisitModalProps> = ({ 
+  mapInstance, 
+  currentLocation,
+  existingRestaurants, 
+  onClose, 
+  onSave 
+}) => {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null); // Keep blob for upload
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [isProcessingImg, setIsProcessingImg] = useState(false);
+  const [foundLocation, setFoundLocation] = useState<Coordinates | null>(null);
+  
+  const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+  const [manualSearch, setManualSearch] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  const [rating, setRating] = useState('A');
+  const [comment, setComment] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiDesc, setAiDesc] = useState('');
+  
+  // New saving state
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const originalFile = e.target.files[0];
+      setImageFile(originalFile);
+      setIsProcessingImg(true);
+
+      try {
+        const coords = await getGPSFromImage(originalFile);
+        
+        // Prepare preview and upload blob
+        let finalBlob: Blob = originalFile;
+        const isHeic = originalFile.name.toLowerCase().endsWith('.heic') || originalFile.type === 'image/heic';
+
+        if (isHeic && typeof heic2any !== 'undefined') {
+          try {
+            const convertedBlob = await heic2any({
+              blob: originalFile,
+              toType: "image/jpeg",
+              quality: 0.8
+            });
+            const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+            finalBlob = blob;
+          } catch (err) {
+            console.error("HEIC conversion failed", err);
+          }
+        }
+
+        const url = URL.createObjectURL(finalBlob);
+        setPreviewUrl(url);
+        setPreviewBlob(finalBlob);
+        setIsProcessingImg(false);
+        
+        if (coords) {
+          setFoundLocation(coords);
+          searchNearbyPlaces(coords);
+        } else {
+          setFoundLocation(null);
+          searchNearbyPlaces(currentLocation);
+        }
+        setStep(2);
+
+      } catch (error) {
+        console.error("Error processing image", error);
+        setIsProcessingImg(false);
+      }
+    }
+  };
+
+  const searchNearbyPlaces = async (loc: Coordinates) => {
+    if (!mapInstance) return;
+    setIsSearching(true);
+    
+    try {
+      const { PlacesService, PlacesServiceStatus } = await google.maps.importLibrary("places") as google.maps.PlacesLibrary;
+      const service = new PlacesService(mapInstance);
+      const request = {
+        location: loc,
+        radius: 200,
+        type: 'restaurant'
+      };
+
+      service.nearbySearch(request, (results, status) => {
+        setIsSearching(false);
+        if (status === PlacesServiceStatus.OK && results) {
+          const items: SuggestionItem[] = results.map(r => ({
+            place_id: r.place_id!,
+            name: r.name!,
+            description: r.vicinity || '',
+            isPrediction: false,
+            geometry: r.geometry
+          }));
+          setSuggestions(items);
+        } else {
+          setSuggestions([]);
+        }
+      });
+    } catch (e) {
+      console.error("Error loading Places library", e);
+      setIsSearching(false);
+    }
+  };
+
+  const handleManualSearch = async (query: string) => {
+    setManualSearch(query);
+    if (query.length < 3) return;
+
+    try {
+      const { AutocompleteService, PlacesServiceStatus } = await google.maps.importLibrary("places") as google.maps.PlacesLibrary;
+      const service = new AutocompleteService();
+      
+      service.getPlacePredictions({ input: query }, (predictions, status) => {
+        if (status === PlacesServiceStatus.OK && predictions) {
+          const items: SuggestionItem[] = predictions.map(p => ({
+            place_id: p.place_id,
+            name: p.structured_formatting.main_text,
+            description: p.structured_formatting.secondary_text,
+            isPrediction: true
+          }));
+          setSuggestions(items);
+        } else if (status === PlacesServiceStatus.ZERO_RESULTS) {
+          setSuggestions([]);
+        }
+      });
+    } catch (e) {
+      console.error("Error loading Autocomplete", e);
+    }
+  };
+
+  const selectPlace = async (item: SuggestionItem) => {
+    if (item.isPrediction) {
+      if (!mapInstance) return;
+      setIsSearching(true);
+      try {
+        const { PlacesService, PlacesServiceStatus } = await google.maps.importLibrary("places") as google.maps.PlacesLibrary;
+        const service = new PlacesService(mapInstance);
+        service.getDetails({ placeId: item.place_id }, (place, status) => {
+          setIsSearching(false);
+          if (status === PlacesServiceStatus.OK && place) {
+            setSelectedPlace(place);
+            setStep(3);
+          } else {
+            alert("Could not retrieve details for this location.");
+          }
+        });
+      } catch (e) {
+        console.error("Error getting details", e);
+        setIsSearching(false);
+      }
+    } else {
+      setSelectedPlace({
+        place_id: item.place_id,
+        name: item.name,
+        vicinity: item.description,
+        geometry: item.geometry
+      });
+      setStep(3);
+    }
+  };
+
+  const handleAnalyzePhoto = async () => {
+    if (!selectedPlace || !previewUrl) return;
+    setAiLoading(true);
+    const desc = await generateFoodDescription(previewUrl, comment, selectedPlace.name || 'Unknown');
+    setAiDesc(desc);
+    setAiLoading(false);
+  };
+
+  const handleSave = async () => {
+    if (!selectedPlace || !selectedPlace.geometry?.location || !previewBlob) return;
+    
+    setIsSaving(true);
+
+    try {
+      // 1. Upload to Firebase Storage
+      const filename = `visits/${selectedPlace.place_id}/${Date.now()}_food.jpg`;
+      const storageRef = ref(storage, filename);
+      const snapshot = await uploadBytes(storageRef, previewBlob);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+
+      // 2. Construct Objects
+      const newRestaurant: Restaurant = {
+        id: selectedPlace.place_id || Math.random().toString(),
+        name: selectedPlace.name || 'Unknown Spot',
+        address: selectedPlace.vicinity || 'Unknown Address',
+        location: {
+          lat: selectedPlace.geometry.location.lat(),
+          lng: selectedPlace.geometry.location.lng()
+        },
+        visits: []
+      };
+
+      const newVisit: Visit = {
+        id: Math.random().toString(),
+        date: new Date().toISOString(),
+        photoDataUrl: downloadURL, // Use cloud URL
+        rating,
+        comment,
+        aiDescription: aiDesc
+      };
+
+      onSave(newRestaurant, newVisit);
+      // setIsSaving(false); // No need to set false as modal will close
+    } catch (error) {
+      console.error("Upload failed:", error);
+      alert("Failed to upload image. Please try again.");
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-gray-800 w-full max-w-md rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
+          <h2 className="text-lg font-semibold text-white">
+            {step === 1 && 'Add a Memory'}
+            {step === 2 && 'Where was this?'}
+            {step === 3 && 'How was it?'}
+          </h2>
+          <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          
+          {step === 1 && (
+            <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-gray-600 rounded-xl hover:border-blue-500 hover:bg-gray-700/30 transition cursor-pointer relative">
+              {isProcessingImg ? (
+                <div className="flex flex-col items-center text-blue-400">
+                  <Loader2 className="animate-spin mb-2" size={32} />
+                  <span className="text-sm">Processing image...</span>
+                </div>
+              ) : (
+                <>
+                  <input 
+                    type="file" 
+                    accept="image/*,.heic" 
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onChange={handleFileChange}
+                  />
+                  <Camera size={48} className="text-gray-400 mb-2" />
+                  <p className="text-gray-400 font-medium">Tap to upload food photo</p>
+                  <p className="text-xs text-gray-500 mt-2">Supports JPG, PNG, HEIC</p>
+                </>
+              )}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              {previewUrl && (
+                <div className="h-48 w-full rounded-xl overflow-hidden relative border border-gray-600 bg-gray-900">
+                   <img src={previewUrl} className="w-full h-full object-cover" alt="Preview" />
+                   {foundLocation ? (
+                     <div className="absolute bottom-2 right-2 bg-green-600/90 px-2 py-1 rounded text-xs text-white flex items-center gap-1 shadow-lg">
+                       <MapPin size={12} /> Location Detected
+                     </div>
+                   ) : (
+                      <div className="absolute bottom-2 right-2 bg-yellow-600/90 px-2 py-1 rounded text-xs text-white flex items-center gap-1 shadow-lg">
+                       <MapPin size={12} /> No GPS data found
+                     </div>
+                   )}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="sticky top-0 bg-gray-800 z-10 pb-2">
+                   <label className="text-xs text-gray-400 mb-1 block uppercase font-bold">Search or Select</label>
+                   <div className="flex gap-2">
+                     <input 
+                       type="text" 
+                       value={manualSearch}
+                       onChange={(e) => handleManualSearch(e.target.value)}
+                       placeholder="Search restaurant manually..."
+                       className="flex-1 bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                     />
+                     <div className="bg-gray-700 px-3 py-2 rounded flex items-center justify-center">
+                        {isSearching ? <Loader2 size={16} className="animate-spin text-blue-400"/> : <Search size={16} />}
+                     </div>
+                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  {suggestions.length > 0 ? (
+                    suggestions.map((place) => (
+                      <button 
+                        key={place.place_id}
+                        onClick={() => selectPlace(place)}
+                        className="w-full text-left p-3 bg-gray-700/50 hover:bg-gray-700 rounded-lg transition border border-transparent hover:border-gray-500 group"
+                      >
+                        <div className="flex justify-between items-start">
+                          <p className="font-semibold text-white group-hover:text-blue-300 transition">{place.name}</p>
+                          {place.isPrediction && <Search size={12} className="text-gray-500 mt-1"/>}
+                        </div>
+                        <p className="text-xs text-gray-400 truncate">{place.description}</p>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <ImageIcon className="mx-auto mb-2 opacity-50" size={32}/>
+                      <p className="text-sm">No restaurants found nearby.</p>
+                      <p className="text-xs">Try typing the name above.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && selectedPlace && (
+            <div className="space-y-6">
+              <div className="flex items-start gap-4 p-3 bg-gray-700/30 rounded-lg border border-gray-700">
+                <div className="bg-blue-500/20 p-2 rounded-full text-blue-400">
+                  <MapPin size={24} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-lg">{selectedPlace.name}</h3>
+                  <p className="text-sm text-gray-400">{selectedPlace.vicinity}</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Grade</label>
+                <div className="flex gap-2 justify-between">
+                  {GRADES.map((grade) => (
+                    <button 
+                      key={grade} 
+                      onClick={() => setRating(grade)}
+                      className={`
+                        w-12 h-12 rounded-lg font-bold text-lg transition border-2
+                        ${rating === grade 
+                          ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-500/30' 
+                          : 'bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600 hover:border-gray-500'}
+                      `}
+                    >
+                      {grade}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Notes</label>
+                <textarea 
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="What did you eat? How was the vibe?"
+                  className="w-full h-24 bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-blue-500 resize-none"
+                />
+              </div>
+
+              <div className="bg-indigo-900/30 border border-indigo-500/30 p-4 rounded-xl">
+                <div className="flex justify-between items-center mb-2">
+                  <div className="flex items-center gap-2 text-indigo-300">
+                    <Sparkles size={16} />
+                    <span className="text-sm font-semibold">Gemini Food Critic</span>
+                  </div>
+                  <button 
+                    onClick={handleAnalyzePhoto}
+                    disabled={aiLoading}
+                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-full transition disabled:opacity-50"
+                  >
+                    {aiLoading ? 'Thinking...' : 'Analyze Photo'}
+                  </button>
+                </div>
+                {aiDesc ? (
+                  <p className="text-sm text-indigo-100 italic">"{aiDesc}"</p>
+                ) : (
+                  <p className="text-xs text-gray-500">Tap analyze to get a creative description based on your photo.</p>
+                )}
+              </div>
+
+              <button 
+                onClick={handleSave}
+                disabled={isSaving}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-900/20 transition transform hover:scale-[1.02] disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+              >
+                {isSaving && <Loader2 size={18} className="animate-spin"/>}
+                {isSaving ? 'Uploading to Cloud...' : 'Save Experience'}
+              </button>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AddVisitModal;
