@@ -7,6 +7,7 @@ import AddVisitModal from './components/AddVisitModal';
 import RestaurantDetail from './components/RestaurantDetail';
 import InfoModal from './components/InfoModal';
 import UserHistoryModal from './components/UserHistoryModal';
+import EditVisitModal from './components/EditVisitModal';
 
 // Firebase Imports
 import { auth, googleProvider, db } from './firebaseConfig';
@@ -28,6 +29,10 @@ function App() {
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  
+  // New state to hold data being edited
+  const [editingData, setEditingData] = useState<{ restaurant: Restaurant, visit: Visit } | null>(null);
+
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   
   // Default fallback location (Toronto)
@@ -161,7 +166,35 @@ function App() {
     }
   };
 
-  // 4. Delete Visit
+  // 4. Update Visit
+  const handleUpdateVisit = async (restaurantId: string, oldVisit: Visit, newVisit: Visit) => {
+    if (!user) return;
+
+    try {
+      const restaurantRef = doc(db, "restaurants", restaurantId);
+      const restaurantDoc = await getDoc(restaurantRef);
+      
+      if (restaurantDoc.exists()) {
+        const currentData = restaurantDoc.data() as Restaurant;
+        
+        // Find and replace the visit
+        const updatedVisits = currentData.visits.map(v => v.id === oldVisit.id ? newVisit : v);
+        
+        await updateDoc(restaurantRef, {
+          visits: updatedVisits
+        });
+        
+        // If we are editing, close the edit modal and return to detail
+        setEditingData(null);
+        setViewState(ViewState.RESTAURANT_DETAIL);
+      }
+    } catch (e) {
+       console.error("Error updating visit:", e);
+       alert("Failed to update memory.");
+    }
+  };
+
+  // 5. Delete Visit
   const handleDeleteVisit = async (restaurant: Restaurant, visitToDelete: Visit) => {
     try {
       const restaurantRef = doc(db, "restaurants", restaurant.id);
@@ -191,7 +224,7 @@ function App() {
     }
   };
 
-  // 5. Clear Entire Database
+  // 6. Clear Entire Database
   const handleClearDatabase = async () => {
     if (!window.confirm("WARNING: This will delete ALL experiences from the database. This action cannot be undone. Are you sure?")) {
       return;
@@ -217,6 +250,11 @@ function App() {
     setSelectedRestaurant(r);
     setViewState(ViewState.RESTAURANT_DETAIL);
   }, []);
+
+  const handleEditTrigger = (r: Restaurant, v: Visit) => {
+    setEditingData({ restaurant: r, visit: v });
+    setViewState(ViewState.EDIT_ENTRY);
+  };
 
   // --- Login Screen ---
   if (viewState === ViewState.LOGIN) {
@@ -339,6 +377,18 @@ function App() {
         />
       )}
 
+      {viewState === ViewState.EDIT_ENTRY && editingData && (
+        <EditVisitModal
+          restaurant={editingData.restaurant}
+          visit={editingData.visit}
+          onClose={() => {
+            setEditingData(null);
+            setViewState(ViewState.RESTAURANT_DETAIL);
+          }}
+          onSave={handleUpdateVisit}
+        />
+      )}
+
       {viewState === ViewState.RESTAURANT_DETAIL && selectedRestaurant && (
         <RestaurantDetail 
           restaurant={selectedRestaurant}
@@ -351,6 +401,7 @@ function App() {
             setViewState(ViewState.ADD_ENTRY);
           }}
           onDeleteVisit={handleDeleteVisit}
+          onEditVisit={handleEditTrigger}
         />
       )}
 

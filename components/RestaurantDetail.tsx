@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calendar, MapPin, Share2, User, Trash2, ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
+import { X, Calendar, MapPin, Share2, User, Trash2, ChevronLeft, ChevronRight, Download, Loader2, Pencil } from 'lucide-react';
 import { Restaurant, Visit, GUEST_ID } from '../types';
 import { getGradeColor, gradeToScore, scoreToGrade } from '../utils/rating';
 import html2canvas from 'html2canvas';
@@ -12,6 +12,7 @@ interface RestaurantDetailProps {
   onClose: () => void;
   onAddAnotherVisit: () => void;
   onDeleteVisit: (restaurant: Restaurant, visit: Visit) => void;
+  onEditVisit: (restaurant: Restaurant, visit: Visit) => void;
 }
 
 // Sub-component for Image Slider
@@ -206,7 +207,8 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   currentUserUid, 
   onClose, 
   onAddAnotherVisit,
-  onDeleteVisit
+  onDeleteVisit,
+  onEditVisit
 }) => {
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [shareBase64Map, setShareBase64Map] = useState<Record<string, string>>({});
@@ -315,7 +317,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   };
 
   // Check if current user has permission to delete specific visit
-  const canDeleteVisit = (visit: Visit): boolean => {
+  const canEditOrDeleteVisit = (visit: Visit): boolean => {
     if (!currentUserUid) return false;
     
     // 1. User can delete their own post
@@ -416,15 +418,24 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
                   
                   {/* Image Section Container - Relative for absolute positioning of overlays */}
                   <div className="relative">
-                    {/* Delete Button (Logic: Creator or Auth User deleting Guest post) */}
-                    {canDeleteVisit(visit) && (
-                      <button 
-                        onClick={() => handleDelete(visit)}
-                        className="absolute top-2 right-2 z-20 bg-red-600/80 hover:bg-red-500 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Delete this memory"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                    {/* Action Buttons (Edit/Delete) */}
+                    {canEditOrDeleteVisit(visit) && (
+                      <div className="absolute top-2 right-2 z-20 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <button 
+                          onClick={() => onEditVisit(restaurant, visit)}
+                          className="bg-blue-600/80 hover:bg-blue-500 p-1.5 rounded-full text-white"
+                          title="Edit"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(visit)}
+                          className="bg-red-600/80 hover:bg-red-500 p-1.5 rounded-full text-white"
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     )}
 
                     {/* Image Slider */}
