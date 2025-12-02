@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calendar, MapPin, Share2, User, Trash2, ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { Restaurant, Visit, GUEST_ID } from '../types';
@@ -20,92 +21,39 @@ const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
 
   if (!photos || photos.length === 0) return <div className="h-48 bg-gray-800" />;
 
-  const next = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const next = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setIndex((prev) => (prev + 1) % photos.length);
   };
 
-  const prev = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const prev = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setIndex((prev) => (prev - 1 + photos.length) % photos.length);
   };
 
-  const openLightbox = (idx: number) => {
-    setIndex(idx);
-    setIsLightboxOpen(true);
-  };
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isLightboxOpen) return;
+      
+      if (e.key === 'ArrowRight') {
+        setIndex((prev) => (prev + 1) % photos.length);
+      } else if (e.key === 'ArrowLeft') {
+        setIndex((prev) => (prev - 1 + photos.length) % photos.length);
+      } else if (e.key === 'Escape') {
+        setIsLightboxOpen(false);
+      }
+    };
 
-  const Lightbox = () => {
-    if (!isLightboxOpen) return null;
-
-    return createPortal(
-      <div 
-        className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-200"
-        onClick={() => setIsLightboxOpen(false)}
-      >
-        {/* Main Image Container - Rendered FIRST but we rely on z-index for controls */}
-        <div 
-          className="w-full h-full p-2 md:p-8 flex items-center justify-center relative z-10" 
-          onClick={(e) => e.stopPropagation()}
-        >
-           <img 
-             src={photos[index]} 
-             className="max-w-full max-h-full object-contain shadow-2xl"
-             alt={`Full view ${index + 1}`}
-           />
-        </div>
-
-        {/* Close Button - Rendered AFTER image container with higher Z to ensure clickability */}
-        <button 
-           className="absolute top-6 right-6 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition z-50 cursor-pointer"
-           onClick={(e) => {
-             e.stopPropagation();
-             setIsLightboxOpen(false);
-           }}
-        >
-          <X size={32} />
-        </button>
-
-        {/* Navigation Controls */}
-        {photos.length > 1 && (
-          <>
-             <button 
-               onClick={(e) => {
-                 e.stopPropagation();
-                 setIndex((prev) => (prev - 1 + photos.length) % photos.length);
-               }} 
-               className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-3 rounded-full transition z-50 cursor-pointer"
-             >
-               <ChevronLeft size={32} />
-             </button>
-             <button 
-               onClick={(e) => {
-                 e.stopPropagation();
-                 setIndex((prev) => (prev + 1) % photos.length);
-               }} 
-               className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-3 rounded-full transition z-50 cursor-pointer"
-             >
-               <ChevronRight size={32} />
-             </button>
-             
-             {/* Pagination Dots */}
-             <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex gap-2 z-50">
-                {photos.map((_, i) => (
-                  <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i === index ? 'bg-white' : 'bg-white/30'}`} />
-                ))}
-             </div>
-          </>
-        )}
-      </div>,
-      document.body
-    );
-  };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLightboxOpen, photos.length]);
 
   return (
     <>
       <div 
         className="h-48 w-full relative group overflow-hidden bg-gray-900 cursor-zoom-in"
-        onClick={() => openLightbox(index)}
+        onClick={() => setIsLightboxOpen(true)}
       >
         {/* Carousel Container */}
         <div 
@@ -143,7 +91,76 @@ const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
           </>
         )}
       </div>
-      <Lightbox />
+
+      {/* Fullscreen Lightbox Portal */}
+      {isLightboxOpen && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-200"
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          {/* Close Button - Top Right (Fixed Position) */}
+          <button 
+             className="absolute top-4 right-4 z-[60] p-3 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all cursor-pointer hover:scale-105"
+             onClick={(e) => {
+               e.stopPropagation();
+               setIsLightboxOpen(false);
+             }}
+          >
+            <X size={32} />
+          </button>
+
+          {/* Navigation - Left */}
+          {photos.length > 1 && (
+             <button 
+               onClick={prev} 
+               className="absolute left-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
+             >
+               <ChevronLeft size={40} />
+             </button>
+          )}
+
+           {/* Navigation - Right */}
+          {photos.length > 1 && (
+             <button 
+               onClick={next} 
+               className="absolute right-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
+             >
+               <ChevronRight size={40} />
+             </button>
+          )}
+
+          {/* Main Image Container */}
+          <div 
+            className="w-full h-full p-2 md:p-12 flex items-center justify-center relative z-10" 
+            onClick={(e) => e.stopPropagation()} // Clicking image area shouldn't close it
+          >
+             <img 
+               src={photos[index]} 
+               className="max-w-full max-h-full object-contain shadow-2xl select-none"
+               alt={`Full view ${index + 1}`}
+               onClick={(e) => {
+                  // Optional: Click image to go to next
+                  e.stopPropagation();
+                  // next(); 
+               }}
+             />
+          </div>
+
+           {/* Pagination Dots - Bottom */}
+           {photos.length > 1 && (
+             <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-3 z-50" onClick={(e) => e.stopPropagation()}>
+                {photos.map((_, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => setIndex(i)}
+                    className={`w-3 h-3 rounded-full transition-all cursor-pointer ${i === index ? 'bg-white scale-125' : 'bg-white/30 hover:bg-white/50'}`} 
+                  />
+                ))}
+             </div>
+          )}
+        </div>,
+        document.body
+      )}
     </>
   );
 };
