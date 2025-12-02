@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Camera, MapPin, Search, Loader2, Sparkles, X, Image as ImageIcon } from 'lucide-react';
+import { Camera, MapPin, Search, Loader2, Sparkles, X, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Coordinates, PlaceResult, Restaurant, Visit } from '../types';
 import { getGPSFromImage } from '../utils/exif';
 import { generateFoodDescription } from '../services/geminiService';
@@ -33,9 +34,12 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   onSave 
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null); // Keep blob for upload
-  const [previewUrl, setPreviewUrl] = useState<string>('');
+  
+  // Multi-image state
+  const [previewBlobs, setPreviewBlobs] = useState<Blob[]>([]); 
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0);
+
   const [isProcessingImg, setIsProcessingImg] = useState(false);
   const [foundLocation, setFoundLocation] = useState<Coordinates | null>(null);
   
@@ -52,36 +56,41 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   // New saving state
   const [isSaving, setIsSaving] = useState(false);
 
+  const processFile = async (file: File): Promise<Blob> => {
+    const isHeic = file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic';
+    if (isHeic) {
+      try {
+        const convertedBlob = await heic2any({
+          blob: file,
+          toType: "image/jpeg",
+          quality: 0.8
+        });
+        return Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+      } catch (err) {
+        console.error("HEIC conversion failed for file", file.name, err);
+        return file; // Fallback to original
+      }
+    }
+    return file;
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const originalFile = e.target.files[0];
-      setImageFile(originalFile);
+    if (e.target.files && e.target.files.length > 0) {
       setIsProcessingImg(true);
+      
+      const files = Array.from(e.target.files) as File[];
+      const firstFile = files[0];
 
       try {
-        const coords = await getGPSFromImage(originalFile);
+        // 1. Get GPS from the FIRST image only
+        const coords = await getGPSFromImage(firstFile);
         
-        // Prepare preview and upload blob
-        let finalBlob: Blob = originalFile;
-        const isHeic = originalFile.name.toLowerCase().endsWith('.heic') || originalFile.type === 'image/heic';
+        // 2. Process ALL images (HEIC -> JPG if needed)
+        const blobs = await Promise.all(files.map(f => processFile(f)));
+        const urls = blobs.map(b => URL.createObjectURL(b));
 
-        if (isHeic) {
-          try {
-            const convertedBlob = await heic2any({
-              blob: originalFile,
-              toType: "image/jpeg",
-              quality: 0.8
-            });
-            const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-            finalBlob = blob;
-          } catch (err) {
-            console.error("HEIC conversion failed", err);
-          }
-        }
-
-        const url = URL.createObjectURL(finalBlob);
-        setPreviewUrl(url);
-        setPreviewBlob(finalBlob);
+        setPreviewBlobs(blobs);
+        setPreviewUrls(urls);
         setIsProcessingImg(false);
         
         if (coords) {
@@ -94,7 +103,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
         setStep(2);
 
       } catch (error) {
-        console.error("Error processing image", error);
+        console.error("Error processing images", error);
         setIsProcessingImg(false);
       }
     }
@@ -192,24 +201,29 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   };
 
   const handleAnalyzePhoto = async () => {
-    if (!selectedPlace || !previewUrl) return;
+    if (!selectedPlace || previewUrls.length === 0) return;
     setAiLoading(true);
-    const desc = await generateFoodDescription(previewUrl, comment, selectedPlace.name || 'Unknown');
+    // Use the first image for AI analysis
+    const desc = await generateFoodDescription(previewUrls[0], comment, selectedPlace.name || 'Unknown');
     setAiDesc(desc);
     setAiLoading(false);
   };
 
   const handleSave = async () => {
-    if (!selectedPlace || !selectedPlace.geometry?.location || !previewBlob) return;
+    if (!selectedPlace || !selectedPlace.geometry?.location || previewBlobs.length === 0) return;
     
     setIsSaving(true);
 
     try {
-      // 1. Upload to Firebase Storage
-      const filename = `visits/${selectedPlace.place_id}/${Date.now()}_food.jpg`;
-      const storageRef = ref(storage, filename);
-      const snapshot = await uploadBytes(storageRef, previewBlob);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      // 1. Upload ALL images to Firebase Storage
+      const uploadPromises = previewBlobs.map(async (blob, index) => {
+        const filename = `visits/${selectedPlace.place_id}/${Date.now()}_img_${index}.jpg`;
+        const storageRef = ref(storage, filename);
+        const snapshot = await uploadBytes(storageRef, blob);
+        return await getDownloadURL(snapshot.ref);
+      });
+
+      const downloadURLs = await Promise.all(uploadPromises);
 
       // 2. Construct Objects
       const newRestaurant: Restaurant = {
@@ -226,7 +240,8 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
       const newVisit: Visit = {
         id: Math.random().toString(),
         date: new Date().toISOString(),
-        photoDataUrl: downloadURL, // Use cloud URL
+        photoDataUrl: downloadURLs[0], // Keep primary for back-compat
+        photos: downloadURLs, // Store all URLs
         rating,
         comment,
         aiDescription: aiDesc
@@ -236,10 +251,14 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
       // setIsSaving(false); // No need to set false as modal will close
     } catch (error) {
       console.error("Upload failed:", error);
-      alert("Failed to upload image. Please try again.");
+      alert("Failed to upload images. Please try again.");
       setIsSaving(false);
     }
   };
+
+  // Carousel helpers
+  const nextPreview = () => setCurrentPreviewIndex(prev => (prev + 1) % previewUrls.length);
+  const prevPreview = () => setCurrentPreviewIndex(prev => (prev - 1 + previewUrls.length) % previewUrls.length);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -263,19 +282,20 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
               {isProcessingImg ? (
                 <div className="flex flex-col items-center text-blue-400">
                   <Loader2 className="animate-spin mb-2" size={32} />
-                  <span className="text-sm">Processing image...</span>
+                  <span className="text-sm">Processing {previewUrls.length > 0 ? previewUrls.length : ''} images...</span>
                 </div>
               ) : (
                 <>
                   <input 
                     type="file" 
                     accept="image/*,.heic" 
+                    multiple
                     className="absolute inset-0 opacity-0 cursor-pointer"
                     onChange={handleFileChange}
                   />
                   <Camera size={48} className="text-gray-400 mb-2" />
-                  <p className="text-gray-400 font-medium">Tap to upload food photo</p>
-                  <p className="text-xs text-gray-500 mt-2">Supports JPG, PNG, HEIC</p>
+                  <p className="text-gray-400 font-medium">Tap to upload food photos</p>
+                  <p className="text-xs text-gray-500 mt-2">Supports multi-select (JPG, PNG, HEIC)</p>
                 </>
               )}
             </div>
@@ -283,17 +303,39 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
 
           {step === 2 && (
             <div className="space-y-4">
-              {previewUrl && (
-                <div className="h-48 w-full rounded-xl overflow-hidden relative border border-gray-600 bg-gray-900">
-                   <img src={previewUrl} className="w-full h-full object-cover" alt="Preview" />
+              {/* Preview Carousel */}
+              {previewUrls.length > 0 && (
+                <div className="h-48 w-full rounded-xl overflow-hidden relative border border-gray-600 bg-gray-900 group">
+                   <img src={previewUrls[currentPreviewIndex]} className="w-full h-full object-cover" alt="Preview" />
+                   
+                   {/* GPS Indicator (Always based on 1st img) */}
                    {foundLocation ? (
-                     <div className="absolute bottom-2 right-2 bg-green-600/90 px-2 py-1 rounded text-xs text-white flex items-center gap-1 shadow-lg">
+                     <div className="absolute top-2 right-2 bg-green-600/90 px-2 py-1 rounded text-xs text-white flex items-center gap-1 shadow-lg">
                        <MapPin size={12} /> Location Detected
                      </div>
                    ) : (
-                      <div className="absolute bottom-2 right-2 bg-yellow-600/90 px-2 py-1 rounded text-xs text-white flex items-center gap-1 shadow-lg">
-                       <MapPin size={12} /> No GPS data found
+                      <div className="absolute top-2 right-2 bg-yellow-600/90 px-2 py-1 rounded text-xs text-white flex items-center gap-1 shadow-lg">
+                       <MapPin size={12} /> No GPS (Image 1)
                      </div>
+                   )}
+
+                   {/* Carousel Controls */}
+                   {previewUrls.length > 1 && (
+                     <>
+                       <div className="absolute inset-0 flex items-center justify-between p-2 opacity-0 group-hover:opacity-100 transition">
+                          <button onClick={(e) => { e.stopPropagation(); prevPreview(); }} className="bg-black/50 hover:bg-black/70 p-1 rounded-full text-white">
+                            <ChevronLeft size={20} />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); nextPreview(); }} className="bg-black/50 hover:bg-black/70 p-1 rounded-full text-white">
+                            <ChevronRight size={20} />
+                          </button>
+                       </div>
+                       <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1">
+                          {previewUrls.map((_, idx) => (
+                            <div key={idx} className={`w-1.5 h-1.5 rounded-full ${idx === currentPreviewIndex ? 'bg-white' : 'bg-white/40'}`} />
+                          ))}
+                       </div>
+                     </>
                    )}
                 </div>
               )}
@@ -411,7 +453,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-900/20 transition transform hover:scale-[1.02] disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
               >
                 {isSaving && <Loader2 size={18} className="animate-spin"/>}
-                {isSaving ? 'Uploading to Cloud...' : 'Save Experience'}
+                {isSaving ? `Uploading ${previewBlobs.length} Photos...` : 'Save Experience'}
               </button>
             </div>
           )}

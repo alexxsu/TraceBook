@@ -7,7 +7,8 @@ export interface Coordinates {
 export interface Visit {
   id: string;
   date: string;
-  photoDataUrl: string; // Firebase Storage URL
+  photoDataUrl: string; // Primary thumbnail (backward compatibility)
+  photos?: string[]; // Array of all photo URLs
   rating: string; // Grade: S, A, B, C, D, E
   comment: string;
   aiDescription?: string;

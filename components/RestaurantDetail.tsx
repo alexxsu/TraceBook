@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { X, Calendar, MapPin, Share2, User, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Calendar, MapPin, Share2, User, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Restaurant, Visit, GUEST_ID } from '../types';
 import { getGradeColor, gradeToScore, scoreToGrade } from '../utils/rating';
 
@@ -11,6 +11,50 @@ interface RestaurantDetailProps {
   onAddAnotherVisit: () => void;
   onDeleteVisit: (restaurant: Restaurant, visit: Visit) => void;
 }
+
+// Sub-component for Image Slider
+const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
+  const [index, setIndex] = useState(0);
+
+  if (!photos || photos.length === 0) return <div className="h-48 bg-gray-800" />;
+
+  const next = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIndex((prev) => (prev + 1) % photos.length);
+  };
+
+  const prev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIndex((prev) => (prev - 1 + photos.length) % photos.length);
+  };
+
+  return (
+    <div className="h-48 w-full relative group">
+      <img src={photos[index]} className="w-full h-full object-cover transition-all duration-300" alt="Food" />
+      
+      {photos.length > 1 && (
+        <>
+          <div className="absolute inset-0 flex items-center justify-between p-2 opacity-0 group-hover:opacity-100 transition">
+            <button onClick={prev} className="bg-black/50 hover:bg-black/70 p-1 rounded-full text-white">
+              <ChevronLeft size={16} />
+            </button>
+            <button onClick={next} className="bg-black/50 hover:bg-black/70 p-1 rounded-full text-white">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1">
+             {photos.map((_, i) => (
+               <div key={i} className={`w-1.5 h-1.5 rounded-full shadow-sm ${i === index ? 'bg-white' : 'bg-white/40'}`} />
+             ))}
+          </div>
+          <div className="absolute top-2 left-2 bg-black/50 px-2 py-0.5 rounded text-[10px] text-white">
+            {index + 1}/{photos.length}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const RestaurantDetail: React.FC<RestaurantDetailProps> = ({ 
   restaurant, 
@@ -128,52 +172,58 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
              <p>No visits recorded.</p>
            </div>
         ) : (
-          restaurant.visits.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((visit) => (
-            <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm relative group">
-              
-              {/* Delete Button (Logic: Creator or Auth User deleting Guest post) */}
-              {canDeleteVisit(visit) && (
-                <button 
-                  onClick={() => handleDelete(visit)}
-                  className="absolute top-2 right-2 z-10 bg-red-600/80 hover:bg-red-500 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                  title="Delete this memory"
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
+          restaurant.visits.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((visit) => {
+            // Normalize photos list (legacy support)
+            const photos = visit.photos && visit.photos.length > 0 ? visit.photos : [visit.photoDataUrl];
+            
+            return (
+              <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm relative group">
+                
+                {/* Delete Button (Logic: Creator or Auth User deleting Guest post) */}
+                {canDeleteVisit(visit) && (
+                  <button 
+                    onClick={() => handleDelete(visit)}
+                    className="absolute top-2 right-2 z-10 bg-red-600/80 hover:bg-red-500 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Delete this memory"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
 
-              <div className="h-48 w-full relative">
-                <img src={visit.photoDataUrl} className="w-full h-full object-cover" alt="Food" />
+                {/* Image Slider */}
+                <ImageSlider photos={photos} />
+
                 {visit.creatorName && (
-                  <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-md flex items-center gap-1">
+                  <div className="absolute top-40 bottom-24 left-2 z-10 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-md flex items-center gap-1 pointer-events-none">
                     <User size={10} className="text-gray-300" />
                     <span className="text-[10px] text-white font-medium">Added by {visit.creatorName}</span>
                   </div>
                 )}
-              </div>
-              <div className="p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-gray-700 font-bold ${getGradeColor(visit.rating)}`}>
-                    {visit.rating}
-                  </div>
-                  <div className="flex items-center gap-1 text-gray-500 text-xs mt-1">
-                    <Calendar size={12} />
-                    <span>{formatDate(visit.date)}</span>
-                  </div>
-                </div>
                 
-                {visit.comment && (
-                  <p className="text-gray-300 text-sm mb-3">"{visit.comment}"</p>
-                )}
-
-                {visit.aiDescription && (
-                  <div className="bg-indigo-900/20 border border-indigo-500/20 p-2 rounded-lg">
-                    <p className="text-xs text-indigo-300 italic">✨ {visit.aiDescription}</p>
+                <div className="p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-lg bg-gray-700 font-bold ${getGradeColor(visit.rating)}`}>
+                      {visit.rating}
+                    </div>
+                    <div className="flex items-center gap-1 text-gray-500 text-xs mt-1">
+                      <Calendar size={12} />
+                      <span>{formatDate(visit.date)}</span>
+                    </div>
                   </div>
-                )}
+                  
+                  {visit.comment && (
+                    <p className="text-gray-300 text-sm mb-3">"{visit.comment}"</p>
+                  )}
+
+                  {visit.aiDescription && (
+                    <div className="bg-indigo-900/20 border border-indigo-500/20 p-2 rounded-lg">
+                      <p className="text-xs text-indigo-300 italic">✨ {visit.aiDescription}</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

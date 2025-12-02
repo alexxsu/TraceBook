@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon } from 'lucide-react';
 import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID } from './types';
 import MapContainer from './components/MapContainer';
@@ -11,7 +11,7 @@ import UserHistoryModal from './components/UserHistoryModal';
 // Firebase Imports
 import { auth, googleProvider, db } from './firebaseConfig';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { collection, onSnapshot, doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc } from 'firebase/firestore';
 
 // Interface to support both Firebase User and our Mock Guest User
 interface AppUser {
@@ -65,6 +65,10 @@ function App() {
         const updated = fetchedRestaurants.find(r => r.id === selectedRestaurant.id);
         if (updated) {
           setSelectedRestaurant(updated);
+        } else {
+          // If the selected restaurant is no longer in the fetched list (it was deleted), close the view
+          setSelectedRestaurant(null);
+          setViewState(ViewState.MAP);
         }
       }
     }, (error) => {
@@ -101,7 +105,7 @@ function App() {
     setViewState(ViewState.LOGIN);
   };
 
-  const handleMapLoad = (map: google.maps.Map) => {
+  const handleMapLoad = useCallback((map: google.maps.Map) => {
     setMapInstance(map);
     map.addListener('center_changed', () => {
       const center = map.getCenter();
@@ -109,7 +113,7 @@ function App() {
         setCurrentMapCenter({ lat: center.lat(), lng: center.lng() });
       }
     });
-  };
+  }, []);
 
   // 3. Save to Firestore
   const handleSaveVisit = async (restaurantInfo: Restaurant, visit: Visit) => {
@@ -159,10 +163,18 @@ function App() {
         // Filter out the visit by ID
         const updatedVisits = currentData.visits.filter(v => v.id !== visitToDelete.id);
         
-        await updateDoc(restaurantRef, {
-          visits: updatedVisits
-        });
-        // UI updates automatically via onSnapshot
+        if (updatedVisits.length === 0) {
+          // If no visits remain, delete the entire restaurant document
+          await deleteDoc(restaurantRef);
+          // Close the detail view immediately
+          setSelectedRestaurant(null);
+          setViewState(ViewState.MAP);
+        } else {
+          // Otherwise, just update the visits array
+          await updateDoc(restaurantRef, {
+            visits: updatedVisits
+          });
+        }
       }
     } catch (e) {
       console.error("Error deleting visit:", e);
@@ -174,10 +186,10 @@ function App() {
     setViewState(ViewState.ADD_ENTRY);
   };
 
-  const handleMarkerClick = (r: Restaurant) => {
+  const handleMarkerClick = useCallback((r: Restaurant) => {
     setSelectedRestaurant(r);
     setViewState(ViewState.RESTAURANT_DETAIL);
-  };
+  }, []);
 
   // --- Login Screen ---
   if (viewState === ViewState.LOGIN) {
