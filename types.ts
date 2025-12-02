@@ -23,6 +23,8 @@ export interface Restaurant {
   visits: Visit[];
 }
 
+export const GUEST_ID = 'guest-user';
+
 // Global declaration for Google Maps
 declare global {
   namespace google {

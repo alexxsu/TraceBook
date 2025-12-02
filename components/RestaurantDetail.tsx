@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { X, Calendar, MapPin, Share2, User, Trash2 } from 'lucide-react';
-import { Restaurant, Visit } from '../types';
+import { Restaurant, Visit, GUEST_ID } from '../types';
 import { getGradeColor, gradeToScore, scoreToGrade } from '../utils/rating';
 
 interface RestaurantDetailProps {
@@ -39,6 +39,22 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     if (window.confirm("Are you sure you want to delete this memory? This cannot be undone.")) {
       onDeleteVisit(restaurant, visit);
     }
+  };
+
+  // Check if current user has permission to delete specific visit
+  const canDeleteVisit = (visit: Visit): boolean => {
+    if (!currentUserUid) return false;
+    
+    // 1. User can delete their own post
+    if (visit.createdBy === currentUserUid) return true;
+
+    // 2. Real Google Logged In Users (not guests) can delete Guest posts
+    const isRealUser = currentUserUid !== GUEST_ID;
+    const isGuestPost = visit.createdBy === GUEST_ID;
+
+    if (isRealUser && isGuestPost) return true;
+
+    return false;
   };
 
   // Calculate average grade
@@ -115,8 +131,8 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
           restaurant.visits.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((visit) => (
             <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm relative group">
               
-              {/* Delete Button (Only visible if currentUser matches creator) */}
-              {currentUserUid && visit.createdBy === currentUserUid && (
+              {/* Delete Button (Logic: Creator or Auth User deleting Guest post) */}
+              {canDeleteVisit(visit) && (
                 <button 
                   onClick={() => handleDelete(visit)}
                   className="absolute top-2 right-2 z-10 bg-red-600/80 hover:bg-red-500 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"

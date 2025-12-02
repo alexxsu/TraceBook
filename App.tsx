@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed } from 'lucide-react';
-import { Restaurant, ViewState, Coordinates, Visit } from './types';
+import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon } from 'lucide-react';
+import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID } from './types';
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
 import RestaurantDetail from './components/RestaurantDetail';
@@ -13,11 +13,18 @@ import { auth, googleProvider, db } from './firebaseConfig';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { collection, onSnapshot, doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 
+// Interface to support both Firebase User and our Mock Guest User
+interface AppUser {
+  uid: string;
+  displayName: string | null;
+  photoURL: string | null;
+}
+
 function App() {
   // Hardcoded key as requested
   const GOOGLE_MAPS_KEY = "AIzaSyB-2EeKGbY78jVlp3gFWbiLuXm0dZQAyhA";
   
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
@@ -33,14 +40,15 @@ function App() {
         setUser(currentUser);
         setViewState(ViewState.MAP);
       } else {
-        setUser(null);
-        setViewState(ViewState.LOGIN);
+        // Only reset to login if we aren't already in guest mode
+        setUser((prev) => (prev?.uid === GUEST_ID ? prev : null));
+        setViewState((prev) => (prev === ViewState.MAP && user?.uid === GUEST_ID ? ViewState.MAP : ViewState.LOGIN));
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [user?.uid]);
 
-  // 2. Firestore Real-time Sync (Only when logged in)
+  // 2. Firestore Real-time Sync (Only when logged in or guest)
   useEffect(() => {
     if (!user) return;
 
@@ -75,8 +83,21 @@ function App() {
     }
   };
 
+  const handleGuestLogin = () => {
+    setUser({
+      uid: GUEST_ID,
+      displayName: 'Guest',
+      photoURL: null
+    });
+    setViewState(ViewState.MAP);
+  };
+
   const handleLogout = async () => {
-    await signOut(auth);
+    if (user?.uid === GUEST_ID) {
+      setUser(null);
+    } else {
+      await signOut(auth);
+    }
     setViewState(ViewState.LOGIN);
   };
 
@@ -181,7 +202,7 @@ function App() {
           
           <button 
             onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-6 rounded-xl transition shadow-lg transform hover:scale-[1.02]"
+            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-6 rounded-xl transition shadow-lg transform hover:scale-[1.02] mb-4"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -190,6 +211,13 @@ function App() {
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
             Sign in with Google
+          </button>
+
+          <button 
+            onClick={handleGuestLogin}
+            className="text-sm text-gray-400 hover:text-white transition underline decoration-gray-600 hover:decoration-white"
+          >
+            Continue as Guest
           </button>
         </div>
       </div>
@@ -230,10 +258,16 @@ function App() {
                className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition"
                onClick={() => setViewState(ViewState.USER_HISTORY)}
              >
-                <img src={user.photoURL || ''} alt="User" className="w-6 h-6 rounded-full border border-gray-600" />
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full border border-gray-600" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center">
+                    <UserIcon size={14} className="text-gray-300"/>
+                  </div>
+                )}
                 <span className="text-xs text-gray-300 font-medium max-w-[100px] truncate">{user.displayName}</span>
              </div>
-             <button onClick={handleLogout} className="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded-full text-gray-400 transition">
+             <button onClick={handleLogout} className="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded-full text-gray-400 transition" title="Log Out">
                <LogOut size={14} />
              </button>
           </div>
