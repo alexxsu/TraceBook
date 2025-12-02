@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Camera, MapPin, Search, Loader2, Sparkles, X, Image as ImageIcon } from 'lucide-react';
 import { Coordinates, PlaceResult, Restaurant, Visit } from '../types';
@@ -7,9 +6,8 @@ import { generateFoodDescription } from '../services/geminiService';
 import { GRADES } from '../utils/rating';
 import { storage } from '../firebaseConfig';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-
-// Declare heic2any on window since we loaded it via script tag
-declare const heic2any: any;
+// Import heic2any properly
+import heic2any from 'heic2any';
 
 interface AddVisitModalProps {
   mapInstance: google.maps.Map | null;
@@ -67,7 +65,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
         let finalBlob: Blob = originalFile;
         const isHeic = originalFile.name.toLowerCase().endsWith('.heic') || originalFile.type === 'image/heic';
 
-        if (isHeic && typeof heic2any !== 'undefined') {
+        if (isHeic) {
           try {
             const convertedBlob = await heic2any({
               blob: originalFile,
