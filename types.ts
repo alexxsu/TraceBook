@@ -14,6 +14,7 @@ export interface Visit {
   aiDescription?: string;
   createdBy?: string; // User UID
   creatorName?: string; // User Display Name
+  creatorPhotoURL?: string | null; // User Profile Picture
 }
 
 export interface Restaurant {

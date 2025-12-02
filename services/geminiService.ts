@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 // We initialize the SDK inside the function to prevent the app from crashing 
@@ -9,16 +10,23 @@ export const generateFoodDescription = async (
   restaurantName: string
 ): Promise<string> => {
   try {
-    // Fix: Use process.env.API_KEY as per Google GenAI SDK guidelines.
-    // Initialization is deferred until the function is called.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      console.error("API Key is missing");
+      return "Error: API Key missing.";
+    }
 
-    let cleanBase64 = base64Image;
+    const ai = new GoogleGenAI({ apiKey });
 
-    // Fix: Handle blob URLs (e.g. from URL.createObjectURL) by fetching and converting to base64
+    let cleanBase64 = '';
+    let mimeType = 'image/jpeg'; // Default fallback
+
+    // Fix: Handle blob URLs and extract correct MIME type
     if (base64Image.startsWith('blob:')) {
       const response = await fetch(base64Image);
       const blob = await response.blob();
+      mimeType = blob.type; // Extract actual type (e.g. image/png)
+      
       cleanBase64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -29,9 +37,17 @@ export const generateFoodDescription = async (
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
+    } else if (base64Image.startsWith('data:')) {
+      // Extract MIME type from Data URL
+      const matches = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
+      if (matches && matches[1]) {
+        mimeType = matches[1];
+      }
+      // Remove Data URL prefix
+      cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z+]+;base64,/, '');
     } else {
-      // Fix: Remove Data URL prefix if present to get raw base64
-      cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|heic|webp);base64,/, '');
+      // Assume raw base64 is jpeg if unknown
+      cleanBase64 = base64Image;
     }
 
     const prompt = `I am at a restaurant called "${restaurantName}".
@@ -47,7 +63,7 @@ export const generateFoodDescription = async (
         parts: [
           {
             inlineData: {
-              mimeType: 'image/jpeg',
+              mimeType: mimeType, // Pass the correct dynamic mime type
               data: cleanBase64
             }
           },
@@ -56,7 +72,6 @@ export const generateFoodDescription = async (
       }
     });
 
-    // Fix: Access .text property directly
     return response.text || "Delicious!";
   } catch (error) {
     console.error("Gemini Error:", error);

@@ -29,25 +29,38 @@ const ImageSlider: React.FC<{ photos: string[] }> = ({ photos }) => {
   };
 
   return (
-    <div className="h-48 w-full relative group">
-      <img src={photos[index]} className="w-full h-full object-cover transition-all duration-300" alt="Food" />
+    <div className="h-48 w-full relative group overflow-hidden bg-gray-900">
+      {/* Carousel Container */}
+      <div 
+        className="flex h-full transition-transform duration-300 ease-out"
+        style={{ transform: `translateX(-${index * 100}%)` }}
+      >
+        {photos.map((photo, i) => (
+          <img 
+            key={i}
+            src={photo} 
+            className="w-full h-full object-cover flex-shrink-0" 
+            alt={`Food ${i + 1}`} 
+          />
+        ))}
+      </div>
       
       {photos.length > 1 && (
         <>
-          <div className="absolute inset-0 flex items-center justify-between p-2 opacity-0 group-hover:opacity-100 transition">
-            <button onClick={prev} className="bg-black/50 hover:bg-black/70 p-1 rounded-full text-white">
+          <div className="absolute inset-0 flex items-center justify-between p-2 opacity-0 group-hover:opacity-100 transition z-10">
+            <button onClick={prev} className="bg-black/50 hover:bg-black/70 p-1 rounded-full text-white backdrop-blur-sm">
               <ChevronLeft size={16} />
             </button>
-            <button onClick={next} className="bg-black/50 hover:bg-black/70 p-1 rounded-full text-white">
+            <button onClick={next} className="bg-black/50 hover:bg-black/70 p-1 rounded-full text-white backdrop-blur-sm">
               <ChevronRight size={16} />
             </button>
           </div>
-          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1">
+          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1 z-20">
              {photos.map((_, i) => (
-               <div key={i} className={`w-1.5 h-1.5 rounded-full shadow-sm ${i === index ? 'bg-white' : 'bg-white/40'}`} />
+               <div key={i} className={`w-1.5 h-1.5 rounded-full shadow-sm transition-colors ${i === index ? 'bg-white' : 'bg-white/40'}`} />
              ))}
           </div>
-          <div className="absolute top-2 left-2 bg-black/50 px-2 py-0.5 rounded text-[10px] text-white">
+          <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-white z-10 border border-white/10">
             {index + 1}/{photos.length}
           </div>
         </>
@@ -177,28 +190,40 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
             const photos = visit.photos && visit.photos.length > 0 ? visit.photos : [visit.photoDataUrl];
             
             return (
-              <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm relative group">
+              <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm group">
                 
-                {/* Delete Button (Logic: Creator or Auth User deleting Guest post) */}
-                {canDeleteVisit(visit) && (
-                  <button 
-                    onClick={() => handleDelete(visit)}
-                    className="absolute top-2 right-2 z-10 bg-red-600/80 hover:bg-red-500 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Delete this memory"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
+                {/* Image Section Container - Relative for absolute positioning of overlays */}
+                <div className="relative">
+                  {/* Delete Button (Logic: Creator or Auth User deleting Guest post) */}
+                  {canDeleteVisit(visit) && (
+                    <button 
+                      onClick={() => handleDelete(visit)}
+                      className="absolute top-2 right-2 z-20 bg-red-600/80 hover:bg-red-500 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Delete this memory"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
 
-                {/* Image Slider */}
-                <ImageSlider photos={photos} />
+                  {/* Image Slider */}
+                  <ImageSlider photos={photos} />
 
-                {visit.creatorName && (
-                  <div className="absolute top-40 bottom-24 left-2 z-10 bg-black/60 backdrop-blur-sm px-2 py-1 rounded-md flex items-center gap-1 pointer-events-none">
-                    <User size={10} className="text-gray-300" />
-                    <span className="text-[10px] text-white font-medium">Added by {visit.creatorName}</span>
-                  </div>
-                )}
+                  {/* Creator Badge - Positioned relative to image, with truncation and PFP */}
+                  {visit.creatorName && (
+                    <div className="absolute bottom-2 left-2 z-10 bg-black/60 backdrop-blur-md pl-1 pr-3 py-1 rounded-full flex items-center gap-2 max-w-[85%] border border-white/10 pointer-events-none">
+                      {visit.creatorPhotoURL ? (
+                         <img src={visit.creatorPhotoURL} alt="User" className="w-5 h-5 rounded-full object-cover border border-gray-400" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center border border-gray-500">
+                          <User size={10} className="text-gray-300" />
+                        </div>
+                      )}
+                      <span className="text-[10px] text-white font-medium truncate">
+                        {visit.creatorName}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 
                 <div className="p-4">
                   <div className="flex justify-between items-start mb-2">

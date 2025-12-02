@@ -131,7 +131,8 @@ function App() {
     const fullVisit: Visit = {
       ...visit,
       createdBy: user.uid,
-      creatorName: user.displayName || 'Anonymous'
+      creatorName: user.displayName || 'Anonymous',
+      creatorPhotoURL: user.photoURL // Pass photo URL here
     };
 
     const restaurantRef = doc(db, "restaurants", restaurantInfo.id);
