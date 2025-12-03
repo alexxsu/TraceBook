@@ -46,9 +46,9 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
 
   // Keyboard navigation for lightbox
   useEffect(() => {
+    if (!isLightboxOpen) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isLightboxOpen) return;
-      
       if (e.key === 'ArrowRight') {
         if (index < photos.length - 1) setIndex(prev => prev + 1);
       } else if (e.key === 'ArrowLeft') {
@@ -60,7 +60,8 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLightboxOpen, photos.length, index]);
+    // Fixed: Added handleLightboxClose to dependencies
+  }, [isLightboxOpen, photos.length, index, handleLightboxClose]);
 
   // Touch Handlers
   const onTouchStart = (e: React.TouchEvent) => {

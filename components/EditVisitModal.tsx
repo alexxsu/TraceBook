@@ -41,6 +41,13 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
     setTimeout(onClose, 200);
   };
 
+  // Cleanup blob URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      newPreviews.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [newPreviews]);
+
   const processFile = async (file: File): Promise<Blob> => {
     let fileToProcess: Blob = file;
     

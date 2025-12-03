@@ -11,7 +11,7 @@ import StatsModal from './components/StatsModal';
 import { calculateAverageGrade, GRADES, getGradeColor } from './utils/rating';
 
 // Firebase Imports
-import { auth, googleProvider, db, firebaseConfig } from './firebaseConfig';
+import { auth, googleProvider, db, GOOGLE_MAPS_API_KEY } from './firebaseConfig';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { collection, onSnapshot, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc } from 'firebase/firestore';
 
@@ -23,8 +23,6 @@ interface AppUser {
 }
 
 function App() {
-  const GOOGLE_MAPS_KEY = firebaseConfig.apiKey;
-  
   const [user, setUser] = useState<AppUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // Store full profile including role
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
@@ -68,13 +66,16 @@ function App() {
         setUser((prev) => (prev?.uid === GUEST_ID ? prev : null));
         setUserProfile(null);
         setViewState((prev) => {
-          if (prev === ViewState.MAP && user?.uid === GUEST_ID) return ViewState.MAP;
+          // Fixed: Use local prev instead of stale user state
+          const currentUser = prev === ViewState.MAP ? user : null;
+          if (prev === ViewState.MAP && currentUser?.uid === GUEST_ID) return ViewState.MAP;
           return ViewState.LOGIN;
         });
       }
     });
     return () => unsubscribe();
-  }, [user?.uid]);
+    // Fixed: Removed user?.uid from dependencies to prevent unnecessary re-subscriptions
+  }, []);
 
   // Check User Approval Status (Real Users Only)
   useEffect(() => {
@@ -127,31 +128,45 @@ function App() {
 
     const unsubscribe = onSnapshot(collection(db, "restaurants"), (snapshot) => {
       const fetchedRestaurants: Restaurant[] = [];
+      const docsToDelete: any[] = [];
+
       snapshot.forEach((docSnapshot) => {
         const data = docSnapshot.data() as Restaurant;
         if (!data.visits || data.visits.length === 0) {
-          deleteDoc(docSnapshot.ref).catch(e => console.error("Auto-cleanup error:", e));
+          // Fixed: Collect docs to delete instead of deleting in the listener
+          // This prevents race conditions with the snapshot listener
+          docsToDelete.push(docSnapshot.ref);
         } else {
           fetchedRestaurants.push(data);
         }
       });
-      setRestaurants(fetchedRestaurants);
-      
-      if (selectedRestaurant) {
-        const updated = fetchedRestaurants.find(r => r.id === selectedRestaurant.id);
-        if (updated) {
-          setSelectedRestaurant(updated);
-        } else {
-          setSelectedRestaurant(null);
-          setViewState(ViewState.MAP);
-        }
+
+      // Delete empty restaurants after processing snapshot
+      if (docsToDelete.length > 0) {
+        Promise.all(docsToDelete.map(ref => deleteDoc(ref)))
+          .catch(e => console.error("Auto-cleanup error:", e));
       }
+
+      setRestaurants(fetchedRestaurants);
+
+      // Update selected restaurant if it exists
+      setSelectedRestaurant(prev => {
+        if (!prev) return null;
+        const updated = fetchedRestaurants.find(r => r.id === prev.id);
+        if (updated) {
+          return updated;
+        } else {
+          setViewState(ViewState.MAP);
+          return null;
+        }
+      });
     }, (error) => {
       console.error("Error fetching data:", error);
     });
 
     return () => unsubscribe();
-  }, [user, selectedRestaurant, viewState]);
+    // Fixed: Removed selectedRestaurant from dependencies to prevent re-subscription
+  }, [user, viewState]);
 
   // Handle Search Filtering
   useEffect(() => {
@@ -511,8 +526,8 @@ function App() {
       {/* Map & Add Button Container */}
       {(viewState === ViewState.MAP || viewState === ViewState.RESTAURANT_DETAIL || viewState === ViewState.ADD_ENTRY || viewState === ViewState.EDIT_ENTRY || viewState === ViewState.INFO || viewState === ViewState.STATS || viewState === ViewState.USER_HISTORY) && (
         <>
-          <MapContainer 
-            apiKey={GOOGLE_MAPS_KEY} 
+          <MapContainer
+            apiKey={GOOGLE_MAPS_API_KEY}
             restaurants={filteredMapRestaurants}
             onMapLoad={handleMapLoad}
             onMarkerClick={handleMarkerClick}
