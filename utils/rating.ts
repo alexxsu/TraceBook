@@ -1,4 +1,6 @@
 
+import { Visit } from '../types';
+
 export const GRADES = ['S', 'A', 'B', 'C', 'D', 'E'];
 
 export const gradeToScore = (grade: string): number => {
@@ -44,4 +46,14 @@ export const getGradeDescription = (grade: string): string => {
     case 'E': return 'Hell, recommend to someone you hate';
     default: return '';
   }
+};
+
+export const calculateAverageGrade = (visits: Visit[]): string => {
+  if (!visits || visits.length === 0) return 'N/A';
+  let totalScore = 0;
+  visits.forEach(v => {
+    totalScore += gradeToScore(v.rating);
+  });
+  const avgScore = totalScore / visits.length;
+  return scoreToGrade(avgScore);
 };

@@ -1,7 +1,8 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Calendar, MapPin, Share2, User, Trash2, Pencil, Loader2, ExternalLink } from 'lucide-react';
 import { Restaurant, Visit, GUEST_ID } from '../types';
-import { getGradeColor, gradeToScore, scoreToGrade } from '../utils/rating';
+import { getGradeColor, calculateAverageGrade } from '../utils/rating';
 import html2canvas from 'html2canvas';
 import ImageSlider from './ImageSlider';
 
@@ -26,13 +27,20 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [shareBase64Map, setShareBase64Map] = useState<Record<string, string>>({});
   const shareRef = useRef<HTMLDivElement>(null);
+  
+  // Animation & Drag State
   const [isClosing, setIsClosing] = useState(false);
+  const [isClosingDown, setIsClosingDown] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const startYRef = useRef<number>(0);
   
   const sortedVisits = [...restaurant.visits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const handleClose = () => {
+  const handleClose = (direction: 'right' | 'down' = 'right') => {
+    if (direction === 'down') setIsClosingDown(true);
     setIsClosing(true);
-    setTimeout(onClose, 200);
+    setTimeout(onClose, 250); // Matches CSS animation duration
   };
 
   const formatDate = (dateStr: string) => {
@@ -43,67 +51,98 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     });
   };
 
+  // Drag Handlers
+  const onTouchStart = (e: React.TouchEvent) => {
+    startYRef.current = e.touches[0].clientY;
+    setIsDragging(true);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - startYRef.current;
+    
+    // Only allow dragging down
+    if (diff > 0) {
+      setDragY(diff);
+    }
+  };
+
+  const onTouchEnd = () => {
+    setIsDragging(false);
+    if (dragY > 150) { // Threshold to close
+      handleClose('down');
+    } else {
+      setDragY(0); // Snap back
+    }
+  };
+
+  const convertUrlToBase64 = (url: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      // Append a timestamp to avoid cache issues with CORS
+      img.src = url + (url.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
+      
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        try {
+          const dataURL = canvas.toDataURL('image/png');
+          resolve(dataURL);
+        } catch (e) {
+          reject(e); // Likely tainted canvas if CORS failed silently
+        }
+      };
+      
+      img.onerror = (e) => {
+        reject(new Error(`Image load failed`));
+      };
+    });
+  };
+
   const handleShareAsImage = async () => {
     if (!shareRef.current) return;
     setIsGeneratingShare(true);
 
     try {
-      // 1. Convert all images to Base64
+      // 1. Convert all images to Base64 using Canvas method
       const urls = sortedVisits.map(v => v.photoDataUrl).filter(url => url);
       const uniqueUrls = [...new Set(urls)];
       const newBase64Map: Record<string, string> = {};
 
       await Promise.all(uniqueUrls.map(async (url) => {
         try {
-          // If already data url, use as is
           if (url.startsWith('data:')) {
              newBase64Map[url] = url;
              return;
           }
-          
-          // Fetch blob and convert to base64
-          // 'cors' mode requests CORS headers. 'no-cache' ensures we don't get a cached opacity response.
-          const response = await fetch(url, { mode: 'cors', cache: 'no-cache' });
-          const blob = await response.blob();
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
+          const base64 = await convertUrlToBase64(url);
           newBase64Map[url] = base64;
         } catch (err) {
-          console.warn("Error converting image for share:", url, err);
-          // Fallback: If CORS fetch fails, we just use the original URL.
-          // html2canvas *might* fail on it if allowTaint is false (which it is),
-          // but at least we tried.
-          newBase64Map[url] = url;
+          console.warn("Error converting image for share (CORS might be missing on bucket):", url);
+          // Fallback to original URL - html2canvas might still fail to render it if it's cross-origin
+          newBase64Map[url] = url; 
         }
       }));
 
-      // 2. Set state and wait for DOM to update
       setShareBase64Map(newBase64Map);
       
-      // Give React time to render the new src attributes
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Allow React to re-render the hidden view with Base64 sources
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. Preload images to ensure they are fully painted
-      if (shareRef.current) {
-        const images = Array.from(shareRef.current.querySelectorAll('img')) as HTMLImageElement[];
-        await Promise.all(images.map(img => {
-          if (img.complete) return Promise.resolve();
-          return new Promise((resolve) => {
-             img.onload = () => resolve(null);
-             img.onerror = () => resolve(null); // Continue even if error
-          });
-        }));
-      }
-
-      // 4. Capture with html2canvas
       const canvas = await html2canvas(shareRef.current, {
         useCORS: true, 
+        allowTaint: false, // Must be false to allow export
         backgroundColor: '#111827',
-        scale: 2, // High res
+        scale: 2, 
         logging: false,
       });
 
@@ -119,7 +158,6 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
               text: `Check out my experience at ${restaurant.name} on 宝宝少爷寻味地图!`
             });
           } catch (shareError) {
-             // Share cancelled or failed, fallback to download
              downloadImage(canvas);
           }
         } else {
@@ -130,7 +168,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
 
     } catch (error) {
       console.error("Error generating image:", error);
-      alert("Failed to generate share image.");
+      alert("Failed to generate share image. Please ensure your Firebase Storage CORS settings allow this domain.");
       setIsGeneratingShare(false);
     }
   };
@@ -157,17 +195,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     return false;
   };
 
-  const calculateAverageGrade = () => {
-    if (restaurant.visits.length === 0) return 'N/A';
-    let totalScore = 0;
-    restaurant.visits.forEach(v => {
-      totalScore += gradeToScore(v.rating);
-    });
-    const avgScore = totalScore / restaurant.visits.length;
-    return scoreToGrade(avgScore);
-  };
-
-  const avgGrade = calculateAverageGrade();
+  const avgGrade = calculateAverageGrade(restaurant.visits);
 
   const handleOpenGoogleMaps = () => {
     const query = encodeURIComponent(`${restaurant.name} ${restaurant.address}`);
@@ -175,13 +203,33 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     window.open(url, '_blank');
   };
 
+  // Determine animation class
+  let animationClass = 'animate-slide-in-up sm:animate-slide-in-right'; // Mobile slide up, Desktop slide right
+  if (isClosing) {
+    animationClass = isClosingDown ? 'animate-slide-out-down' : 'animate-slide-out-down sm:animate-slide-out-right';
+  }
+
   return (
     <>
-      <div className={`absolute top-0 right-0 h-full w-full sm:w-[400px] bg-gray-900 border-l border-gray-800 shadow-2xl z-20 flex flex-col ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}>
+      <div 
+        className={`absolute bottom-0 left-0 right-0 h-[92%] sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] bg-gray-900 border-t sm:border-t-0 sm:border-l border-gray-800 shadow-2xl z-20 flex flex-col rounded-t-2xl sm:rounded-none ${animationClass}`}
+        style={{ 
+          transform: isDragging ? `translateY(${dragY}px)` : undefined,
+          transition: isDragging ? 'none' : undefined
+        }}
+      >
         
-        {/* Header */}
-        <div className="relative h-48 bg-gray-800 flex-shrink-0">
-          <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent z-10" />
+        {/* Header - Draggable Area */}
+        <div 
+          className="relative h-48 bg-gray-800 flex-shrink-0 cursor-grab active:cursor-grabbing touch-none rounded-t-2xl sm:rounded-none overflow-hidden"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+        >
+          {/* Drag Handle for Mobile */}
+          <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1.5 bg-gray-400/50 rounded-full z-30 sm:hidden"></div>
+
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent z-10 pointer-events-none" />
           {restaurant.visits.length > 0 && (
             <img 
               src={restaurant.visits[0].photoDataUrl} 
@@ -190,12 +238,12 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
             />
           )}
           <button 
-            onClick={handleClose}
+            onClick={() => handleClose('right')}
             className="absolute top-4 right-4 z-20 bg-black/50 hover:bg-black/70 p-2 rounded-full text-white transition"
           >
             <X size={20} />
           </button>
-          <div className="absolute bottom-4 left-4 right-4 z-20">
+          <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none">
             <h1 className="text-2xl font-bold text-white leading-tight">{restaurant.name}</h1>
             <div className="flex items-center gap-1 text-gray-300 text-xs mt-1">
               <MapPin size={12} />
@@ -386,8 +434,8 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
       >
         <div className="text-center mb-6">
            <h2 className="text-xl font-bold text-white mb-1">宝宝少爷寻味地图</h2>
-           <div className="w-16 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mb-4 rounded-full"></div>
-           <h1 className="text-2xl font-black text-blue-400 mb-2">{restaurant.name}</h1>
+           <div className="w-48 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mb-4 rounded-full shadow-sm"></div>
+           <h1 className="text-2xl font-black text-blue-400 mb-2 px-4 leading-tight">{restaurant.name}</h1>
            <p className="text-gray-400 text-xs flex items-center justify-center gap-1">
              <MapPin size={12} /> {restaurant.address}
            </p>
@@ -424,23 +472,20 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
                       <span className={`text-lg font-bold ${getGradeColor(visit.rating)}`}>{visit.rating}</span>
                    </div>
 
-                   <div className="rounded-lg overflow-hidden mb-2 border border-gray-700">
-                     <img 
-                       src={shareBase64Map[visit.photoDataUrl] || visit.photoDataUrl} 
-                       className="w-full h-32 object-cover" 
-                       crossOrigin="anonymous" 
-                       alt="Food"
-                     />
+                   {/* Use Background Image to prevent stretching and ensure cover fit */}
+                   <div className="rounded-lg overflow-hidden mb-2 border border-gray-700 h-64 bg-gray-800">
+                     <div 
+                        className="w-full h-full bg-cover bg-center"
+                        style={{ 
+                          backgroundImage: `url(${shareBase64Map[visit.photoDataUrl] || visit.photoDataUrl})` 
+                        }}
+                     ></div>
                    </div>
                    
                    {visit.comment && <p className="text-sm text-gray-300 italic mb-1">"{visit.comment}"</p>}
                 </div>
              </div>
            ))}
-        </div>
-
-        <div className="mt-8 pt-4 border-t border-gray-800 text-center">
-          <p className="text-xs text-gray-600 font-mono">Generated by GastroMap</p>
         </div>
       </div>
     </>

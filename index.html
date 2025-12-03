@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -39,24 +38,42 @@
         from { transform: translateX(0); }
         to { transform: translateX(100%); }
       }
+      @keyframes slideInUp {
+        from { transform: translateY(100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes slideOutDown {
+        from { transform: translateY(0); opacity: 1; }
+        to { transform: translateY(100%); opacity: 0; }
+      }
       @keyframes fadeInUp {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
-      @keyframes jumpOut {
-        0% { transform: translateY(100%) scale(0.1); opacity: 0; }
-        60% { transform: translateY(-10%) scale(1.05); opacity: 1; }
-        100% { transform: translateY(0) scale(1); opacity: 1; }
+      /* Elegant Bloom Effect */
+      @keyframes bloomIn {
+        0% { 
+          opacity: 0; 
+          transform: translateY(40px) scale(0.9); 
+          filter: blur(8px);
+        }
+        100% { 
+          opacity: 1; 
+          transform: translateY(0) scale(1); 
+          filter: blur(0);
+        }
       }
       
       .animate-scale-in { animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       .animate-scale-out { animation: scaleOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       .animate-slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       .animate-slide-out-right { animation: slideOutRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      .animate-slide-in-up { animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      .animate-slide-out-down { animation: slideOutDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; opacity: 0; }
       
-      .animate-jump-out { 
-        animation: jumpOut 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; 
+      .animate-bloom-in { 
+        animation: bloomIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; 
         transform-origin: bottom center;
       }
       

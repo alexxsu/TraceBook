@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Camera, MapPin, Search, Loader2, X, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Coordinates, PlaceResult, Restaurant, Visit } from '../types';
@@ -16,6 +15,7 @@ interface AddVisitModalProps {
   existingRestaurants: Restaurant[];
   onClose: () => void;
   onSave: (restaurant: Restaurant, visit: Visit) => void;
+  onPhotosUploaded?: (hasPhotos: boolean) => void;
 }
 
 interface SuggestionItem {
@@ -31,7 +31,8 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   currentLocation,
   existingRestaurants, 
   onClose, 
-  onSave 
+  onSave,
+  onPhotosUploaded
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isClosing, setIsClosing] = useState(false);
@@ -59,6 +60,12 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
     setIsClosing(true);
     setTimeout(onClose, 200);
   };
+
+  useEffect(() => {
+    if (onPhotosUploaded) {
+      onPhotosUploaded(previewUrls.length > 0);
+    }
+  }, [previewUrls, onPhotosUploaded]);
 
   const processFile = async (file: File): Promise<Blob> => {
     let fileToProcess: Blob = file;
@@ -265,7 +272,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   const prevPreview = () => setCurrentPreviewIndex(prev => (prev - 1 + previewUrls.length) % previewUrls.length);
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 ${isClosing ? 'animate-scale-out' : 'animate-jump-out'}`}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 ${isClosing ? 'animate-scale-out' : 'animate-bloom-in'}`}>
       <div className="bg-gray-800 w-full max-w-md rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">

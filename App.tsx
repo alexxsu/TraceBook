@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon, BarChart2, Search, X, Crosshair, Minus } from 'lucide-react';
+import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon, BarChart2, Search, X, Crosshair, Minus, LocateFixed, Filter } from 'lucide-react';
 import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID } from './types';
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
@@ -9,6 +9,7 @@ import InfoModal from './components/InfoModal';
 import UserHistoryModal from './components/UserHistoryModal';
 import EditVisitModal from './components/EditVisitModal';
 import StatsModal from './components/StatsModal';
+import { calculateAverageGrade, GRADES, getGradeColor } from './utils/rating';
 
 // Firebase Imports
 import { auth, googleProvider, db } from './firebaseConfig';
@@ -22,7 +23,7 @@ interface AppUser {
 }
 
 function App() {
-  const GOOGLE_MAPS_KEY = "AIzaSyB-2EeKGbY78jVlp3gFWbiLuXm0dZQAyhA";
+  const GOOGLE_MAPS_KEY = "AIzaSyCHoA2Vegt3SaybflKyedD7Y33o6kUPZr0";
   
   const [user, setUser] = useState<AppUser | null>(null);
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
@@ -34,6 +35,13 @@ function App() {
   const [searchResults, setSearchResults] = useState<Restaurant[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Grade Filter State
+  const [selectedGrades, setSelectedGrades] = useState<string[]>(GRADES);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  
+  // UI State
+  const [hideAddButton, setHideAddButton] = useState(false);
   
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant, visit: Visit } | null>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
@@ -103,6 +111,12 @@ function App() {
       searchInputRef.current.focus();
     }
   }, [isSearchFocused]);
+
+  // Calculate Filtered Restaurants for Map
+  const filteredMapRestaurants = restaurants.filter(r => {
+     const avgGrade = calculateAverageGrade(r.visits);
+     return selectedGrades.includes(avgGrade);
+  });
 
   const handleSearchSelect = (restaurant: Restaurant) => {
     setSearchQuery('');
@@ -185,6 +199,26 @@ function App() {
     }
   };
 
+  const handleResetView = () => {
+    if (mapInstance) {
+      // Bounds for Greater Toronto Area (approximate)
+      // SW: Mississauga/Oakville border, NE: Scarborough/Pickering border
+      const bounds = new google.maps.LatLngBounds(
+        { lat: 43.48, lng: -79.80 }, 
+        { lat: 43.90, lng: -79.00 }
+      );
+      mapInstance.fitBounds(bounds);
+    }
+  };
+
+  const toggleGradeFilter = (grade: string) => {
+    setSelectedGrades(prev => 
+      prev.includes(grade) 
+        ? prev.filter(g => g !== grade) 
+        : [...prev, grade]
+    );
+  };
+
   const handleSaveVisit = async (restaurantInfo: Restaurant, visit: Visit) => {
     if (!user) return;
 
@@ -206,6 +240,7 @@ function App() {
         await setDoc(restaurantRef, newRestaurant);
       }
       setViewState(ViewState.MAP);
+      setHideAddButton(false);
     } catch (e) {
       console.error("Error saving to Firestore:", e);
       alert("Failed to save memory. Check your internet connection.");
@@ -268,6 +303,16 @@ function App() {
 
   const openAddModal = () => setViewState(ViewState.ADD_ENTRY);
 
+  // Toggle function for the main action button
+  const handleToggleAdd = () => {
+    if (viewState === ViewState.ADD_ENTRY) {
+      setViewState(ViewState.MAP);
+      setHideAddButton(false);
+    } else {
+      setViewState(ViewState.ADD_ENTRY);
+    }
+  };
+
   const handleMarkerClick = useCallback((r: Restaurant) => {
     setSelectedRestaurant(r);
     setViewState(ViewState.RESTAURANT_DETAIL);
@@ -318,11 +363,17 @@ function App() {
     );
   }
 
+  const isAddModalOpen = viewState === ViewState.ADD_ENTRY;
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-gray-900">
+      {/* 
+        Pass filtered restaurants to map. 
+        Note: We keep existingRestaurants=restaurants in AddVisitModal so users can add visits to hidden places too if they search there.
+      */}
       <MapContainer 
         apiKey={GOOGLE_MAPS_KEY} 
-        restaurants={restaurants}
+        restaurants={filteredMapRestaurants}
         onMapLoad={handleMapLoad}
         onMarkerClick={handleMarkerClick}
       />
@@ -413,10 +464,55 @@ function App() {
       </div>
 
       {/* Top Right Buttons */}
-      <div className="absolute top-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
+      <div className="absolute top-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto items-end">
+        {/* Filter Button & Popover */}
+        <div className="relative">
+           <button 
+             onClick={() => setIsFilterOpen(!isFilterOpen)}
+             className={`p-3 rounded-full shadow-lg transition group backdrop-blur border flex items-center justify-center w-12 h-12
+               ${isFilterOpen || selectedGrades.length < GRADES.length ? 'bg-blue-600 text-white border-blue-400' : 'bg-gray-800/90 text-white border-gray-700 hover:bg-gray-700'}
+             `}
+             title="Filter Grades"
+           >
+              {selectedGrades.length === GRADES.length ? (
+                <Filter size={24} />
+              ) : (
+                 <span className="text-xs font-bold leading-none text-center">
+                   {selectedGrades.length <= 2 ? selectedGrades.join(' ') : selectedGrades.length}
+                 </span>
+              )}
+           </button>
+           
+           {isFilterOpen && (
+             <div className="absolute right-14 top-0 bg-gray-800 border border-gray-700 rounded-xl shadow-xl p-3 flex flex-col gap-2 animate-scale-in w-32 origin-top-right">
+                <div className="text-xs text-gray-400 font-bold uppercase mb-1">Filter Map</div>
+                <div className="grid grid-cols-2 gap-2">
+                   {GRADES.map(grade => (
+                     <button
+                       key={grade}
+                       onClick={() => toggleGradeFilter(grade)}
+                       className={`
+                         text-sm font-bold py-1.5 rounded transition border
+                         ${selectedGrades.includes(grade) 
+                            ? `${getGradeColor(grade)} bg-gray-700 border-gray-600` 
+                            : 'text-gray-600 border-transparent hover:bg-gray-700/50'}
+                       `}
+                     >
+                       {grade}
+                     </button>
+                   ))}
+                </div>
+                <div className="border-t border-gray-700 mt-1 pt-2 flex justify-between text-[10px]">
+                   <button onClick={() => setSelectedGrades(GRADES)} className="text-blue-400 hover:text-blue-300">All</button>
+                   <button onClick={() => setSelectedGrades([])} className="text-gray-500 hover:text-gray-400">None</button>
+                </div>
+             </div>
+           )}
+        </div>
+
         <button 
           onClick={() => setViewState(ViewState.STATS)}
-          className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
+          className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group w-12 h-12 flex items-center justify-center"
           title="Rankings"
         >
           <BarChart2 size={24} className="group-hover:text-blue-400 transition" />
@@ -424,7 +520,7 @@ function App() {
 
         <button 
             onClick={() => setViewState(ViewState.INFO)}
-            className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
+            className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group w-12 h-12 flex items-center justify-center"
             title="Info"
           >
             <Info size={24} className="group-hover:text-blue-400 transition" />
@@ -433,6 +529,13 @@ function App() {
 
       {/* Bottom Right Custom Map Controls */}
       <div className="absolute bottom-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
+        <button 
+           onClick={handleResetView}
+           className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
+           title="Reset View to GTA"
+        >
+           <MapIcon size={24} className="group-hover:text-blue-400 transition" />
+        </button>
         <button 
            onClick={handleLocateMe}
            className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
@@ -456,20 +559,31 @@ function App() {
         </button>
       </div>
 
-      {/* Add Button - Bottom Center */}
-      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-10 pointer-events-auto">
-        <button 
-          onClick={openAddModal}
-          className="group flex items-center bg-blue-600 hover:bg-blue-500 h-16 rounded-full overflow-hidden shadow-lg shadow-blue-900/50 transition-all duration-300 ease-in-out"
-        >
-          <div className="w-16 h-16 flex items-center justify-center flex-shrink-0">
-             <Plus size={28} className="text-white" />
-          </div>
-          <span className="max-w-0 group-hover:max-w-[10rem] overflow-hidden transition-all duration-500 ease-in-out whitespace-nowrap text-white font-medium pr-0 group-hover:pr-6">
-            Add Memory
-          </span>
-        </button>
-      </div>
+      {/* Add Button - Bottom Center - New Glassmorphism Design with Rotate Animation */}
+      {!hideAddButton && (
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-[60] pointer-events-auto">
+          <button 
+            onClick={handleToggleAdd}
+            className={`group relative flex items-center justify-center w-16 h-16 rounded-full border backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out active:scale-95
+               ${isAddModalOpen 
+                 ? 'bg-red-500/80 border-red-400/50 shadow-red-500/20' 
+                 : 'bg-gray-900/40 border-white/20 hover:bg-gray-900/60 hover:shadow-blue-500/20 hover:scale-105'
+               }
+            `}
+            title={isAddModalOpen ? "Close" : "Add Memory"}
+          >
+             {/* Inner ring for idle animation */}
+             {!isAddModalOpen && <div className="absolute inset-0 rounded-full border border-white/5 group-hover:scale-110 transition-transform duration-500 opacity-50"></div>}
+             
+             <Plus 
+               size={32} 
+               className={`text-white/90 drop-shadow-md transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]
+                 ${isAddModalOpen ? 'rotate-[135deg]' : 'group-hover:rotate-90'}
+               `} 
+             />
+          </button>
+        </div>
+      )}
 
       {/* Modals */}
       {viewState === ViewState.ADD_ENTRY && (
@@ -477,8 +591,12 @@ function App() {
           mapInstance={mapInstance}
           currentLocation={currentMapCenter}
           existingRestaurants={restaurants}
-          onClose={() => setViewState(ViewState.MAP)}
+          onClose={() => {
+            setViewState(ViewState.MAP);
+            setHideAddButton(false);
+          }}
           onSave={handleSaveVisit}
+          onPhotosUploaded={(hasPhotos) => setHideAddButton(hasPhotos)}
         />
       )}
 

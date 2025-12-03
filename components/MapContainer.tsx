@@ -15,6 +15,7 @@ const DEFAULT_CENTER = { lat: 43.6532, lng: -79.3832 };
 const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMarkerClick, onMapLoad }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   
   // Store clusterer instance
   const clustererRef = useRef<MarkerClusterer | null>(null);
@@ -25,7 +26,20 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
   useEffect(() => {
     if (!apiKey) return;
 
+    // Define global error handler for Google Maps Auth Failures
+    (window as any).gm_authFailure = () => {
+      const message = "Google Maps API Blocked. Please check your API Key Restrictions in Google Cloud Console. You may need to add this preview domain to the allowed list.";
+      setAuthError(message);
+      console.error(message);
+    };
+
     const loadMaps = async () => {
+      // Check if script already exists
+      if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+         initMap();
+         return;
+      }
+
       (function(g: any){
         var h: any, a: any, k: any, p: string = "The Google Maps JavaScript API", c: string = "google", l: string = "importLibrary", q: string = "__ib__", m: Document = document, b: any = window;
         b = b[c] || (b[c] = {});
@@ -66,12 +80,13 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         zoom: 13,
         mapTypeId: 'satellite',
         mapId: "DEMO_MAP_ID",
-        disableDefaultUI: true, // Hide core default controls
-        zoomControl: false,     // Explicitly disable Zoom control
-        mapTypeControl: false,  // Explicitly disable Map Type control
-        streetViewControl: false, // Explicitly disable Street View
-        fullscreenControl: false, // Explicitly disable Fullscreen control
-        rotateControl: false,     // Explicitly disable Rotate control
+        disableDefaultUI: true, // Explicitly disable all default controls
+        zoomControl: false,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        rotateControl: false,
+        scaleControl: false,
         gestureHandling: 'greedy', 
       });
 
@@ -164,6 +179,20 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
 
     updateMarkers();
   }, [mapInstance, restaurants, onMarkerClick]);
+
+  if (authError) {
+    return (
+      <div className="w-full h-full bg-gray-900 flex items-center justify-center p-8">
+        <div className="bg-red-900/20 border border-red-500/50 p-6 rounded-xl max-w-md text-center">
+          <h3 className="text-red-400 font-bold text-lg mb-2">Map Loading Failed</h3>
+          <p className="text-gray-300 mb-4">{authError}</p>
+          <p className="text-xs text-gray-500">
+             If you are in preview mode, go to Google Cloud Console and set restrictions to "None" temporarily.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={mapRef} className="w-full h-full bg-gray-900" />

@@ -206,12 +206,9 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
                 <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center p-2 md:p-12">
                    <img 
                      src={photo} 
-                     className="max-w-full max-h-full object-contain shadow-2xl select-none"
+                     className="max-w-full max-h-full object-contain shadow-2xl select-none cursor-zoom-out"
                      alt={`Full view ${i + 1}`}
                      loading="lazy"
-                     onClick={(e) => {
-                        // Removed click propagation stop so clicking image closes modal
-                     }}
                    />
                 </div>
               ))}
