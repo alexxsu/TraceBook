@@ -53,7 +53,8 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
              newBase64Map[url] = url;
              return;
           }
-          const response = await fetch(url);
+          // Fetch with CORS and no-cache to ensure we get headers required for canvas
+          const response = await fetch(url, { mode: 'cors', cache: 'no-cache' });
           const blob = await response.blob();
           const base64 = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
@@ -64,6 +65,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
           newBase64Map[url] = base64;
         } catch (err) {
           console.warn("Error converting image for share:", url, err);
+          // Fallback: This might fail in html2canvas if CORS headers are missing on the resource
           newBase64Map[url] = url;
         }
       }));
