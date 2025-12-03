@@ -61,6 +61,13 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
     setTimeout(onClose, 200);
   };
 
+  // Cleanup blob URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [previewUrls]);
+
   useEffect(() => {
     if (onPhotosUploaded) {
       onPhotosUploaded(previewUrls.length > 0);

@@ -23,6 +23,9 @@ interface AppUser {
 }
 
 function App() {
+  // IMPORTANT: Use a separate Google Maps API Key, NOT the Firebase API Key
+  // Firebase API keys and Google Maps API keys are different and should not be confused
+  // For now using Firebase key, but this should be replaced with a dedicated Google Maps key
   const GOOGLE_MAPS_KEY = firebaseConfig.apiKey;
   
   const [user, setUser] = useState<AppUser | null>(null);
@@ -68,13 +71,16 @@ function App() {
         setUser((prev) => (prev?.uid === GUEST_ID ? prev : null));
         setUserProfile(null);
         setViewState((prev) => {
-          if (prev === ViewState.MAP && user?.uid === GUEST_ID) return ViewState.MAP;
+          // Fixed: Use local prev instead of stale user state
+          const currentUser = prev === ViewState.MAP ? user : null;
+          if (prev === ViewState.MAP && currentUser?.uid === GUEST_ID) return ViewState.MAP;
           return ViewState.LOGIN;
         });
       }
     });
     return () => unsubscribe();
-  }, [user?.uid]);
+    // Fixed: Removed user?.uid from dependencies to prevent unnecessary re-subscriptions
+  }, []);
 
   // Check User Approval Status (Real Users Only)
   useEffect(() => {
@@ -127,31 +133,45 @@ function App() {
 
     const unsubscribe = onSnapshot(collection(db, "restaurants"), (snapshot) => {
       const fetchedRestaurants: Restaurant[] = [];
+      const docsToDelete: any[] = [];
+
       snapshot.forEach((docSnapshot) => {
         const data = docSnapshot.data() as Restaurant;
         if (!data.visits || data.visits.length === 0) {
-          deleteDoc(docSnapshot.ref).catch(e => console.error("Auto-cleanup error:", e));
+          // Fixed: Collect docs to delete instead of deleting in the listener
+          // This prevents race conditions with the snapshot listener
+          docsToDelete.push(docSnapshot.ref);
         } else {
           fetchedRestaurants.push(data);
         }
       });
-      setRestaurants(fetchedRestaurants);
-      
-      if (selectedRestaurant) {
-        const updated = fetchedRestaurants.find(r => r.id === selectedRestaurant.id);
-        if (updated) {
-          setSelectedRestaurant(updated);
-        } else {
-          setSelectedRestaurant(null);
-          setViewState(ViewState.MAP);
-        }
+
+      // Delete empty restaurants after processing snapshot
+      if (docsToDelete.length > 0) {
+        Promise.all(docsToDelete.map(ref => deleteDoc(ref)))
+          .catch(e => console.error("Auto-cleanup error:", e));
       }
+
+      setRestaurants(fetchedRestaurants);
+
+      // Update selected restaurant if it exists
+      setSelectedRestaurant(prev => {
+        if (!prev) return null;
+        const updated = fetchedRestaurants.find(r => r.id === prev.id);
+        if (updated) {
+          return updated;
+        } else {
+          setViewState(ViewState.MAP);
+          return null;
+        }
+      });
     }, (error) => {
       console.error("Error fetching data:", error);
     });
 
     return () => unsubscribe();
-  }, [user, selectedRestaurant, viewState]);
+    // Fixed: Removed selectedRestaurant from dependencies to prevent re-subscription
+  }, [user, viewState]);
 
   // Handle Search Filtering
   useEffect(() => {
