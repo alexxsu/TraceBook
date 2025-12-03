@@ -59,21 +59,39 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
 
     try {
       const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
-      const { Marker } = await google.maps.importLibrary("marker") as any; // Ensure Marker is loaded for Clusterer if needed
+      await google.maps.importLibrary("marker"); // Ensure Marker is loaded for Clusterer if needed
 
       const map = new Map(mapRef.current, {
         center: DEFAULT_CENTER,
         zoom: 13,
         mapTypeId: 'satellite',
         mapId: "DEMO_MAP_ID",
-        disableDefaultUI: false,
-        mapTypeControl: false,
-        streetViewControl: false,
+        disableDefaultUI: true, // Hide core default controls
+        zoomControl: false,     // Explicitly disable Zoom control
+        mapTypeControl: false,  // Explicitly disable Map Type control
+        streetViewControl: false, // Explicitly disable Street View
+        fullscreenControl: false, // Explicitly disable Fullscreen control
+        rotateControl: false,     // Explicitly disable Rotate control
         gestureHandling: 'greedy', 
       });
 
-      // Initialize MarkerClusterer
-      clustererRef.current = new MarkerClusterer({ map });
+      // Initialize MarkerClusterer with robust click handler
+      clustererRef.current = new MarkerClusterer({ 
+        map,
+        onClusterClick: (event, cluster, map) => {
+          // Explicit fitBounds ensures consistent zoom animation
+          const bounds = new google.maps.LatLngBounds();
+          if (cluster.markers) {
+            cluster.markers.forEach(m => {
+              if (m.position) {
+                bounds.extend(m.position);
+              }
+            });
+            // Padding ensures markers aren't right on the edge
+            map.fitBounds(bounds, 50); 
+          }
+        }
+      });
 
       setMapInstance(map);
       onMapLoad(map);

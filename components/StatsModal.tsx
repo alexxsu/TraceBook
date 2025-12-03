@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { X, MapPin, Calendar, User as UserIcon } from 'lucide-react';
 import { Restaurant, Visit } from '../types';
 import { GRADES, getGradeColor, getGradeDescription } from '../utils/rating';
@@ -16,6 +16,7 @@ interface FlattenedVisit extends Visit {
 }
 
 const StatsModal: React.FC<StatsModalProps> = ({ restaurants, onClose }) => {
+  const [isClosing, setIsClosing] = useState(false);
   
   // 1. Flatten all visits into a single array with restaurant metadata
   const allVisits: FlattenedVisit[] = restaurants.flatMap(r => 
@@ -42,27 +43,36 @@ const StatsModal: React.FC<StatsModalProps> = ({ restaurants, onClose }) => {
     });
   };
 
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 ${isClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
       <div className="bg-gray-800 w-full max-w-4xl rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             📊 Statistics & Rankings
           </h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
+          <button onClick={handleClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
             <X size={20} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-8 bg-gray-900/50">
           
-          {GRADES.map(grade => {
+          {GRADES.map((grade, gradeIndex) => {
             const visits = visitsByRating[grade];
             if (visits.length === 0) return null;
 
             return (
-              <div key={grade} className="space-y-4">
+              <div 
+                key={grade} 
+                className="space-y-4 animate-fade-in-up"
+                style={{ animationDelay: `${gradeIndex * 100}ms` }}
+              >
                 <div className="flex items-center gap-4 border-b border-gray-700 pb-2">
                   <div className={`text-4xl font-black ${getGradeColor(grade)} w-16 text-center`}>
                     {grade}

@@ -23,6 +23,7 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
 }) => {
   const [rating, setRating] = useState(visit.rating);
   const [comment, setComment] = useState(visit.comment);
+  const [isClosing, setIsClosing] = useState(false);
   
   // Manage existing photos and new photos separately initially
   const [existingPhotos, setExistingPhotos] = useState<string[]>(
@@ -34,6 +35,11 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
   
   const [isSaving, setIsSaving] = useState(false);
   const [isProcessingImg, setIsProcessingImg] = useState(false);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
 
   const processFile = async (file: File): Promise<Blob> => {
     let fileToProcess: Blob = file;
@@ -135,12 +141,12 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 ${isClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
       <div className="bg-gray-800 w-full max-w-lg rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h2 className="text-lg font-semibold text-white">Edit Experience</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
+          <button onClick={handleClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
             <X size={20} />
           </button>
         </div>

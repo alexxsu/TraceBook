@@ -19,6 +19,7 @@ const UserHistoryModal: React.FC<UserHistoryModalProps> = ({
   onClose,
   onSelectVisit
 }) => {
+  const [isClosing, setIsClosing] = useState(false);
   
   // Flatten restaurants to get all visits by this user
   const allUserVisits = restaurants.flatMap(r => 
@@ -37,6 +38,11 @@ const UserHistoryModal: React.FC<UserHistoryModalProps> = ({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(allUserVisits.length > ITEMS_PER_PAGE);
   const observerTarget = useRef<HTMLDivElement>(null);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -82,14 +88,14 @@ const UserHistoryModal: React.FC<UserHistoryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 ${isClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
       <div className="bg-gray-800 w-full max-w-2xl rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
             Your Food Journey <span className="text-gray-500 text-sm font-normal">({allUserVisits.length} memories)</span>
           </h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
+          <button onClick={handleClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
             <X size={20} />
           </button>
         </div>
@@ -102,11 +108,12 @@ const UserHistoryModal: React.FC<UserHistoryModalProps> = ({
             </div>
           ) : (
             <>
-              {displayedVisits.map((item) => (
+              {displayedVisits.map((item, index) => (
                 <div 
                   key={item.id} 
                   onClick={() => onSelectVisit(item.restaurantObj)}
-                  className="flex gap-4 p-3 bg-gray-800 hover:bg-gray-700 rounded-xl border border-gray-700 hover:border-blue-500/50 transition cursor-pointer group"
+                  className="flex gap-4 p-3 bg-gray-800 hover:bg-gray-700 rounded-xl border border-gray-700 hover:border-blue-500/50 transition cursor-pointer group animate-fade-in-up"
+                  style={{ animationDelay: `${(index % 10) * 50}ms` }}
                 >
                   {/* Thumbnail */}
                   <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-900">

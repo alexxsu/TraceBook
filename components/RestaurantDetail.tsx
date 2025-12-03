@@ -1,5 +1,4 @@
-
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Calendar, MapPin, Share2, User, Trash2, Pencil, Loader2, ExternalLink } from 'lucide-react';
 import { Restaurant, Visit, GUEST_ID } from '../types';
 import { getGradeColor, gradeToScore, scoreToGrade } from '../utils/rating';
@@ -27,8 +26,14 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [shareBase64Map, setShareBase64Map] = useState<Record<string, string>>({});
   const shareRef = useRef<HTMLDivElement>(null);
+  const [isClosing, setIsClosing] = useState(false);
   
   const sortedVisits = [...restaurant.visits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -43,17 +48,21 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     setIsGeneratingShare(true);
 
     try {
+      // 1. Convert all images to Base64
       const urls = sortedVisits.map(v => v.photoDataUrl).filter(url => url);
       const uniqueUrls = [...new Set(urls)];
       const newBase64Map: Record<string, string> = {};
 
       await Promise.all(uniqueUrls.map(async (url) => {
         try {
+          // If already data url, use as is
           if (url.startsWith('data:')) {
              newBase64Map[url] = url;
              return;
           }
-          // Fetch with CORS and no-cache to ensure we get headers required for canvas
+          
+          // Fetch blob and convert to base64
+          // 'cors' mode requests CORS headers. 'no-cache' ensures we don't get a cached opacity response.
           const response = await fetch(url, { mode: 'cors', cache: 'no-cache' });
           const blob = await response.blob();
           const base64 = await new Promise<string>((resolve, reject) => {
@@ -65,19 +74,37 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
           newBase64Map[url] = base64;
         } catch (err) {
           console.warn("Error converting image for share:", url, err);
-          // Fallback: This might fail in html2canvas if CORS headers are missing on the resource
+          // Fallback: If CORS fetch fails, we just use the original URL.
+          // html2canvas *might* fail on it if allowTaint is false (which it is),
+          // but at least we tried.
           newBase64Map[url] = url;
         }
       }));
 
+      // 2. Set state and wait for DOM to update
       setShareBase64Map(newBase64Map);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Give React time to render the new src attributes
+      await new Promise(resolve => setTimeout(resolve, 300));
 
+      // 3. Preload images to ensure they are fully painted
+      if (shareRef.current) {
+        const images = Array.from(shareRef.current.querySelectorAll('img')) as HTMLImageElement[];
+        await Promise.all(images.map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise((resolve) => {
+             img.onload = () => resolve(null);
+             img.onerror = () => resolve(null); // Continue even if error
+          });
+        }));
+      }
+
+      // 4. Capture with html2canvas
       const canvas = await html2canvas(shareRef.current, {
-        useCORS: true,
-        allowTaint: true,
+        useCORS: true, 
         backgroundColor: '#111827',
-        scale: 2,
+        scale: 2, // High res
+        logging: false,
       });
 
       canvas.toBlob(async (blob: Blob | null) => {
@@ -92,6 +119,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
               text: `Check out my experience at ${restaurant.name} on 宝宝少爷寻味地图!`
             });
           } catch (shareError) {
+             // Share cancelled or failed, fallback to download
              downloadImage(canvas);
           }
         } else {
@@ -149,7 +177,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
 
   return (
     <>
-      <div className="absolute top-0 right-0 h-full w-full sm:w-[400px] bg-gray-900 border-l border-gray-800 shadow-2xl z-20 flex flex-col transform transition-transform duration-300">
+      <div className={`absolute top-0 right-0 h-full w-full sm:w-[400px] bg-gray-900 border-l border-gray-800 shadow-2xl z-20 flex flex-col ${isClosing ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}>
         
         {/* Header */}
         <div className="relative h-48 bg-gray-800 flex-shrink-0">
@@ -162,7 +190,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
             />
           )}
           <button 
-            onClick={onClose}
+            onClick={handleClose}
             className="absolute top-4 right-4 z-20 bg-black/50 hover:bg-black/70 p-2 rounded-full text-white transition"
           >
             <X size={20} />
@@ -229,11 +257,15 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
                    <p>No visits recorded.</p>
                  </div>
               ) : (
-                sortedVisits.map((visit) => {
+                sortedVisits.map((visit, index) => {
                   const photos = visit.photos && visit.photos.length > 0 ? visit.photos : [visit.photoDataUrl];
                   
                   return (
-                    <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm group">
+                    <div 
+                      key={visit.id} 
+                      className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm group animate-fade-in-up"
+                      style={{ animationDelay: `${index * 100}ms` }}
+                    >
                       
                       <div className="relative">
                         {canEditOrDeleteVisit(visit) && (
@@ -297,7 +329,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
 
           {/* INFO TAB */}
           {activeTab === 'info' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-fade-in-up">
                <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Location Details</h3>
                  

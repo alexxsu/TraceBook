@@ -18,14 +18,21 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
 
   if (!photos || photos.length === 0) return <div className="h-48 bg-gray-800" />;
 
+  const canGoNext = index < photos.length - 1;
+  const canGoPrev = index > 0;
+
   const next = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setIndex((prev) => (prev + 1) % photos.length);
+    if (canGoNext) {
+      setIndex((prev) => prev + 1);
+    }
   };
 
   const prev = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setIndex((prev) => (prev - 1 + photos.length) % photos.length);
+    if (canGoPrev) {
+      setIndex((prev) => prev - 1);
+    }
   };
 
   // Keyboard navigation for lightbox
@@ -34,9 +41,9 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
       if (!isLightboxOpen) return;
       
       if (e.key === 'ArrowRight') {
-        setIndex((prev) => (prev + 1) % photos.length);
+        if (index < photos.length - 1) setIndex(prev => prev + 1);
       } else if (e.key === 'ArrowLeft') {
-        setIndex((prev) => (prev - 1 + photos.length) % photos.length);
+        if (index > 0) setIndex(prev => prev - 1);
       } else if (e.key === 'Escape') {
         setIsLightboxOpen(false);
       }
@@ -44,7 +51,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLightboxOpen, photos.length]);
+  }, [isLightboxOpen, photos.length, index]);
 
   // Touch Handlers
   const onTouchStart = (e: React.TouchEvent) => {
@@ -67,10 +74,10 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
     const isLeftSwipe = distance > minSwipeDistance;
     const isRightSwipe = distance < -minSwipeDistance;
     
-    if (isLeftSwipe) {
-      setIndex((prev) => (prev + 1) % photos.length);
-    } else if (isRightSwipe) {
-      setIndex((prev) => (prev - 1 + photos.length) % photos.length);
+    if (isLeftSwipe && index < photos.length - 1) {
+      setIndex((prev) => prev + 1);
+    } else if (isRightSwipe && index > 0) {
+      setIndex((prev) => prev - 1);
     }
     
     // Reset refs after a short delay to allow onClick to check isDragging
@@ -99,8 +106,11 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
       >
         {/* Carousel Container */}
         <div 
-          className="flex h-full transition-transform duration-300 ease-out"
-          style={{ transform: `translateX(-${index * 100}%)` }}
+          className="flex h-full transition-transform duration-500"
+          style={{ 
+            transform: `translateX(-${index * 100}%)`,
+            transitionTimingFunction: 'cubic-bezier(0.25, 1, 0.5, 1)' 
+          }}
         >
           {photos.map((photo, i) => (
             <img 
@@ -116,16 +126,24 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
         {photos.length > 1 && (
           <>
             <div className="absolute inset-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition z-10 pointer-events-none">
-              <button onClick={prev} className="pointer-events-auto bg-black/40 hover:bg-black/60 p-2 rounded-full text-white backdrop-blur-sm transition transform active:scale-95">
-                <ChevronLeft size={20} />
-              </button>
-              <button onClick={next} className="pointer-events-auto bg-black/40 hover:bg-black/60 p-2 rounded-full text-white backdrop-blur-sm transition transform active:scale-95">
-                <ChevronRight size={20} />
-              </button>
+              <div className="pointer-events-auto">
+                {canGoPrev && (
+                  <button onClick={prev} className="bg-black/40 hover:bg-black/60 p-2 rounded-full text-white backdrop-blur-sm transition transform active:scale-95">
+                    <ChevronLeft size={20} />
+                  </button>
+                )}
+              </div>
+              <div className="pointer-events-auto">
+                {canGoNext && (
+                  <button onClick={next} className="bg-black/40 hover:bg-black/60 p-2 rounded-full text-white backdrop-blur-sm transition transform active:scale-95">
+                    <ChevronRight size={20} />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1 z-20 pointer-events-none">
                {photos.map((_, i) => (
-                 <div key={i} className={`w-1.5 h-1.5 rounded-full shadow-sm transition-colors ${i === index ? 'bg-white' : 'bg-white/40'}`} />
+                 <div key={i} className={`w-1.5 h-1.5 rounded-full shadow-sm transition-all duration-300 ${i === index ? 'bg-white w-3' : 'bg-white/40'}`} />
                ))}
             </div>
             <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-white z-10 border border-white/10 pointer-events-none">
@@ -138,7 +156,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
       {/* Fullscreen Lightbox Portal */}
       {isLightboxOpen && createPortal(
         <div 
-          className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-200"
+          className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex items-center justify-center animate-scale-in"
           onClick={() => setIsLightboxOpen(false)}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
@@ -156,7 +174,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
           </button>
 
           {/* Navigation - Left */}
-          {photos.length > 1 && (
+          {photos.length > 1 && canGoPrev && (
              <button 
                onClick={prev} 
                className="hidden md:block absolute left-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
@@ -166,7 +184,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
           )}
 
            {/* Navigation - Right */}
-          {photos.length > 1 && (
+          {photos.length > 1 && canGoNext && (
              <button 
                onClick={next} 
                className="hidden md:block absolute right-4 top-1/2 -translate-y-1/2 z-[60] p-4 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full backdrop-blur-md transition-all cursor-pointer hover:scale-110 active:scale-95"
@@ -178,8 +196,11 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
           {/* Main Image Slider Track */}
           <div className="w-full h-full overflow-hidden">
             <div 
-              className="flex h-full transition-transform duration-300 ease-out"
-              style={{ transform: `translateX(-${index * 100}%)` }}
+              className="flex h-full transition-transform duration-500"
+              style={{ 
+                transform: `translateX(-${index * 100}%)`,
+                transitionTimingFunction: 'cubic-bezier(0.25, 1, 0.5, 1)'
+              }}
             >
               {photos.map((photo, i) => (
                 <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center p-2 md:p-12">
@@ -189,8 +210,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
                      alt={`Full view ${i + 1}`}
                      loading="lazy"
                      onClick={(e) => {
-                        // Prevent click on image from closing the lightbox
-                        e.stopPropagation();
+                        // Removed click propagation stop so clicking image closes modal
                      }}
                    />
                 </div>

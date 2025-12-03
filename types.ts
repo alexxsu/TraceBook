@@ -35,7 +35,16 @@ declare global {
         constructor(mapDiv: Element | null, opts?: MapOptions);
         setCenter(latLng: LatLng | LatLngLiteral): void;
         getCenter(): LatLng;
+        setZoom(zoom: number): void;
+        getZoom(): number;
+        panTo(latLng: LatLng | LatLngLiteral): void;
+        fitBounds(bounds: LatLngBounds | LatLngBoundsLiteral, padding?: number | Padding): void;
         addListener(eventName: string, handler: Function): MapsEventListener;
+      }
+
+      class LatLngBounds {
+        constructor(sw?: LatLng | LatLngLiteral, ne?: LatLng | LatLngLiteral);
+        extend(point: LatLng | LatLngLiteral): LatLngBounds;
       }
 
       // Modern Library Import
@@ -50,6 +59,10 @@ declare global {
         disableDefaultUI?: boolean;
         mapTypeControl?: boolean;
         streetViewControl?: boolean;
+        zoomControl?: boolean;
+        fullscreenControl?: boolean;
+        rotateControl?: boolean;
+        scaleControl?: boolean;
         styles?: any[];
         gestureHandling?: string;
       }
@@ -62,6 +75,18 @@ declare global {
       interface LatLng {
         lat(): number;
         lng(): number;
+      }
+      interface LatLngBoundsLiteral {
+          east: number;
+          north: number;
+          south: number;
+          west: number;
+      }
+      interface Padding {
+          bottom: number;
+          left: number;
+          right: number;
+          top: number;
       }
 
       // Events
@@ -134,6 +159,7 @@ declare global {
       // Interface for Library Returns (to handle casting)
       interface MapsLibrary {
         Map: typeof google.maps.Map;
+        LatLngBounds: typeof google.maps.LatLngBounds;
       }
       interface MarkerLibrary {
         AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement;

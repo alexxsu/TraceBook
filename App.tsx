@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon, BarChart2, Search, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon, BarChart2, Search, X, Crosshair, Minus } from 'lucide-react';
 import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID } from './types';
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
@@ -33,6 +33,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Restaurant[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant, visit: Visit } | null>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
@@ -96,6 +97,13 @@ function App() {
     }
   }, [searchQuery, restaurants]);
 
+  // Auto-focus search input when activated
+  useEffect(() => {
+    if (isSearchFocused && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isSearchFocused]);
+
   const handleSearchSelect = (restaurant: Restaurant) => {
     setSearchQuery('');
     setSearchResults([]);
@@ -144,6 +152,38 @@ function App() {
       }
     });
   }, []);
+
+  const handleZoomIn = () => {
+    if (mapInstance) {
+      mapInstance.setZoom((mapInstance.getZoom() || 13) + 1);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapInstance) {
+      mapInstance.setZoom((mapInstance.getZoom() || 13) - 1);
+    }
+  };
+
+  const handleLocateMe = () => {
+    if (navigator.geolocation && mapInstance) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const pos = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+          mapInstance.panTo(pos);
+          mapInstance.setZoom(16);
+        },
+        () => {
+          alert("Could not access your location. Please check browser permissions.");
+        }
+      );
+    } else {
+      alert("Geolocation is not supported by this browser.");
+    }
+  };
 
   const handleSaveVisit = async (restaurantInfo: Restaurant, visit: Visit) => {
     if (!user) return;
@@ -245,7 +285,7 @@ function App() {
             <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600 rounded-full blur-[100px]"></div>
             <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600 rounded-full blur-[100px]"></div>
          </div>
-        <div className="bg-gray-800/80 backdrop-blur p-8 rounded-2xl shadow-2xl max-w-md w-full border border-gray-700 z-10 text-center">
+        <div className="bg-gray-800/80 backdrop-blur p-8 rounded-2xl shadow-2xl max-w-md w-full border border-gray-700 z-10 text-center animate-fade-in-up">
           <div className="flex justify-center mb-6">
             <div className="bg-gradient-to-tr from-blue-600 to-purple-600 p-4 rounded-2xl shadow-lg">
               <UtensilsCrossed size={40} className="text-white" />
@@ -290,7 +330,10 @@ function App() {
       {/* Top Left Controls */}
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 w-[calc(100%-6rem)] max-w-sm pointer-events-none">
         {/* Header / Search Bar */}
-        <div className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500">
+        <div 
+          className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 cursor-text"
+          onClick={() => setIsSearchFocused(true)}
+        >
           <div className="flex items-center gap-2">
             {!isSearchFocused && !searchQuery ? (
                <div className="flex items-center gap-2 px-2 py-1 text-white">
@@ -302,6 +345,7 @@ function App() {
             <div className={`flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 py-1 ${!isSearchFocused && !searchQuery ? 'hidden' : 'flex'}`}>
               <Search size={14} className="text-gray-400 mr-2" />
               <input 
+                ref={searchInputRef}
                 type="text" 
                 placeholder="Search your memories..." 
                 className="bg-transparent border-none focus:outline-none text-sm text-white w-full placeholder-gray-500"
@@ -311,14 +355,14 @@ function App() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="text-gray-400 hover:text-white">
+                <button onClick={(e) => { e.stopPropagation(); setSearchQuery(''); }} className="text-gray-400 hover:text-white">
                   <X size={14} />
                 </button>
               )}
             </div>
 
             {(!isSearchFocused && !searchQuery) && (
-               <button onClick={() => setIsSearchFocused(true)} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white ml-auto">
+               <button onClick={(e) => { e.stopPropagation(); setIsSearchFocused(true); }} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white ml-auto">
                  <Search size={18} />
                </button>
             )}
@@ -331,7 +375,7 @@ function App() {
                  searchResults.map(r => (
                    <button 
                      key={r.id} 
-                     onClick={() => handleSearchSelect(r)}
+                     onClick={(e) => { e.stopPropagation(); handleSearchSelect(r); }}
                      className="w-full text-left px-2 py-2 hover:bg-gray-700 rounded text-sm text-gray-300 hover:text-white flex flex-col"
                    >
                      <span className="font-semibold">{r.name}</span>
@@ -368,8 +412,8 @@ function App() {
         )}
       </div>
 
-      {/* Stats Button - Top Right */}
-      <div className="absolute top-24 right-4 z-10 flex flex-col gap-3">
+      {/* Top Right Buttons */}
+      <div className="absolute top-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
         <button 
           onClick={() => setViewState(ViewState.STATS)}
           className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
@@ -378,7 +422,6 @@ function App() {
           <BarChart2 size={24} className="group-hover:text-blue-400 transition" />
         </button>
 
-        {/* Info Button - Aligned Vertically Below Stats */}
         <button 
             onClick={() => setViewState(ViewState.INFO)}
             className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
@@ -388,8 +431,33 @@ function App() {
         </button>
       </div>
 
-      {/* Add Button */}
-      <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-10">
+      {/* Bottom Right Custom Map Controls */}
+      <div className="absolute bottom-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
+        <button 
+           onClick={handleLocateMe}
+           className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
+           title="Locate Me"
+        >
+           <Crosshair size={24} className="group-hover:text-blue-400 transition" />
+        </button>
+        <button 
+           onClick={handleZoomIn}
+           className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
+           title="Zoom In"
+        >
+           <Plus size={24} className="group-hover:text-blue-400 transition" />
+        </button>
+        <button 
+           onClick={handleZoomOut}
+           className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
+           title="Zoom Out"
+        >
+           <Minus size={24} className="group-hover:text-blue-400 transition" />
+        </button>
+      </div>
+
+      {/* Add Button - Bottom Center */}
+      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-10 pointer-events-auto">
         <button 
           onClick={openAddModal}
           className="group flex items-center bg-blue-600 hover:bg-blue-500 h-16 rounded-full overflow-hidden shadow-lg shadow-blue-900/50 transition-all duration-300 ease-in-out"

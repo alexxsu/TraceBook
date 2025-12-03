@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -20,6 +21,51 @@
       ::-webkit-scrollbar-track { background: #1f2937; }
       ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
       ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+      /* Custom Animations */
+      @keyframes scaleIn {
+        from { transform: scale(0.95); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+      @keyframes scaleOut {
+        from { transform: scale(1); opacity: 1; }
+        to { transform: scale(0.95); opacity: 0; }
+      }
+      @keyframes slideInRight {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+      }
+      @keyframes slideOutRight {
+        from { transform: translateX(0); }
+        to { transform: translateX(100%); }
+      }
+      @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes jumpOut {
+        0% { transform: translateY(100%) scale(0.1); opacity: 0; }
+        60% { transform: translateY(-10%) scale(1.05); opacity: 1; }
+        100% { transform: translateY(0) scale(1); opacity: 1; }
+      }
+      
+      .animate-scale-in { animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      .animate-scale-out { animation: scaleOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      .animate-slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      .animate-slide-out-right { animation: slideOutRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; opacity: 0; }
+      
+      .animate-jump-out { 
+        animation: jumpOut 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; 
+        transform-origin: bottom center;
+      }
+      
+      /* Stagger delays */
+      .delay-75 { animation-delay: 75ms; }
+      .delay-100 { animation-delay: 100ms; }
+      .delay-150 { animation-delay: 150ms; }
+      .delay-200 { animation-delay: 200ms; }
+      .delay-300 { animation-delay: 300ms; }
     </style>
   <script type="importmap">
 {

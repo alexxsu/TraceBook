@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Camera, MapPin, Search, Loader2, X, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Coordinates, PlaceResult, Restaurant, Visit } from '../types';
 import { getGPSFromImage } from '../utils/exif';
@@ -34,7 +34,8 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   onSave 
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  
+  const [isClosing, setIsClosing] = useState(false);
+
   // Multi-image state
   const [previewBlobs, setPreviewBlobs] = useState<Blob[]>([]); 
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -53,6 +54,11 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   
   // New saving state
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 200);
+  };
 
   const processFile = async (file: File): Promise<Blob> => {
     let fileToProcess: Blob = file;
@@ -259,7 +265,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   const prevPreview = () => setCurrentPreviewIndex(prev => (prev - 1 + previewUrls.length) % previewUrls.length);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 ${isClosing ? 'animate-scale-out' : 'animate-jump-out'}`}>
       <div className="bg-gray-800 w-full max-w-md rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
@@ -268,7 +274,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
             {step === 2 && 'Where was this?'}
             {step === 3 && 'How was it?'}
           </h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
+          <button onClick={handleClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
             <X size={20} />
           </button>
         </div>
