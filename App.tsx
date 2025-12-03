@@ -11,7 +11,7 @@ import StatsModal from './components/StatsModal';
 import { calculateAverageGrade, GRADES, getGradeColor } from './utils/rating';
 
 // Firebase Imports
-import { auth, googleProvider, db, firebaseConfig } from './firebaseConfig';
+import { auth, googleProvider, db, GOOGLE_MAPS_API_KEY } from './firebaseConfig';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { collection, onSnapshot, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc } from 'firebase/firestore';
 
@@ -23,11 +23,6 @@ interface AppUser {
 }
 
 function App() {
-  // IMPORTANT: Use a separate Google Maps API Key, NOT the Firebase API Key
-  // Firebase API keys and Google Maps API keys are different and should not be confused
-  // For now using Firebase key, but this should be replaced with a dedicated Google Maps key
-  const GOOGLE_MAPS_KEY = firebaseConfig.apiKey;
-  
   const [user, setUser] = useState<AppUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // Store full profile including role
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
@@ -531,8 +526,8 @@ function App() {
       {/* Map & Add Button Container */}
       {(viewState === ViewState.MAP || viewState === ViewState.RESTAURANT_DETAIL || viewState === ViewState.ADD_ENTRY || viewState === ViewState.EDIT_ENTRY || viewState === ViewState.INFO || viewState === ViewState.STATS || viewState === ViewState.USER_HISTORY) && (
         <>
-          <MapContainer 
-            apiKey={GOOGLE_MAPS_KEY} 
+          <MapContainer
+            apiKey={GOOGLE_MAPS_API_KEY}
             restaurants={filteredMapRestaurants}
             onMapLoad={handleMapLoad}
             onMarkerClick={handleMarkerClick}
