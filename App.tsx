@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon, BarChart2 } from 'lucide-react';
+import { Plus, Map as MapIcon, Info, LogOut, UtensilsCrossed, User as UserIcon, BarChart2, Search, X } from 'lucide-react';
 import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID } from './types';
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
@@ -15,7 +15,6 @@ import { auth, googleProvider, db } from './firebaseConfig';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { collection, onSnapshot, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc } from 'firebase/firestore';
 
-// Interface to support both Firebase User and our Mock Guest User
 interface AppUser {
   uid: string;
   displayName: string | null;
@@ -23,7 +22,6 @@ interface AppUser {
 }
 
 function App() {
-  // Hardcoded key as requested
   const GOOGLE_MAPS_KEY = "AIzaSyB-2EeKGbY78jVlp3gFWbiLuXm0dZQAyhA";
   
   const [user, setUser] = useState<AppUser | null>(null);
@@ -31,11 +29,15 @@ function App() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
   
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Restaurant[]>([]);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant, visit: Visit } | null>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [currentMapCenter, setCurrentMapCenter] = useState<Coordinates>({ lat: 43.6532, lng: -79.3832 });
 
-  // 1. Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
@@ -49,7 +51,6 @@ function App() {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // 2. Firestore Real-time Sync
   useEffect(() => {
     if (!user) return;
 
@@ -80,6 +81,36 @@ function App() {
 
     return () => unsubscribe();
   }, [user, selectedRestaurant]);
+
+  // Handle Search Filtering
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setSearchResults([]);
+    } else {
+      const lowerQuery = searchQuery.toLowerCase();
+      const results = restaurants.filter(r => 
+        r.name.toLowerCase().includes(lowerQuery) || 
+        r.address.toLowerCase().includes(lowerQuery)
+      );
+      setSearchResults(results);
+    }
+  }, [searchQuery, restaurants]);
+
+  const handleSearchSelect = (restaurant: Restaurant) => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setIsSearchFocused(false);
+    
+    // Pan map to location
+    if (mapInstance) {
+      mapInstance.setCenter(restaurant.location);
+      mapInstance.setZoom(16);
+    }
+    
+    // Open Detail
+    setSelectedRestaurant(restaurant);
+    setViewState(ViewState.RESTAURANT_DETAIL);
+  };
 
   const handleLogin = async () => {
     try {
@@ -256,24 +287,67 @@ function App() {
         onMarkerClick={handleMarkerClick}
       />
 
-      {/* Top Controls */}
-      <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 items-start">
-        <div className="flex gap-2">
-          <div className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-lg shadow-lg">
-             <h1 className="font-bold text-white px-2 flex items-center gap-2">
-               <MapIcon size={18} className="text-blue-500"/> 宝宝少爷寻味地图
-             </h1>
+      {/* Top Left Controls */}
+      <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 w-[calc(100%-6rem)] max-w-sm pointer-events-none">
+        {/* Header / Search Bar */}
+        <div className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500">
+          <div className="flex items-center gap-2">
+            {!isSearchFocused && !searchQuery ? (
+               <div className="flex items-center gap-2 px-2 py-1 text-white">
+                 <MapIcon size={18} className="text-blue-500 flex-shrink-0"/> 
+                 <span className="font-bold truncate">宝宝少爷寻味地图</span>
+               </div>
+            ) : null}
+            
+            <div className={`flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 py-1 ${!isSearchFocused && !searchQuery ? 'hidden' : 'flex'}`}>
+              <Search size={14} className="text-gray-400 mr-2" />
+              <input 
+                type="text" 
+                placeholder="Search your memories..." 
+                className="bg-transparent border-none focus:outline-none text-sm text-white w-full placeholder-gray-500"
+                value={searchQuery}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="text-gray-400 hover:text-white">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {(!isSearchFocused && !searchQuery) && (
+               <button onClick={() => setIsSearchFocused(true)} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white ml-auto">
+                 <Search size={18} />
+               </button>
+            )}
           </div>
-          <button 
-            onClick={() => setViewState(ViewState.INFO)}
-            className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-lg shadow-lg text-white hover:bg-gray-700 transition"
-          >
-            <Info size={18} />
-          </button>
+          
+          {/* Search Results Dropdown */}
+          {searchQuery && (
+             <div className="mt-2 border-t border-gray-700 pt-2 max-h-60 overflow-y-auto">
+               {searchResults.length > 0 ? (
+                 searchResults.map(r => (
+                   <button 
+                     key={r.id} 
+                     onClick={() => handleSearchSelect(r)}
+                     className="w-full text-left px-2 py-2 hover:bg-gray-700 rounded text-sm text-gray-300 hover:text-white flex flex-col"
+                   >
+                     <span className="font-semibold">{r.name}</span>
+                     <span className="text-xs text-gray-500 truncate">{r.address}</span>
+                   </button>
+                 ))
+               ) : (
+                 <p className="text-gray-500 text-sm px-2 py-1">No restaurants found.</p>
+               )}
+             </div>
+          )}
         </div>
         
+        {/* User Profile */}
         {user && (
-          <div className="bg-gray-800/90 backdrop-blur border border-gray-700 p-1.5 pl-3 pr-1.5 rounded-full shadow-lg flex items-center gap-2">
+          <div className="bg-gray-800/90 backdrop-blur border border-gray-700 p-1.5 pl-3 pr-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-auto self-start">
              <div 
                className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition"
                onClick={() => setViewState(ViewState.USER_HISTORY)}
@@ -294,14 +368,23 @@ function App() {
         )}
       </div>
 
-      {/* Stats Button - Top Right - Moved down to top-24 to avoid map controls */}
-      <div className="absolute top-24 right-4 z-10">
+      {/* Stats Button - Top Right */}
+      <div className="absolute top-24 right-4 z-10 flex flex-col gap-3">
         <button 
           onClick={() => setViewState(ViewState.STATS)}
           className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
           title="Rankings"
         >
           <BarChart2 size={24} className="group-hover:text-blue-400 transition" />
+        </button>
+
+        {/* Info Button - Aligned Vertically Below Stats */}
+        <button 
+            onClick={() => setViewState(ViewState.INFO)}
+            className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
+            title="Info"
+          >
+            <Info size={24} className="group-hover:text-blue-400 transition" />
         </button>
       </div>
 

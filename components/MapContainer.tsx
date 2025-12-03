@@ -1,5 +1,7 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Restaurant } from '../types';
+import { MarkerClusterer } from '@googlemaps/markerclusterer';
 
 interface MapContainerProps {
   apiKey: string;
@@ -13,15 +15,17 @@ const DEFAULT_CENTER = { lat: 43.6532, lng: -79.3832 };
 const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMarkerClick, onMapLoad }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
-  // Use a Map to track markers by Restaurant ID for diffing
+  
+  // Store clusterer instance
+  const clustererRef = useRef<MarkerClusterer | null>(null);
+  // Store marker instances to manage updates
   const markersRef = useRef<Map<string, google.maps.marker.AdvancedMarkerElement>>(new Map());
 
-  // 1. Robust Google Maps Loading using the Official Inline Loader
+  // 1. Load Map
   useEffect(() => {
     if (!apiKey) return;
 
     const loadMaps = async () => {
-      // Define the bootstrap loader strictly as per Google documentation
       (function(g: any){
         var h: any, a: any, k: any, p: string = "The Google Maps JavaScript API", c: string = "google", l: string = "importLibrary", q: string = "__ib__", m: Document = document, b: any = window;
         b = b[c] || (b[c] = {});
@@ -40,10 +44,9 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
       })({
         key: apiKey,
         v: "weekly",
-        loading: "async" // Explicitly requested
+        loading: "async"
       });
 
-      // Initialize Map
       initMap();
     };
 
@@ -56,7 +59,8 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
 
     try {
       const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
-      
+      const { Marker } = await google.maps.importLibrary("marker") as any; // Ensure Marker is loaded for Clusterer if needed
+
       const map = new Map(mapRef.current, {
         center: DEFAULT_CENTER,
         zoom: 13,
@@ -65,10 +69,11 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         disableDefaultUI: false,
         mapTypeControl: false,
         streetViewControl: false,
-        // 'greedy' allows 1-finger panning on mobile and scroll-to-zoom on desktop
-        // without the "Use two fingers to move the map" overlay.
         gestureHandling: 'greedy', 
       });
+
+      // Initialize MarkerClusterer
+      clustererRef.current = new MarkerClusterer({ map });
 
       setMapInstance(map);
       onMapLoad(map);
@@ -77,24 +82,21 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
     }
   };
 
-  // 2. Handle Advanced Markers with Diffing logic to prevent flashing
+  // 2. Handle Markers & Clustering
   useEffect(() => {
     const updateMarkers = async () => {
-      if (!mapInstance) return;
+      if (!mapInstance || !clustererRef.current) return;
 
       try {
         const { AdvancedMarkerElement } = await google.maps.importLibrary("marker") as google.maps.MarkerLibrary;
 
         const currentIds = new Set(restaurants.map(r => r.id));
+        const newMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 
-        // A. Add or Update Markers
+        // A. Add New Markers
         restaurants.forEach(restaurant => {
-          if (markersRef.current.has(restaurant.id)) {
-            // Marker exists. We do NOT recreate it to avoid flashing.
-            // If we needed to update position dynamically, we could do:
-            // markersRef.current.get(restaurant.id)!.position = restaurant.location;
-          } else {
-            // Create New Marker
+          if (!markersRef.current.has(restaurant.id)) {
+            // Create View
             const pinView = document.createElement("div");
             pinView.className = "marker-pin group relative flex items-center justify-center cursor-pointer";
             pinView.innerHTML = `
@@ -103,30 +105,38 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
             `;
 
             const marker = new AdvancedMarkerElement({
-              map: mapInstance,
               position: restaurant.location,
               title: restaurant.name,
               content: pinView,
               gmpClickable: true,
             });
 
-            // Note: We need to be careful with closures here. 
-            // If onMarkerClick changes, the listener invokes the old one.
-            // However, since onMarkerClick is stable via useCallback in parent, this is fine.
             marker.addListener('click', () => {
               onMarkerClick(restaurant);
             });
 
             markersRef.current.set(restaurant.id, marker);
+            newMarkers.push(marker);
           }
         });
 
-        // B. Remove Markers that are no longer in the list
+        // Add new markers to clusterer
+        if (newMarkers.length > 0) {
+          clustererRef.current.addMarkers(newMarkers);
+        }
+
+        // B. Remove Deleted Markers
+        const markersToRemove: google.maps.marker.AdvancedMarkerElement[] = [];
         for (const [id, marker] of markersRef.current) {
           if (!currentIds.has(id)) {
-            marker.map = null; // Remove from map
+            markersToRemove.push(marker);
+            marker.map = null; // Detach from map just in case
             markersRef.current.delete(id);
           }
+        }
+
+        if (markersToRemove.length > 0) {
+          clustererRef.current.removeMarkers(markersToRemove);
         }
 
       } catch (e) {

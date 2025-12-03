@@ -108,6 +108,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
               src={photo} 
               className="w-full h-full object-cover flex-shrink-0 select-none pointer-events-none" 
               alt={`Food ${i + 1}`} 
+              loading="lazy"
             />
           ))}
         </div>
@@ -186,6 +187,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
                      src={photo} 
                      className="max-w-full max-h-full object-contain shadow-2xl select-none"
                      alt={`Full view ${i + 1}`}
+                     loading="lazy"
                      onClick={(e) => {
                         // Prevent click on image from closing the lightbox
                         e.stopPropagation();
