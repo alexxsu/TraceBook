@@ -34,7 +34,9 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
   maxSharedMaps = 3
 }) => {
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingClosing, setIsCreatingClosing] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [isJoiningClosing, setIsJoiningClosing] = useState(false);
   const [newMapName, setNewMapName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,6 +52,36 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
   const canCreateMore = !isGuest && userSharedMapsCount < maxSharedMaps;
   const canJoinMore = !isGuest && totalSharedMapsCount < maxSharedMaps;
 
+  // Animation helpers
+  const openCreateForm = () => {
+    setIsCreatingClosing(false);
+    setIsCreating(true);
+  };
+
+  const closeCreateForm = () => {
+    setIsCreatingClosing(true);
+    setTimeout(() => {
+      setIsCreating(false);
+      setIsCreatingClosing(false);
+      setNewMapName('');
+    }, 200);
+  };
+
+  const openJoinForm = () => {
+    setIsJoiningClosing(false);
+    setIsJoining(true);
+  };
+
+  const closeJoinForm = () => {
+    setIsJoiningClosing(true);
+    setTimeout(() => {
+      setIsJoining(false);
+      setIsJoiningClosing(false);
+      setJoinCode('');
+      setJoinError(null);
+    }, 200);
+  };
+
   const handleClose = () => {
     setIsClosing(true);
     setTimeout(onClose, 200);
@@ -61,8 +93,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
     setIsSubmitting(true);
     try {
       await onCreateSharedMap(newMapName.trim());
-      setNewMapName('');
-      setIsCreating(false);
+      closeCreateForm();
     } catch (error) {
       console.error('Failed to create shared map:', error);
       alert('Failed to create shared map. Please try again.');
@@ -79,8 +110,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
     try {
       const success = await onJoinSharedMap(joinCode);
       if (success) {
-        setJoinCode('');
-        setIsJoining(false);
+        closeJoinForm();
       } else {
         setJoinError('Map not found. Check the code and try again.');
       }
@@ -423,7 +453,11 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
 
                   {/* Join Map Button/Form */}
                   {isJoining ? (
-                    <div className="space-y-3 mt-3 p-3 bg-gray-700/50 rounded-xl border border-gray-600">
+                    <div className={`space-y-3 mt-3 p-3 bg-gray-700/50 rounded-xl border border-gray-600 transition-all duration-200 overflow-hidden ${
+                      isJoiningClosing 
+                        ? 'opacity-0 scale-95 max-h-0 mt-0 p-0 border-0' 
+                        : 'opacity-100 scale-100 max-h-60 animate-scale-in'
+                    }`}>
                       <div>
                         <label className="text-xs text-gray-400 block mb-1">Enter 4-digit map code</label>
                         <input
@@ -445,11 +479,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                       )}
                       <div className="flex gap-2">
                         <button
-                          onClick={() => {
-                            setIsJoining(false);
-                            setJoinCode('');
-                            setJoinError(null);
-                          }}
+                          onClick={closeJoinForm}
                           className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
                         >
                           Cancel
@@ -470,9 +500,9 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                     </div>
                   ) : (
                     <button
-                      onClick={() => canJoinMore && setIsJoining(true)}
+                      onClick={() => canJoinMore && openJoinForm()}
                       disabled={!canJoinMore}
-                      className={`w-full flex items-center justify-center gap-2 py-2.5 mt-2 rounded-xl transition border
+                      className={`w-full flex items-center justify-center gap-2 py-2.5 mt-2 rounded-xl transition-all duration-200 border
                         ${canJoinMore
                           ? 'bg-green-600/20 hover:bg-green-600/30 text-green-300 border-green-500/30'
                           : 'bg-gray-700/30 text-gray-500 border-gray-600 cursor-not-allowed'}
@@ -500,7 +530,11 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
           {/* Create New Shared Map */}
           <div className="p-4 border-t border-gray-700">
             {isCreating && !isGuest ? (
-              <div className="space-y-3">
+              <div className={`space-y-3 transition-all duration-200 overflow-hidden ${
+                isCreatingClosing 
+                  ? 'opacity-0 scale-95 max-h-0' 
+                  : 'opacity-100 scale-100 max-h-40 animate-scale-in'
+              }`}>
                 <input
                   type="text"
                   value={newMapName}
@@ -515,10 +549,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      setIsCreating(false);
-                      setNewMapName('');
-                    }}
+                    onClick={closeCreateForm}
                     className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
                   >
                     Cancel
@@ -534,9 +565,9 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
               </div>
             ) : (
               <button
-                onClick={() => canCreateMore && setIsCreating(true)}
+                onClick={() => canCreateMore && openCreateForm()}
                 disabled={!canCreateMore || isGuest}
-                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl transition border
+                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl transition-all duration-200 border
                   ${canCreateMore && !isGuest
                     ? 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border-purple-500/30'
                     : 'bg-gray-700/50 text-gray-500 cursor-not-allowed border-gray-600'}

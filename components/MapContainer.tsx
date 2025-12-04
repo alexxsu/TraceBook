@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Restaurant } from '../types';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
@@ -14,10 +13,10 @@ interface MapContainerProps {
 const DEFAULT_CENTER = { lat: 43.6532, lng: -79.3832 };
 
 // SVG icon for pins - matches UI button style
-const createPinSvg = (isDarkMode: boolean = false) => {
-  const fillColor = isDarkMode ? 'rgba(255, 255, 255, 0.95)' : 'rgba(31, 41, 55, 0.95)';
-  const strokeColor = isDarkMode ? 'rgba(200, 200, 200, 1)' : 'rgba(75, 85, 99, 1)';
-  const dotColor = isDarkMode ? 'rgba(31, 41, 55, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+const createPinSvg = (isDarkMode: boolean = false, opacity: number = 1) => {
+  const fillColor = isDarkMode ? `rgba(255, 255, 255, ${opacity * 0.95})` : `rgba(31, 41, 55, ${opacity * 0.95})`;
+  const strokeColor = isDarkMode ? `rgba(200, 200, 200, ${opacity})` : `rgba(75, 85, 99, ${opacity})`;
+  const dotColor = isDarkMode ? `rgba(31, 41, 55, ${opacity * 0.95})` : `rgba(255, 255, 255, ${opacity * 0.95})`;
 
   return `data:image/svg+xml,${encodeURIComponent(`
     <svg width="36" height="48" viewBox="0 0 36 48" xmlns="http://www.w3.org/2000/svg">
@@ -31,7 +30,7 @@ const createPinSvg = (isDarkMode: boolean = false) => {
 };
 
 // SVG icon for clusters
-const createClusterSvg = (count: number, isDarkMode: boolean = false) => {
+const createClusterSvg = (count: number, isDarkMode: boolean = false, opacity: number = 1) => {
   let size = 48;
   let fontSize = 16;
 
@@ -49,9 +48,9 @@ const createClusterSvg = (count: number, isDarkMode: boolean = false) => {
     fontSize = 20;
   }
 
-  const fillColor = isDarkMode ? 'rgba(255, 255, 255, 0.95)' : 'rgba(31, 41, 55, 0.95)';
-  const strokeColor = isDarkMode ? 'rgba(200, 200, 200, 1)' : 'rgba(75, 85, 99, 1)';
-  const textColor = isDarkMode ? 'rgba(31, 41, 55, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+  const fillColor = isDarkMode ? `rgba(255, 255, 255, ${opacity * 0.95})` : `rgba(31, 41, 55, ${opacity * 0.95})`;
+  const strokeColor = isDarkMode ? `rgba(200, 200, 200, ${opacity})` : `rgba(75, 85, 99, ${opacity})`;
+  const textColor = isDarkMode ? `rgba(31, 41, 55, ${opacity * 0.95})` : `rgba(255, 255, 255, ${opacity * 0.95})`;
 
   const svg = `
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
@@ -62,6 +61,41 @@ const createClusterSvg = (count: number, isDarkMode: boolean = false) => {
   `;
 
   return { svg, size };
+};
+
+// Animate marker opacity
+const animateMarkerOpacity = (
+  marker: google.maps.Marker, 
+  fromOpacity: number, 
+  toOpacity: number, 
+  duration: number,
+  isDarkMode: boolean,
+  onComplete?: () => void
+) => {
+  const startTime = performance.now();
+  
+  const animate = (currentTime: number) => {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Ease out cubic
+    const easeProgress = 1 - Math.pow(1 - progress, 3);
+    const currentOpacity = fromOpacity + (toOpacity - fromOpacity) * easeProgress;
+    
+    marker.setIcon({
+      url: createPinSvg(isDarkMode, currentOpacity),
+      scaledSize: new google.maps.Size(36, 48),
+      anchor: new google.maps.Point(18, 48),
+    });
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else if (onComplete) {
+      onComplete();
+    }
+  };
+  
+  requestAnimationFrame(animate);
 };
 
 const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMarkerClick, onMapLoad, mapType = 'satellite' }) => {
@@ -75,6 +109,8 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
   const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
   // Track current map type for marker updates
   const currentMapTypeRef = useRef<string>(mapType);
+  // Track previous restaurant IDs for animation
+  const prevRestaurantIdsRef = useRef<Set<string>>(new Set());
 
   // 1. Load Map
   useEffect(() => {
@@ -100,7 +136,7 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         var d = b.maps || (b.maps = {}), r = new Set(), e = new URLSearchParams(), u = () => h || (h = new Promise(async (f, n) => {
             await (a = m.createElement("script"));
             e.set("libraries", [...r] + "");
-            for (k in g) e.set(k.replace(/[A-Z]/g, (t) => "_" + t[0].toLowerCase()), g[k]);
+            for (k in g) e.set(k.replace(/[A-Z]/g, (t: string) => "_" + t[0].toLowerCase()), g[k]);
             e.set("callback", c + ".maps." + q);
             a.src = `https://maps.googleapis.com/maps/api/js?` + e;
             d[q] = f;
@@ -183,25 +219,62 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
     }
   };
 
-  // 2. Handle Markers & Clustering
+  // 2. Handle Markers & Clustering with animations
   useEffect(() => {
     const updateMarkers = async () => {
       if (!mapInstance || !clustererRef.current) return;
 
       const isDarkMode = mapType === 'dark';
+      const currentIds = new Set(restaurants.map(r => r.id));
+      const prevIds = prevRestaurantIdsRef.current;
+      
+      // Check if this is a map switch (many markers changing at once)
+      const addedCount = [...currentIds].filter(id => !prevIds.has(id)).length;
+      const removedCount = [...prevIds].filter(id => !currentIds.has(id)).length;
+      const isMapSwitch = (addedCount > 3 || removedCount > 3) && prevIds.size > 0;
 
       try {
-        const currentIds = new Set(restaurants.map(r => r.id));
-        const newMarkers: google.maps.Marker[] = [];
+        // A. Fade out and remove old markers
+        const markersToRemove: google.maps.Marker[] = [];
+        const removePromises: Promise<void>[] = [];
+        
+        for (const [id, marker] of markersRef.current) {
+          if (!currentIds.has(id)) {
+            if (isMapSwitch) {
+              // Animate fade out
+              removePromises.push(new Promise<void>((resolve) => {
+                animateMarkerOpacity(marker, 1, 0, 300, isDarkMode, () => {
+                  marker.setMap(null);
+                  resolve();
+                });
+              }));
+            } else {
+              marker.setMap(null);
+            }
+            markersToRemove.push(marker);
+            markersRef.current.delete(id);
+          }
+        }
 
-        // A. Add New Markers
+        // Wait for fade out animations
+        if (removePromises.length > 0) {
+          await Promise.all(removePromises);
+        }
+
+        if (markersToRemove.length > 0) {
+          clustererRef.current.removeMarkers(markersToRemove);
+        }
+
+        // B. Add new markers with fade in animation
+        const newMarkers: google.maps.Marker[] = [];
+        
         restaurants.forEach(restaurant => {
           if (!markersRef.current.has(restaurant.id)) {
             const marker = new google.maps.Marker({
               position: restaurant.location,
               title: restaurant.name,
               icon: {
-                url: createPinSvg(isDarkMode),
+                url: createPinSvg(isDarkMode, isMapSwitch ? 0 : 1),
                 scaledSize: new google.maps.Size(36, 48),
                 anchor: new google.maps.Point(18, 48),
               },
@@ -213,6 +286,13 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
 
             markersRef.current.set(restaurant.id, marker);
             newMarkers.push(marker);
+            
+            // Animate fade in for new markers during map switch
+            if (isMapSwitch) {
+              setTimeout(() => {
+                animateMarkerOpacity(marker, 0, 1, 400, isDarkMode);
+              }, 50);
+            }
           }
         });
 
@@ -221,19 +301,8 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
           clustererRef.current.addMarkers(newMarkers);
         }
 
-        // B. Remove Deleted Markers
-        const markersToRemove: google.maps.Marker[] = [];
-        for (const [id, marker] of markersRef.current) {
-          if (!currentIds.has(id)) {
-            markersToRemove.push(marker);
-            marker.setMap(null);
-            markersRef.current.delete(id);
-          }
-        }
-
-        if (markersToRemove.length > 0) {
-          clustererRef.current.removeMarkers(markersToRemove);
-        }
+        // Update previous IDs reference
+        prevRestaurantIdsRef.current = currentIds;
 
       } catch (e) {
         console.error("Error updating markers", e);

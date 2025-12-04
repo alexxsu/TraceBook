@@ -1018,54 +1018,55 @@ function App() {
                   <Menu size={20} />
                 </button>
 
-                {/* Logo/Title - slides out when search focused */}
-                <div
-                  onClick={(e) => { e.stopPropagation(); setIsSearchFocused(true); }}
-                  className={`flex items-center gap-2 px-1 py-1 text-white transition-all duration-300 ease-out cursor-pointer hover:opacity-80 ${
-                    isSearchFocused || searchQuery
-                      ? 'opacity-0 scale-95 absolute -translate-x-4 pointer-events-none'
-                      : 'opacity-100 scale-100'
-                  }`}
-                >
-                  <img src="/logo.svg" className="w-8 h-8 object-contain" alt="Logo" />
-                  <span className="font-bold truncate">TraceBook</span>
-                </div>
+                {/* Logo/Title - hidden when search focused */}
+                {!isSearchFocused && !searchQuery && (
+                  <div
+                    onClick={(e) => { e.stopPropagation(); setIsSearchFocused(true); }}
+                    className="flex items-center gap-2 px-1 py-1 text-white cursor-pointer hover:opacity-80 animate-fade-in"
+                  >
+                    <img src="/logo.svg" className="w-8 h-8 object-contain" alt="Logo" />
+                    <span className="font-bold truncate">TraceBook</span>
+                  </div>
+                )}
 
-                {/* Search Input - slides in when focused */}
-                <div
-                  className={`flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 py-1 transition-all duration-300 ease-out ${
-                    isSearchFocused || searchQuery
-                      ? 'opacity-100 scale-100 translate-x-0'
-                      : 'opacity-0 scale-95 translate-x-4 absolute right-10 pointer-events-none'
-                  }`}
-                >
-                  <Search size={14} className="text-gray-400 mr-2 flex-shrink-0" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    placeholder="Search your memories..."
-                    className="bg-transparent border-none focus:outline-none text-sm text-white w-full placeholder-gray-500"
-                    value={searchQuery}
-                    onFocus={() => setIsSearchFocused(true)}
-                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  {searchQuery && (
-                    <button onClick={(e) => { e.stopPropagation(); setSearchQuery(''); }} className="text-gray-400 hover:text-white">
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
+                {/* Search Input - takes full width when focused */}
+                {(isSearchFocused || searchQuery) && (
+                  <div className="flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 py-1 animate-scale-in">
+                    <Search size={14} className="text-gray-400 mr-2 flex-shrink-0" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      placeholder="Search your experiences..."
+                      className="bg-transparent border-none focus:outline-none text-sm text-white w-full placeholder-gray-500"
+                      value={searchQuery}
+                      onFocus={() => setIsSearchFocused(true)}
+                      onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    {(searchQuery || isSearchFocused) && (
+                      <button 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          setSearchQuery(''); 
+                          setIsSearchFocused(false);
+                        }} 
+                        className="text-gray-400 hover:text-white p-1"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                )}
 
-                {/* Search Icon Button */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); setIsSearchFocused(true); }}
-                  className={`p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white ml-auto transition-all duration-300 ${
-                    isSearchFocused || searchQuery ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'
-                  }`}
-                >
-                  <Search size={18} />
-                </button>
+                {/* Search Icon Button - only when not searching */}
+                {!isSearchFocused && !searchQuery && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setIsSearchFocused(true); }}
+                    className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white ml-auto"
+                  >
+                    <Search size={18} />
+                  </button>
+                )}
               </div>
 
               {searchQuery && (
