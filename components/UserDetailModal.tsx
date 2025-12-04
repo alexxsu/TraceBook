@@ -157,7 +157,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({
                 )}
                 {/* Role badge - less prominent */}
                 <span className="inline-block mt-2 px-3 py-1 bg-gray-700/50 text-gray-400 text-xs font-medium rounded-full capitalize">
-                  {userProfile?.role === 'admin' ? 'Admin' : 'Member'}
+                  {userProfile?.role === 'admin' ? 'Admin' : 'User'}
                 </span>
               </>
             )}
