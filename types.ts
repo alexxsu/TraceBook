@@ -28,7 +28,10 @@ export const GUEST_ID = 'guest-user';
 
 export interface UserProfile {
   email: string;
+  displayName?: string;
+  photoURL?: string | null;
   status: 'pending' | 'approved' | 'rejected';
+  emailVerified?: boolean;
   role: 'user' | 'admin';
   createdAt: string;
   joinedMaps?: string[]; // Array of map IDs user has joined
@@ -225,4 +228,5 @@ export enum ViewState {
   EDIT_ENTRY = 'EDIT_ENTRY',
   STATS = 'STATS',
   MAP_MANAGEMENT = 'MAP_MANAGEMENT',
+  SITE_MANAGEMENT = 'SITE_MANAGEMENT',
 }
