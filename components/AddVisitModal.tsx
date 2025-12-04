@@ -16,6 +16,8 @@ interface AddVisitModalProps {
   onClose: () => void;
   onSave: (restaurant: Restaurant, visit: Visit) => void;
   onPhotosUploaded?: (hasPhotos: boolean) => void;
+  isGuest?: boolean;
+  externalIsClosing?: boolean;
 }
 
 interface SuggestionItem {
@@ -32,10 +34,22 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   existingRestaurants, 
   onClose, 
   onSave,
-  onPhotosUploaded
+  onPhotosUploaded,
+  isGuest,
+  externalIsClosing
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isClosing, setIsClosing] = useState(false);
+
+  // Sync with external closing state
+  React.useEffect(() => {
+    if (externalIsClosing) {
+      setIsClosing(true);
+    }
+  }, [externalIsClosing]);
+
+  // Combined closing state
+  const isModalClosing = isClosing || externalIsClosing;
 
   // Multi-image state
   const [previewBlobs, setPreviewBlobs] = useState<Blob[]>([]); 
@@ -301,8 +315,8 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   const prevPreview = () => setCurrentPreviewIndex(prev => (prev - 1 + previewUrls.length) % previewUrls.length);
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 ${isClosing ? 'animate-scale-out' : 'animate-bloom-in'}`}>
-      <div className="bg-gray-800 w-full max-w-md rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity duration-200 ${isModalClosing ? 'opacity-0' : 'opacity-100'}`}>
+      <div className={`bg-gray-800 w-full max-w-md rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isModalClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h2 className="text-lg font-semibold text-white">

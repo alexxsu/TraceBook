@@ -1,0 +1,280 @@
+import { useState, useEffect } from 'react';
+import { onAuthStateChanged, signInWithPopup, signOut, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { auth, googleProvider, db } from '../firebaseConfig';
+import { UserProfile, UserMap, ViewState } from '../types';
+
+export interface AppUser {
+  uid: string;
+  displayName: string | null;
+  photoURL: string | null;
+  email: string | null;
+  isAnonymous?: boolean;
+  emailVerified?: boolean;
+}
+
+interface UseAuthReturn {
+  user: AppUser | null;
+  userProfile: UserProfile | null;
+  isCheckingStatus: boolean;
+  login: () => Promise<void>;
+  loginWithEmail: (email: string, password: string) => Promise<{ needsVerification: boolean; needsApproval: boolean }>;
+  signUpWithEmail: (email: string, password: string, displayName: string) => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
+  loginAsGuest: () => Promise<UserMap>;
+  logout: () => Promise<void>;
+  refreshStatus: () => Promise<{ emailVerified: boolean; approved: boolean }>;
+}
+
+export function useAuth(): UseAuthReturn {
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+
+  // Auth state listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        setUser({
+          uid: currentUser.uid,
+          displayName: currentUser.isAnonymous ? 'Guest' : currentUser.displayName,
+          photoURL: currentUser.photoURL,
+          email: currentUser.email,
+          isAnonymous: currentUser.isAnonymous,
+          emailVerified: currentUser.emailVerified
+        });
+      } else {
+        setUser(null);
+        setUserProfile(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Check user approval status for real users
+  useEffect(() => {
+    const checkStatus = async () => {
+      if (!user || user.isAnonymous) return;
+
+      setIsCheckingStatus(true);
+      try {
+        const userRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const profile = userSnap.data() as UserProfile;
+          // Update emailVerified status from Firebase Auth
+          if (profile.emailVerified !== user.emailVerified) {
+            await updateDoc(userRef, { emailVerified: user.emailVerified });
+            profile.emailVerified = user.emailVerified;
+          }
+          setUserProfile(profile);
+        } else {
+          const newProfile: UserProfile = {
+            email: user.email || 'unknown',
+            displayName: user.displayName || undefined,
+            photoURL: user.photoURL,
+            status: 'pending',
+            emailVerified: user.emailVerified,
+            role: 'user',
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(userRef, newProfile);
+          setUserProfile(newProfile);
+        }
+      } catch (err) {
+        console.error("Error checking user status:", err);
+      } finally {
+        setIsCheckingStatus(false);
+      }
+    };
+
+    if (user && !user.isAnonymous) {
+      checkStatus();
+    }
+  }, [user]);
+
+  const login = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Login failed", error);
+      throw new Error("Login failed. Please try again.");
+    }
+  };
+
+  const signUpWithEmail = async (email: string, password: string, displayName: string) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
+      
+      // Send verification email
+      await sendEmailVerification(firebaseUser);
+      
+      // Create user profile in Firestore
+      const userRef = doc(db, "users", firebaseUser.uid);
+      const newProfile: UserProfile = {
+        email: email,
+        displayName: displayName,
+        photoURL: null,
+        status: 'pending',
+        emailVerified: false,
+        role: 'user',
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(userRef, newProfile);
+      
+    } catch (error: any) {
+      console.error("Sign up failed", error);
+      if (error.code === 'auth/email-already-in-use') {
+        throw new Error("This email is already registered. Please sign in instead.");
+      } else if (error.code === 'auth/weak-password') {
+        throw new Error("Password should be at least 6 characters.");
+      } else if (error.code === 'auth/invalid-email') {
+        throw new Error("Invalid email address.");
+      }
+      throw new Error("Sign up failed. Please try again.");
+    }
+  };
+
+  const loginWithEmail = async (email: string, password: string): Promise<{ needsVerification: boolean; needsApproval: boolean }> => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = userCredential.user;
+      
+      // Check email verification
+      const needsVerification = !firebaseUser.emailVerified;
+      
+      // Check admin approval
+      const userRef = doc(db, "users", firebaseUser.uid);
+      const userSnap = await getDoc(userRef);
+      let needsApproval = true;
+      
+      if (userSnap.exists()) {
+        const profile = userSnap.data() as UserProfile;
+        needsApproval = profile.status !== 'approved';
+      }
+      
+      return { needsVerification, needsApproval };
+    } catch (error: any) {
+      console.error("Login failed", error);
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        throw new Error("Invalid email or password.");
+      }
+      throw new Error("Login failed. Please try again.");
+    }
+  };
+
+  const resendVerificationEmail = async () => {
+    const currentUser = auth.currentUser;
+    if (currentUser && !currentUser.emailVerified) {
+      await sendEmailVerification(currentUser);
+    }
+  };
+
+  const loginAsGuest = async (): Promise<UserMap> => {
+    const guestProfile: UserProfile = {
+      email: 'guest@tracebook.app',
+      status: 'approved',
+      emailVerified: true,
+      role: 'user',
+      createdAt: new Date().toISOString()
+    };
+
+    const guestUser: AppUser = {
+      uid: 'guest-user',
+      displayName: 'Guest',
+      photoURL: null,
+      email: 'guest@tracebook.app',
+      isAnonymous: true,
+      emailVerified: true
+    };
+
+    setUser(guestUser);
+    setUserProfile(guestProfile);
+
+    const demoMap: UserMap = {
+      id: 'guest-demo-map',
+      ownerUid: 'guest-user',
+      ownerDisplayName: 'Demo',
+      name: 'Demo Map',
+      visibility: 'public',
+      isDefault: true,
+      createdAt: new Date().toISOString()
+    };
+
+    // Ensure the guest-demo-map document exists in Firestore
+    try {
+      const mapRef = doc(db, 'maps', 'guest-demo-map');
+      const mapDoc = await getDoc(mapRef);
+      if (!mapDoc.exists()) {
+        await setDoc(mapRef, demoMap);
+      }
+    } catch (e) {
+      console.error("Error creating guest demo map:", e);
+    }
+
+    return demoMap;
+  };
+
+  const logout = async () => {
+    if (user?.isAnonymous) {
+      setUser(null);
+      setUserProfile(null);
+    } else {
+      await signOut(auth);
+    }
+  };
+
+  const refreshStatus = async (): Promise<{ emailVerified: boolean; approved: boolean }> => {
+    if (!user || user.isAnonymous) return { emailVerified: true, approved: true };
+
+    setIsCheckingStatus(true);
+    try {
+      // Reload user to get latest emailVerified status
+      await auth.currentUser?.reload();
+      const currentUser = auth.currentUser;
+      const emailVerified = currentUser?.emailVerified || false;
+      
+      // Update user state
+      if (currentUser) {
+        setUser(prev => prev ? { ...prev, emailVerified } : prev);
+      }
+
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        const userData = userSnap.data() as UserProfile;
+        
+        // Update emailVerified in Firestore if changed
+        if (userData.emailVerified !== emailVerified) {
+          await updateDoc(userRef, { emailVerified });
+          userData.emailVerified = emailVerified;
+        }
+        
+        setUserProfile(userData);
+        return { emailVerified, approved: userData.status === 'approved' };
+      }
+      return { emailVerified, approved: false };
+    } catch (e) {
+      console.error(e);
+      return { emailVerified: false, approved: false };
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
+
+  return {
+    user,
+    userProfile,
+    isCheckingStatus,
+    login,
+    loginWithEmail,
+    signUpWithEmail,
+    resendVerificationEmail,
+    loginAsGuest,
+    logout,
+    refreshStatus
+  };
+}

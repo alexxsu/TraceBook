@@ -1,7 +1,0 @@
-{
-  "name": "TraceBook",
-  "description": "A photo-first experience tracker. Map your journey, auto-detect locations from photo GPS data.",
-  "requestFramePermissions": [
-    "geolocation"
-  ]
-}
