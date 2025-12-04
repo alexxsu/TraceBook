@@ -151,7 +151,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({
               </div>
             ) : (
               <>
-                <h2 className="text-xl font-bold text-white mt-4">{user.displayName || 'Anonymous User'}</h2>
+                <h2 className="text-xl font-bold text-white mt-4">{user.displayName || userProfile?.displayName || 'Anonymous User'}</h2>
                 {user.email && (
                   <p className="text-gray-400 text-sm mt-1">{user.email}</p>
                 )}

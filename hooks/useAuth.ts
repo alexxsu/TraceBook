@@ -109,10 +109,13 @@ export function useAuth(): UseAuthReturn {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
-      
+
+      // Set displayName on Firebase Auth profile
+      await updateProfile(firebaseUser, { displayName });
+
       // Send verification email
       await sendEmailVerification(firebaseUser);
-      
+
       // Create user profile in Firestore
       const userRef = doc(db, "users", firebaseUser.uid);
       const newProfile: UserProfile = {
@@ -125,7 +128,7 @@ export function useAuth(): UseAuthReturn {
         createdAt: new Date().toISOString()
       };
       await setDoc(userRef, newProfile);
-      
+
     } catch (error: any) {
       console.error("Sign up failed", error);
       if (error.code === 'auth/email-already-in-use') {
