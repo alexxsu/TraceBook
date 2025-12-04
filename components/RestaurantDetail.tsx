@@ -258,8 +258,8 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
       <div
         className={`absolute bottom-0 left-0 right-0 sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] bg-gray-900 border-t sm:border-t-0 sm:border-l border-gray-800 shadow-2xl z-20 flex flex-col ${isExpanded ? 'rounded-none' : 'rounded-t-2xl'} sm:rounded-none ${animationClass}`}
         style={{
-          height: window.innerWidth < 640 ? (isExpanded ? '100vh' : '80vh') : '100vh',
-          top: window.innerWidth < 640 ? (isExpanded ? '0' : 'auto') : '0',
+          height: window.innerWidth < 640 ? ((isExpanding || isExpanded) ? '100vh' : '80vh') : '100vh',
+          top: window.innerWidth < 640 ? ((isExpanding || isExpanded) ? '0' : 'auto') : '0',
           transform: isDragging ? `translateY(${dragY}px)` : undefined,
           transition: isDragging
             ? 'none'

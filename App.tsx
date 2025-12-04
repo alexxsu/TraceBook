@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Map as MapIcon, Info, LogOut, User as UserIcon, BarChart2, Search, X, Crosshair, Minus, LocateFixed, Filter, Lock, Clock, RefreshCw } from 'lucide-react';
+import { Plus, MapPin, Map as MapIcon, Info, LogOut, User as UserIcon, BarChart2, Search, X, Crosshair, Minus, LocateFixed, Filter, Lock, Clock, RefreshCw } from 'lucide-react';
 import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID, UserProfile } from './types';
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
@@ -547,13 +547,18 @@ function App() {
                 title={isAddModalOpen ? "Close" : "Add Memory"}
               >
                 {!isAddModalOpen && <div className="absolute inset-0 rounded-full border border-white/5 group-hover:scale-110 transition-transform duration-500 opacity-50"></div>}
-                
-                <Plus 
-                  size={32} 
-                  className={`text-white/90 drop-shadow-md transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]
-                    ${isAddModalOpen ? 'rotate-[135deg]' : 'group-hover:rotate-90'}
-                  `} 
-                />
+
+                {isAddModalOpen ? (
+                  <Plus
+                    size={32}
+                    className="text-white/90 drop-shadow-md transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] rotate-[135deg]"
+                  />
+                ) : (
+                  <MapPin
+                    size={32}
+                    className="text-white/90 drop-shadow-md transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:scale-110"
+                  />
+                )}
               </button>
             </div>
           )}
