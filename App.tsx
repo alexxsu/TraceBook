@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, MapPin, Map as MapIcon, Info, LogOut, User as UserIcon, BarChart2, Search, X, Crosshair, Minus, LocateFixed, Filter, Lock, Clock, RefreshCw, Layers, Menu } from 'lucide-react';
-import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID, UserProfile } from './types';
+import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID, UserProfile, UserMap } from './types';
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
 import RestaurantDetail from './components/RestaurantDetail';
@@ -13,7 +13,9 @@ import { calculateAverageGrade, GRADES, getGradeColor } from './utils/rating';
 // Firebase Imports
 import { auth, googleProvider, db, GOOGLE_MAPS_API_KEY } from './firebaseConfig';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { collection, onSnapshot, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc, getDocs } from 'firebase/firestore';
+
+import { ensureDefaultMapForUser } from './services/maps';
 
 interface AppUser {
   uid: string;
@@ -27,6 +29,9 @@ function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // Store full profile including role
   const [viewState, setViewState] = useState<ViewState>(ViewState.LOGIN);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [activeMap, setActiveMap] = useState<UserMap | null>(null);
+  const [allMaps, setAllMaps] = useState<UserMap[]>([]); // For admin map selector
+
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
   
   // Search State
@@ -128,11 +133,65 @@ function App() {
     }
   }, [user]);
 
+  // Ensure default map for approved real users
+  useEffect(() => {
+    const setupMap = async () => {
+      if (!user || user.uid === GUEST_ID) {
+        setActiveMap(null);
+        return;
+      }
+      if (!userProfile || userProfile.status !== 'approved') {
+        return;
+      }
+      try {
+        const map = await ensureDefaultMapForUser({
+          uid: user.uid,
+          displayName: user.displayName,
+        });
+        setActiveMap(map);
+      } catch (err) {
+        console.error('Failed to ensure default map:', err);
+      }
+    };
+
+    setupMap();
+  }, [user, userProfile]);
+
+
+  // Admin: subscribe to all maps for selector
+  useEffect(() => {
+    if (!user || user.uid === GUEST_ID) return;
+    if (!userProfile || userProfile.role !== 'admin') return;
+
+    const mapsRef = collection(db, 'maps');
+    const unsubscribe = onSnapshot(mapsRef, (snapshot) => {
+      const data: UserMap[] = snapshot.docs.map((docSnap) => {
+        const d = docSnap.data() as any;
+        return {
+          id: docSnap.id,
+          ownerUid: d.ownerUid,
+          ownerDisplayName: d.ownerDisplayName,
+          name: d.name,
+          visibility: d.visibility,
+          isDefault: d.isDefault,
+          createdAt: d.createdAt?.toDate?.().toISOString?.(),
+          updatedAt: d.updatedAt?.toDate?.().toISOString?.(),
+        };
+      });
+      setAllMaps(data);
+    });
+
+    return () => unsubscribe();
+  }, [user, userProfile]);
+
   // Data Fetching (Only when Map is Active)
   useEffect(() => {
     if (!user || viewState === ViewState.PENDING || viewState === ViewState.LOGIN) return;
+    if (!activeMap) return;
 
-    const unsubscribe = onSnapshot(collection(db, "restaurants"), (snapshot) => {
+    const restaurantsRef = collection(db, 'maps', activeMap.id, 'restaurants');
+
+    const unsubscribe = onSnapshot(restaurantsRef, (snapshot) => {
       const fetchedRestaurants: Restaurant[] = [];
       const docsToDelete: any[] = [];
 
@@ -172,9 +231,10 @@ function App() {
 
     return () => unsubscribe();
     // Fixed: Removed selectedRestaurant from dependencies to prevent re-subscription
-  }, [user, viewState]);
+  }, [user, viewState, activeMap]);
 
-  // Handle Search Filtering
+
+// Handle Search Filtering
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setSearchResults([]);
@@ -415,7 +475,8 @@ function App() {
       creatorPhotoURL: user.photoURL 
     };
 
-    const restaurantRef = doc(db, "restaurants", restaurantInfo.id);
+    if (!activeMap) throw new Error("No active map");
+    const restaurantRef = doc(db, "maps", activeMap.id, "restaurants", restaurantInfo.id);
     const exists = restaurants.some(r => r.id === restaurantInfo.id);
 
     try {
@@ -436,7 +497,8 @@ function App() {
   const handleUpdateVisit = async (restaurantId: string, oldVisit: Visit, newVisit: Visit) => {
     if (!user) return;
     try {
-      const restaurantRef = doc(db, "restaurants", restaurantId);
+      if (!user || !activeMap) return;
+      const restaurantRef = doc(db, "maps", activeMap.id, "restaurants", restaurantId);
       const restaurantDoc = await getDoc(restaurantRef);
       if (restaurantDoc.exists()) {
         const currentData = restaurantDoc.data() as Restaurant;
@@ -453,7 +515,8 @@ function App() {
 
   const handleDeleteVisit = async (restaurant: Restaurant, visitToDelete: Visit) => {
     try {
-      const restaurantRef = doc(db, "restaurants", restaurant.id);
+      if (!activeMap) throw new Error("No active map");
+      const restaurantRef = doc(db, "maps", activeMap.id, "restaurants", restaurant.id);
       const restaurantDoc = await getDoc(restaurantRef);
       if (restaurantDoc.exists()) {
         const currentData = restaurantDoc.data() as Restaurant;
@@ -477,7 +540,8 @@ function App() {
       return;
     }
     try {
-      const deletePromises = restaurants.map(r => deleteDoc(doc(db, "restaurants", r.id)));
+      if (!activeMap) return;
+      const deletePromises = restaurants.map(r => deleteDoc(doc(db, "maps", activeMap.id, "restaurants", r.id)));
       await Promise.all(deletePromises);
       alert("Database has been reset successfully.");
       setViewState(ViewState.MAP);
@@ -486,6 +550,53 @@ function App() {
       alert("Failed to clear database.");
     }
   };
+
+  // TEMP: one-time migration of old restaurants into the current active map
+  const handleMigrateOldRestaurants = async () => {
+    try {
+      if (!user || user.uid === GUEST_ID) {
+        alert('You must be logged in as a real user to run migration.');
+        return;
+      }
+      if (!userProfile || userProfile.role !== 'admin') {
+        alert('Only admin users can run migration.');
+        return;
+      }
+      if (!activeMap) {
+        alert('No active map found. Make sure your profile is approved and map is initialized.');
+        return;
+      }
+
+      const confirmRun = window.confirm(
+        'This will copy ALL old restaurants from the legacy "restaurants" collection into your current map.\n\nContinue?'
+      );
+      if (!confirmRun) return;
+
+      const oldRestaurantsRef = collection(db, 'restaurants');
+      const snapshot = await getDocs(oldRestaurantsRef);
+
+      if (snapshot.empty) {
+        alert('No old restaurants found to migrate.');
+        return;
+      }
+
+      const writes: Promise<any>[] = [];
+
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const newRef = doc(db, 'maps', activeMap.id, 'restaurants', docSnap.id);
+        writes.push(setDoc(newRef, data, { merge: true }));
+      });
+
+      await Promise.all(writes);
+
+      alert('Migration complete! Your old experiences should now appear on your map.');
+    } catch (err) {
+      console.error('Migration error:', err);
+      alert('Migration failed. Check console for details.');
+    }
+  };
+
 
   const openAddModal = () => setViewState(ViewState.ADD_ENTRY);
 
@@ -596,30 +707,82 @@ function App() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-gray-900">
+
       {/* Map & Add Button Container */}
-      {(viewState === ViewState.MAP || viewState === ViewState.RESTAURANT_DETAIL || viewState === ViewState.ADD_ENTRY || viewState === ViewState.EDIT_ENTRY || viewState === ViewState.INFO || viewState === ViewState.STATS || viewState === ViewState.USER_HISTORY) && (
+      {(
+        viewState === ViewState.MAP ||
+        viewState === ViewState.RESTAURANT_DETAIL ||
+        viewState === ViewState.ADD_ENTRY ||
+        viewState === ViewState.EDIT_ENTRY ||
+        viewState === ViewState.INFO ||
+        viewState === ViewState.STATS ||
+        viewState === ViewState.USER_HISTORY
+      ) && (
         <>
+          {activeMap && (
+            <div className="absolute top-24 right-6 z-[60] bg-gray-900/80 border border-gray-700 px-3 py-1.5 rounded-xl backdrop-blur pointer-events-auto">
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2 text-xs text-gray-200">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-green-400" />
+                  <span>
+                    Viewing: <span className="font-semibold">{activeMap.name}</span>
+                    {activeMap.visibility === 'private' && (
+                      <span className="text-[10px] text-gray-400"> (Private to you)</span>
+                    )}
+                  </span>
+                  {userProfile?.role === 'admin' && activeMap.ownerDisplayName && (
+                    <span className="text-[10px] text-gray-400 ml-1">
+                      Owner: {activeMap.ownerDisplayName}
+                    </span>
+                  )}
+                </div>
+
+                {userProfile?.role === 'admin' && allMaps.length > 0 && (
+                  <label className="flex items-center gap-2 text-[10px] text-gray-400">
+                    <span className="uppercase tracking-wide">Map</span>
+                    <select
+                      className="bg-gray-800 text-gray-100 text-[11px] rounded-md px-2 py-1 border border-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      value={activeMap.id}
+                      onChange={(e) => {
+                        const selected = allMaps.find((m) => m.id === e.target.value);
+                        if (selected) setActiveMap(selected);
+                      }}
+                    >
+                      {allMaps.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {(m.ownerDisplayName || m.ownerUid) + ' – ' + m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+            </div>
+          )}
+
           <MapContainer
             apiKey={GOOGLE_MAPS_API_KEY}
             restaurants={filteredMapRestaurants}
             onMapLoad={handleMapLoad}
             onMarkerClick={handleMarkerClick}
           />
-          
+
           {/* Add Button */}
           {!hideAddButton && (
             <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-[60] pointer-events-auto">
               <button 
                 onClick={handleToggleAdd}
-                className={`group relative flex items-center justify-center w-16 h-16 rounded-full border backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out active:scale-95
+                className={\`group relative flex items-center justify-center w-16 h-16 rounded-full border backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out active:scale-95
                   ${isAddModalOpen 
                     ? 'bg-red-500/80 border-red-400/50 shadow-red-500/20' 
                     : 'bg-gray-900/40 border-white/20 hover:bg-gray-900/60 hover:shadow-blue-500/20 hover:scale-105'
                   }
-                `}
+                \`}
                 title={isAddModalOpen ? "Close" : "Add Memory"}
               >
-                {!isAddModalOpen && <div className="absolute inset-0 rounded-full border border-white/5 group-hover:scale-110 transition-transform duration-500 opacity-50"></div>}
+                {!isAddModalOpen && (
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-yellow-400/30 via-red-400/20 to-blue-500/30 blur-md group-hover:opacity-80 group-hover:scale-110 transition-transform duration-500 opacity-50"></div>
+                )}
 
                 {isAddModalOpen ? (
                   <Plus
@@ -637,99 +800,6 @@ function App() {
           )}
         </>
       )}
-
-      {/* Top Left Controls */}
-      <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 w-[calc(100%-6rem)] max-w-sm pointer-events-none">
-        {/* Header / Search Bar */}
-        <div
-          className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 cursor-text"
-          onClick={() => setIsSearchFocused(true)}
-        >
-          <div className="flex items-center gap-2">
-            {/* Hamburger Menu Button */}
-            <button
-              onClick={(e) => { e.stopPropagation(); handleMenuToggle(); }}
-              className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors duration-200 flex-shrink-0"
-            >
-              <Menu size={20} />
-            </button>
-
-            {!isSearchFocused && !searchQuery ? (
-               <div className="flex items-center gap-2 px-1 py-1 text-white">
-                 <img src="/logo.svg" className="w-5 h-5 object-contain" alt="Logo" />
-                 <span className="font-bold truncate">GourmetMaps</span>
-               </div>
-            ) : null}
-
-            <div className={`flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 py-1 ${!isSearchFocused && !searchQuery ? 'hidden' : 'flex'}`}>
-              <Search size={14} className="text-gray-400 mr-2" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search your memories..."
-                className="bg-transparent border-none focus:outline-none text-sm text-white w-full placeholder-gray-500"
-                value={searchQuery}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button onClick={(e) => { e.stopPropagation(); setSearchQuery(''); }} className="text-gray-400 hover:text-white">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            {(!isSearchFocused && !searchQuery) && (
-               <button onClick={(e) => { e.stopPropagation(); setIsSearchFocused(true); }} className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white ml-auto">
-                 <Search size={18} />
-               </button>
-            )}
-          </div>
-
-          {searchQuery && (
-             <div className="mt-2 border-t border-gray-700 pt-2 max-h-60 overflow-y-auto">
-               {searchResults.length > 0 ? (
-                 searchResults.map(r => (
-                   <button
-                     key={r.id}
-                     onClick={(e) => { e.stopPropagation(); handleSearchSelect(r); }}
-                     className="w-full text-left px-2 py-2 hover:bg-gray-700 rounded text-sm text-gray-300 hover:text-white flex flex-col"
-                   >
-                     <span className="font-semibold">{r.name}</span>
-                     <span className="text-xs text-gray-500 truncate">{r.address}</span>
-                   </button>
-                 ))
-               ) : (
-                 <p className="text-gray-500 text-sm px-2 py-1">No restaurants found.</p>
-               )}
-             </div>
-          )}
-        </div>
-        
-        {/* User Profile */}
-        {user && (
-          <div className="bg-gray-800/90 backdrop-blur border border-gray-700 p-1.5 pl-3 pr-1.5 rounded-full shadow-lg flex items-center gap-2 pointer-events-auto self-start">
-             <div 
-               className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition"
-               onClick={() => setViewState(ViewState.USER_HISTORY)}
-             >
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full border border-gray-600" />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center">
-                    <UserIcon size={14} className="text-gray-300"/>
-                  </div>
-                )}
-                <span className="text-xs text-gray-300 font-medium max-w-[100px] truncate">{user.displayName}</span>
-             </div>
-             <button onClick={handleLogout} className="p-1.5 hover:bg-red-500/20 hover:text-red-400 rounded-full text-gray-400 transition" title="Log Out">
-               <LogOut size={14} />
-             </button>
-          </div>
-        )}
-      </div>
-
       {/* Top Right Buttons */}
       <div className="absolute top-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto items-end">
         {/* Filter Button */}
@@ -795,6 +865,16 @@ function App() {
           >
             <Info size={24} className="group-hover:text-blue-400 transition" />
         </button>
+        {userProfile?.role === 'admin' && (
+          <button
+            onClick={handleMigrateOldRestaurants}
+            className="bg-yellow-600/90 backdrop-blur border border-yellow-400/70 rounded-full shadow-lg text-yellow-50 hover:bg-yellow-500 transition w-12 h-12 flex items-center justify-center text-[10px] leading-tight text-center px-2"
+            title="Migrate old data"
+          >
+            MIG
+          </button>
+        )}
+
       </div>
 
       {/* Bottom Right Custom Map Controls */}
@@ -899,7 +979,7 @@ function App() {
               {/* Close button */}
               <button
                 onClick={closeUserDetail}
-                className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"
+                className="absolute top-24 right-6 p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors"
               >
                 <X size={20} />
               </button>

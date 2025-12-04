@@ -190,6 +190,19 @@ export type PlacesService = google.maps.places.PlacesService;
 export type AutocompleteService = google.maps.places.AutocompleteService;
 export type PlaceResult = google.maps.places.PlaceResult;
 
+
+
+export interface UserMap {
+  id: string;
+  ownerUid: string;
+  ownerDisplayName?: string;
+  name: string; // e.g. "Default Map"
+  visibility: 'private' | 'public' | 'shared';
+  isDefault: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export enum ViewState {
   LOGIN = 'LOGIN',
   PENDING = 'PENDING',
