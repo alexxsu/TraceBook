@@ -193,6 +193,13 @@ export type PlaceResult = google.maps.places.PlaceResult;
 
 
 
+export interface MapMember {
+  uid: string;
+  displayName: string;
+  photoURL?: string | null;
+  joinedAt?: string;
+}
+
 export interface UserMap {
   id: string;
   ownerUid: string;
@@ -204,6 +211,7 @@ export interface UserMap {
   updatedAt?: string;
   shareCode?: string; // 4-digit unique code for shared maps
   members?: string[]; // Array of user UIDs who have access to this shared map
+  memberInfo?: MapMember[]; // Detailed member information
 }
 
 export enum ViewState {

@@ -207,6 +207,7 @@ function App() {
           isDefault: d.isDefault,
           shareCode: d.shareCode,
           members: d.members,
+          memberInfo: d.memberInfo,
           createdAt: d.createdAt?.toDate?.().toISOString?.() || d.createdAt,
           updatedAt: d.updatedAt?.toDate?.().toISOString?.() || d.updatedAt,
         };
@@ -235,6 +236,12 @@ function App() {
   useEffect(() => {
     if (!user || viewState === ViewState.PENDING || viewState === ViewState.LOGIN) return;
     if (!activeMap) return;
+
+    // Guest users get an empty map - no Firebase access
+    if (user.isAnonymous) {
+      setRestaurants([]);
+      return;
+    }
 
     const restaurantsRef = collection(db, 'maps', activeMap.id, 'restaurants');
 
@@ -731,7 +738,14 @@ function App() {
     const shareCode = await generateShareCode();
     const mapId = `shared_${user.uid}_${Date.now()}`;
 
-    const newMap: UserMap = {
+    const creatorMemberInfo = {
+      uid: user.uid,
+      displayName: user.displayName || 'Unknown',
+      photoURL: user.photoURL,
+      joinedAt: new Date().toISOString()
+    };
+
+    const newMap = {
       id: mapId,
       ownerUid: user.uid,
       ownerDisplayName: user.displayName || 'Unknown',
@@ -740,6 +754,7 @@ function App() {
       isDefault: false,
       shareCode: shareCode,
       members: [user.uid],
+      memberInfo: [creatorMemberInfo],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -751,6 +766,12 @@ function App() {
   const handleJoinSharedMap = async (code: string): Promise<boolean> => {
     if (!user || user.isAnonymous) {
       throw new Error('Must be logged in to join shared maps');
+    }
+
+    // Check if user has reached the limit (3 total shared maps: created + joined)
+    const totalSharedMaps = userSharedMaps.length + userJoinedMaps.length;
+    if (totalSharedMaps >= 3) {
+      throw new Error('You can only be part of 3 shared maps total');
     }
 
     // Search for map with this share code
@@ -778,13 +799,86 @@ function App() {
       return true;
     }
 
-    // Add user to members array
+    // Add user to members array and memberInfo
     const mapRef = doc(db, 'maps', foundMapId);
+    const newMemberInfo = {
+      uid: user.uid,
+      displayName: user.displayName || 'Unknown',
+      photoURL: user.photoURL,
+      joinedAt: new Date().toISOString()
+    };
+
     await updateDoc(mapRef, {
-      members: arrayUnion(user.uid)
+      members: arrayUnion(user.uid),
+      memberInfo: arrayUnion(newMemberInfo)
     });
 
     return true;
+  };
+
+  const handleLeaveSharedMap = async (mapId: string): Promise<void> => {
+    if (!user || user.isAnonymous) {
+      throw new Error('Must be logged in');
+    }
+
+    const mapRef = doc(db, 'maps', mapId);
+    const mapDoc = await getDoc(mapRef);
+    
+    if (!mapDoc.exists()) {
+      throw new Error('Map not found');
+    }
+
+    const mapData = mapDoc.data();
+    
+    // Remove user from members array
+    const updatedMembers = (mapData.members || []).filter((uid: string) => uid !== user.uid);
+    
+    // Remove user from memberInfo array
+    const updatedMemberInfo = (mapData.memberInfo || []).filter((m: any) => m.uid !== user.uid);
+
+    await updateDoc(mapRef, {
+      members: updatedMembers,
+      memberInfo: updatedMemberInfo
+    });
+
+    // If this was the active map, switch to default
+    if (activeMap?.id === mapId) {
+      const defaultMap = userOwnMaps.find(m => m.isDefault);
+      if (defaultMap) {
+        setActiveMap(defaultMap);
+      }
+    }
+  };
+
+  const handleKickMember = async (mapId: string, memberUid: string): Promise<void> => {
+    if (!user || user.isAnonymous) {
+      throw new Error('Must be logged in');
+    }
+
+    const mapRef = doc(db, 'maps', mapId);
+    const mapDoc = await getDoc(mapRef);
+    
+    if (!mapDoc.exists()) {
+      throw new Error('Map not found');
+    }
+
+    const mapData = mapDoc.data();
+    
+    // Verify current user is the owner
+    if (mapData.ownerUid !== user.uid) {
+      throw new Error('Only the map owner can remove members');
+    }
+
+    // Remove member from members array
+    const updatedMembers = (mapData.members || []).filter((uid: string) => uid !== memberUid);
+    
+    // Remove member from memberInfo array
+    const updatedMemberInfo = (mapData.memberInfo || []).filter((m: any) => m.uid !== memberUid);
+
+    await updateDoc(mapRef, {
+      members: updatedMembers,
+      memberInfo: updatedMemberInfo
+    });
   };
 
   const openAddModal = () => setViewState(ViewState.ADD_ENTRY);
@@ -1021,7 +1115,7 @@ function App() {
 
             {/* Compact Viewing Card - shows active map info */}
             {isCompactCardOpen && activeMap && (
-              <div className="bg-gray-900/90 backdrop-blur border border-gray-700 rounded-xl px-3 py-2 shadow-xl animate-scale-in pointer-events-auto self-start min-w-[200px]">
+              <div className="bg-gray-900/90 backdrop-blur border border-gray-700 rounded-xl px-3 py-2 shadow-xl animate-scale-in pointer-events-auto self-start min-w-[220px]">
                 <div className="flex items-center gap-2 text-xs text-gray-200">
                   <span className={`inline-flex h-2 w-2 rounded-full flex-shrink-0 ${
                     activeMap.isDefault ? 'bg-blue-400' : 
@@ -1043,8 +1137,60 @@ function App() {
                   )}
                 </div>
 
+                {/* Map selector dropdown - for non-guest users with maps */}
+                {!user?.isAnonymous && (userOwnMaps.length > 0 || userSharedMaps.length > 0 || userJoinedMaps.length > 0) && (
+                  <div className="mt-2 pt-2 border-t border-gray-700">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Switch Map</label>
+                    <select
+                      className="w-full bg-gray-800 text-gray-100 text-[11px] rounded-md px-2 py-1.5 border border-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      value={activeMap.id}
+                      onChange={(e) => {
+                        // Find map from all sources
+                        const allUserMaps = [...userOwnMaps, ...userSharedMaps, ...userJoinedMaps];
+                        const selected = allUserMaps.find((m) => m.id === e.target.value);
+                        if (selected) setActiveMap(selected);
+                      }}
+                    >
+                      {/* Default Maps Section */}
+                      {userOwnMaps.filter(m => m.isDefault).length > 0 && (
+                        <optgroup label="── Your Default Map ──">
+                          {userOwnMaps.filter(m => m.isDefault).map((m) => (
+                            <option key={m.id} value={m.id}>
+                              🔒 {m.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      
+                      {/* Created Shared Maps Section */}
+                      {userSharedMaps.length > 0 && (
+                        <optgroup label="── Shared Maps (Owner) ──">
+                          {userSharedMaps.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              👥 {m.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      
+                      {/* Joined Shared Maps Section */}
+                      {userJoinedMaps.length > 0 && (
+                        <optgroup label="── Shared Maps (Joined) ──">
+                          {userJoinedMaps.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              🌐 {m.name} ({m.ownerDisplayName})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
+                )}
+
+                {/* Admin all maps selector */}
                 {userProfile?.role === 'admin' && allMaps.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-gray-700">
+                    <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Admin: All Maps</label>
                     <select
                       className="w-full bg-gray-800 text-gray-100 text-[11px] rounded-md px-2 py-1 border border-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={activeMap.id}
@@ -1270,24 +1416,22 @@ function App() {
                 </div>
               </button>
 
-              {/* Map Management - only for non-guest users */}
-              {!user?.isAnonymous && (
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    setViewState(ViewState.MAP_MANAGEMENT);
-                  }}
-                  className="w-full flex items-center gap-4 px-4 py-3.5 text-gray-300 hover:text-white hover:bg-gray-800 rounded-xl transition-all duration-200 group"
-                >
-                  <div className="w-10 h-10 rounded-full bg-gray-800 group-hover:bg-gray-700 flex items-center justify-center transition-colors duration-200">
-                    <Layers size={20} className="text-gray-400 group-hover:text-white transition-colors duration-200" />
-                  </div>
-                  <div className="text-left">
-                    <span className="font-medium block">Map Management</span>
-                    <span className="text-xs text-gray-500">Manage your maps</span>
-                  </div>
-                </button>
-              )}
+              {/* Map Management - available for all users including guests */}
+              <button
+                onClick={() => {
+                  closeMenu();
+                  setViewState(ViewState.MAP_MANAGEMENT);
+                }}
+                className="w-full flex items-center gap-4 px-4 py-3.5 text-gray-300 hover:text-white hover:bg-gray-800 rounded-xl transition-all duration-200 group"
+              >
+                <div className="w-10 h-10 rounded-full bg-gray-800 group-hover:bg-gray-700 flex items-center justify-center transition-colors duration-200">
+                  <Layers size={20} className="text-gray-400 group-hover:text-white transition-colors duration-200" />
+                </div>
+                <div className="text-left">
+                  <span className="font-medium block">Map Management</span>
+                  <span className="text-xs text-gray-500">Manage your maps</span>
+                </div>
+              </button>
 
               {/* Stats */}
               <button
@@ -1473,15 +1617,19 @@ function App() {
         />
       )}
 
-      {viewState === ViewState.MAP_MANAGEMENT && (
+      {viewState === ViewState.MAP_MANAGEMENT && user && (
         <MapManagementModal
-          userMaps={userOwnMaps.filter(m => m.isDefault)}
-          sharedMaps={userSharedMaps}
-          joinedMaps={userJoinedMaps}
+          userMaps={user.isAnonymous ? [activeMap!].filter(Boolean) : userOwnMaps.filter(m => m.isDefault)}
+          sharedMaps={user.isAnonymous ? [] : userSharedMaps}
+          joinedMaps={user.isAnonymous ? [] : userJoinedMaps}
           activeMap={activeMap}
+          currentUserUid={user.uid}
+          isGuest={user.isAnonymous || false}
           onClose={() => setViewState(ViewState.MAP)}
           onCreateSharedMap={handleCreateSharedMap}
           onJoinSharedMap={handleJoinSharedMap}
+          onLeaveSharedMap={handleLeaveSharedMap}
+          onKickMember={handleKickMember}
           onSelectMap={(map) => {
             setActiveMap(map);
             setViewState(ViewState.MAP);

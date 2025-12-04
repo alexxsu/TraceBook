@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import { X, Plus, Users, Lock, Copy, Check, LogIn, Globe, User } from 'lucide-react';
-import { UserMap } from '../types';
+import { X, Plus, Users, Lock, Copy, Check, LogIn, Globe, User, Settings, Crown, UserMinus, LogOut as LeaveIcon } from 'lucide-react';
+import { UserMap, MapMember } from '../types';
 
 interface MapManagementModalProps {
   userMaps: UserMap[];           // User's default map
   sharedMaps: UserMap[];         // Shared maps user created
   joinedMaps: UserMap[];         // Shared maps user joined
   activeMap: UserMap | null;
+  currentUserUid: string;
+  isGuest?: boolean;
   onClose: () => void;
   onCreateSharedMap: (name: string) => Promise<void>;
   onJoinSharedMap: (code: string) => Promise<boolean>;
+  onLeaveSharedMap: (mapId: string) => Promise<void>;
+  onKickMember: (mapId: string, memberUid: string) => Promise<void>;
   onSelectMap: (map: UserMap) => void;
   maxSharedMaps?: number;
 }
@@ -19,9 +23,13 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
   sharedMaps,
   joinedMaps,
   activeMap,
+  currentUserUid,
+  isGuest = false,
   onClose,
   onCreateSharedMap,
   onJoinSharedMap,
+  onLeaveSharedMap,
+  onKickMember,
   onSelectMap,
   maxSharedMaps = 3
 }) => {
@@ -33,9 +41,14 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [settingsOpenFor, setSettingsOpenFor] = useState<string | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState<string | null>(null);
+  const [confirmKick, setConfirmKick] = useState<{ mapId: string; memberUid: string } | null>(null);
 
-  const userSharedMapsCount = sharedMaps.filter(m => m.visibility === 'shared').length;
-  const canCreateMore = userSharedMapsCount < maxSharedMaps;
+  const userSharedMapsCount = sharedMaps.length;
+  const totalSharedMapsCount = sharedMaps.length + joinedMaps.length;
+  const canCreateMore = !isGuest && userSharedMapsCount < maxSharedMaps;
+  const canJoinMore = !isGuest && totalSharedMapsCount < maxSharedMaps;
 
   const handleClose = () => {
     setIsClosing(true);
@@ -71,9 +84,36 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
       } else {
         setJoinError('Map not found. Check the code and try again.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to join shared map:', error);
-      setJoinError('Failed to join map. Please try again.');
+      setJoinError(error.message || 'Failed to join map. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLeave = async (mapId: string) => {
+    setIsSubmitting(true);
+    try {
+      await onLeaveSharedMap(mapId);
+      setConfirmLeave(null);
+      setSettingsOpenFor(null);
+    } catch (error) {
+      console.error('Failed to leave map:', error);
+      alert('Failed to leave map. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleKick = async (mapId: string, memberUid: string) => {
+    setIsSubmitting(true);
+    try {
+      await onKickMember(mapId, memberUid);
+      setConfirmKick(null);
+    } catch (error) {
+      console.error('Failed to remove member:', error);
+      alert('Failed to remove member. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -91,8 +131,8 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
 
   const renderMapItem = (map: UserMap, type: 'default' | 'created' | 'joined') => {
     const isActive = activeMap?.id === map.id;
+    const isSettingsOpen = settingsOpenFor === map.id;
     
-    // Determine icon and colors based on type
     const getTypeStyles = () => {
       switch (type) {
         case 'default':
@@ -119,58 +159,186 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
     const styles = getTypeStyles();
 
     return (
-      <button
-        key={map.id}
-        onClick={() => {
-          onSelectMap(map);
-          handleClose();
-        }}
-        className={`w-full flex items-center gap-3 p-3 rounded-xl transition text-left
-          ${isActive
-            ? 'bg-blue-600/20 border border-blue-500/50'
-            : 'bg-gray-700/50 border border-transparent hover:bg-gray-700'}
-        `}
-      >
-        <div className={`p-2 rounded-lg ${styles.bgColor}`}>
-          {styles.icon}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-white font-medium truncate">{map.name}</span>
-            {map.isDefault && (
-              <span className="text-[10px] bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">Default</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-gray-400">{styles.label}</span>
-            {map.shareCode && type === 'created' && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopyCode(map.shareCode!);
-                }}
-                className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition"
-              >
-                <span className="font-mono bg-gray-600 px-1.5 py-0.5 rounded">{map.shareCode}</span>
-                {copiedCode === map.shareCode ? (
-                  <Check size={12} className="text-green-400" />
-                ) : (
-                  <Copy size={12} />
+      <div key={map.id} className="space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              onSelectMap(map);
+              handleClose();
+            }}
+            className={`flex-1 flex items-center gap-3 p-3 rounded-xl transition text-left
+              ${isActive
+                ? 'bg-blue-600/20 border border-blue-500/50'
+                : 'bg-gray-700/50 border border-transparent hover:bg-gray-700'}
+            `}
+          >
+            <div className={`p-2 rounded-lg ${styles.bgColor}`}>
+              {styles.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-white font-medium truncate">{map.name}</span>
+                {map.isDefault && (
+                  <span className="text-[10px] bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">Default</span>
                 )}
-              </button>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs text-gray-400">{styles.label}</span>
+                {map.shareCode && type === 'created' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCopyCode(map.shareCode!);
+                    }}
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition"
+                  >
+                    <span className="font-mono bg-gray-600 px-1.5 py-0.5 rounded">{map.shareCode}</span>
+                    {copiedCode === map.shareCode ? (
+                      <Check size={12} className="text-green-400" />
+                    ) : (
+                      <Copy size={12} />
+                    )}
+                  </button>
+                )}
+                {type === 'joined' && map.ownerDisplayName && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <User size={10} />
+                    {map.ownerDisplayName}
+                  </span>
+                )}
+              </div>
+            </div>
+            {isActive && (
+              <span className="inline-flex h-2 w-2 rounded-full bg-green-400" />
             )}
-            {type === 'joined' && map.ownerDisplayName && (
-              <span className="text-xs text-gray-500 flex items-center gap-1">
-                <User size={10} />
-                {map.ownerDisplayName}
-              </span>
+          </button>
+
+          {/* Settings gear for created and joined maps */}
+          {(type === 'created' || type === 'joined') && (
+            <button
+              onClick={() => setSettingsOpenFor(isSettingsOpen ? null : map.id)}
+              className={`p-2 rounded-lg transition ${
+                isSettingsOpen 
+                  ? 'bg-gray-600 text-white' 
+                  : 'bg-gray-700/50 text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              <Settings size={18} />
+            </button>
+          )}
+        </div>
+
+        {/* Settings Panel */}
+        {isSettingsOpen && (
+          <div className="ml-2 bg-gray-800 rounded-xl border border-gray-600 overflow-hidden animate-scale-in">
+            {type === 'created' ? (
+              // Created map settings - show members list
+              <div className="p-3">
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  Members ({map.memberInfo?.length || 1})
+                </h4>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {/* Owner */}
+                  <div className="flex items-center gap-2 p-2 bg-gray-700/50 rounded-lg">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
+                      <Crown size={14} className="text-purple-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-white text-sm font-medium truncate block">
+                        {map.ownerDisplayName || 'You'}
+                      </span>
+                      <span className="text-xs text-purple-400">Creator</span>
+                    </div>
+                  </div>
+
+                  {/* Other members */}
+                  {map.memberInfo?.filter(m => m.uid !== map.ownerUid).map((member) => (
+                    <div key={member.uid} className="flex items-center gap-2 p-2 bg-gray-700/50 rounded-lg group">
+                      {member.photoURL ? (
+                        <img src={member.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
+                          <User size={14} className="text-gray-400" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <span className="text-white text-sm font-medium truncate block">
+                          {member.displayName}
+                        </span>
+                        <span className="text-xs text-gray-400">Member</span>
+                      </div>
+                      {confirmKick?.mapId === map.id && confirmKick?.memberUid === member.uid ? (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleKick(map.id, member.uid)}
+                            disabled={isSubmitting}
+                            className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded transition"
+                          >
+                            {isSubmitting ? '...' : 'Confirm'}
+                          </button>
+                          <button
+                            onClick={() => setConfirmKick(null)}
+                            className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded transition"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmKick({ mapId: map.id, memberUid: member.uid })}
+                          className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition"
+                          title="Remove member"
+                        >
+                          <UserMinus size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  {(!map.memberInfo || map.memberInfo.filter(m => m.uid !== map.ownerUid).length === 0) && (
+                    <p className="text-gray-500 text-xs text-center py-2">No other members yet</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              // Joined map settings - show leave option
+              <div className="p-3">
+                {confirmLeave === map.id ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-300 text-center">
+                      Leave "{map.name}"?
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setConfirmLeave(null)}
+                        className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition text-sm"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleLeave(map.id)}
+                        disabled={isSubmitting}
+                        className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition text-sm flex items-center justify-center gap-1"
+                      >
+                        <LeaveIcon size={14} />
+                        {isSubmitting ? 'Leaving...' : 'Leave'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmLeave(map.id)}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition"
+                  >
+                    <LeaveIcon size={16} />
+                    <span>Leave this map</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
-        </div>
-        {isActive && (
-          <span className="inline-flex h-2 w-2 rounded-full bg-green-400" />
         )}
-      </button>
+      </div>
     );
   };
 
@@ -193,7 +361,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
             <div>
               <h2 className="text-lg font-bold text-white">Map Management</h2>
               <p className="text-xs text-gray-400 mt-0.5">
-                Manage your maps and collaborations
+                {isGuest ? 'View your demo map' : 'Manage your maps and collaborations'}
               </p>
             </div>
             <button
@@ -211,7 +379,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
             <div>
               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
                 <Lock size={12} />
-                Your Default Map
+                {isGuest ? 'Demo Map' : 'Your Default Map'}
               </h3>
               <div className="space-y-2">
                 {userMaps.length > 0 ? (
@@ -222,97 +390,116 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
               </div>
             </div>
 
-            {/* Section 2: Shared Maps You Created */}
-            <div>
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Users size={12} />
-                Shared Maps You Created
-              </h3>
-              <div className="space-y-2">
-                {sharedMaps.length > 0 ? (
-                  sharedMaps.map((map) => renderMapItem(map, 'created'))
-                ) : (
-                  <p className="text-gray-500 text-sm text-center py-2">No shared maps created yet</p>
-                )}
+            {/* Section 2: Shared Maps You Created - hide for guests */}
+            {!isGuest && (
+              <div>
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Users size={12} />
+                  Shared Maps You Created ({sharedMaps.length}/{maxSharedMaps})
+                </h3>
+                <div className="space-y-2">
+                  {sharedMaps.length > 0 ? (
+                    sharedMaps.map((map) => renderMapItem(map, 'created'))
+                  ) : (
+                    <p className="text-gray-500 text-sm text-center py-2">No shared maps created yet</p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Section 3: Shared Maps You Joined */}
-            <div>
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                <Globe size={12} />
-                Shared Maps You Joined
-              </h3>
-              <div className="space-y-2">
-                {joinedMaps.length > 0 ? (
-                  joinedMaps.map((map) => renderMapItem(map, 'joined'))
-                ) : (
-                  <p className="text-gray-500 text-sm text-center py-2">No joined maps yet</p>
-                )}
+            {/* Section 3: Shared Maps You Joined - hide for guests */}
+            {!isGuest && (
+              <div>
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Globe size={12} />
+                  Shared Maps You Joined ({joinedMaps.length}/{maxSharedMaps})
+                </h3>
+                <div className="space-y-2">
+                  {joinedMaps.length > 0 ? (
+                    joinedMaps.map((map) => renderMapItem(map, 'joined'))
+                  ) : (
+                    <p className="text-gray-500 text-sm text-center py-2">No joined maps yet</p>
+                  )}
 
-                {/* Join Map Button/Form */}
-                {isJoining ? (
-                  <div className="space-y-3 mt-3 p-3 bg-gray-700/50 rounded-xl border border-gray-600">
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1">Enter 4-digit map code</label>
-                      <input
-                        type="text"
-                        value={joinCode}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                          setJoinCode(val);
-                          setJoinError(null);
-                        }}
-                        placeholder="0000"
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-center font-mono text-xl tracking-widest placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
-                        maxLength={4}
-                        autoFocus
-                      />
+                  {/* Join Map Button/Form */}
+                  {isJoining ? (
+                    <div className="space-y-3 mt-3 p-3 bg-gray-700/50 rounded-xl border border-gray-600">
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">Enter 4-digit map code</label>
+                        <input
+                          type="text"
+                          value={joinCode}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            setJoinCode(val);
+                            setJoinError(null);
+                          }}
+                          placeholder="0000"
+                          className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-center font-mono text-xl tracking-widest placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                          maxLength={4}
+                          autoFocus
+                        />
+                      </div>
+                      {joinError && (
+                        <p className="text-red-400 text-xs text-center">{joinError}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setIsJoining(false);
+                            setJoinCode('');
+                            setJoinError(null);
+                          }}
+                          className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleJoin}
+                          disabled={joinCode.length !== 4 || isSubmitting}
+                          className="flex-1 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded-lg transition flex items-center justify-center gap-2"
+                        >
+                          {isSubmitting ? 'Joining...' : (
+                            <>
+                              <LogIn size={16} />
+                              Join
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
-                    {joinError && (
-                      <p className="text-red-400 text-xs text-center">{joinError}</p>
-                    )}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setIsJoining(false);
-                          setJoinCode('');
-                          setJoinError(null);
-                        }}
-                        className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleJoin}
-                        disabled={joinCode.length !== 4 || isSubmitting}
-                        className="flex-1 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded-lg transition flex items-center justify-center gap-2"
-                      >
-                        {isSubmitting ? 'Joining...' : (
-                          <>
-                            <LogIn size={16} />
-                            Join
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setIsJoining(true)}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 mt-2 rounded-xl transition bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/30"
-                  >
-                    <LogIn size={16} />
-                    <span>Join a Shared Map</span>
-                  </button>
-                )}
+                  ) : (
+                    <button
+                      onClick={() => canJoinMore && setIsJoining(true)}
+                      disabled={!canJoinMore}
+                      className={`w-full flex items-center justify-center gap-2 py-2.5 mt-2 rounded-xl transition border
+                        ${canJoinMore
+                          ? 'bg-green-600/20 hover:bg-green-600/30 text-green-300 border-green-500/30'
+                          : 'bg-gray-700/30 text-gray-500 border-gray-600 cursor-not-allowed'}
+                      `}
+                    >
+                      <LogIn size={16} />
+                      <span>Join a Shared Map</span>
+                      {!canJoinMore && <span className="text-xs text-gray-500">(Limit reached)</span>}
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Guest info message */}
+            {isGuest && (
+              <div className="bg-gray-700/30 rounded-xl p-4 border border-gray-600">
+                <p className="text-gray-400 text-sm text-center">
+                  Sign in to create or join shared maps with others.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Create New Shared Map */}
           <div className="p-4 border-t border-gray-700">
-            {isCreating ? (
+            {isCreating && !isGuest ? (
               <div className="space-y-3">
                 <input
                   type="text"
@@ -347,25 +534,22 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
               </div>
             ) : (
               <button
-                onClick={() => setIsCreating(true)}
-                disabled={!canCreateMore}
-                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl transition
-                  ${canCreateMore
-                    ? 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30'
-                    : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'}
+                onClick={() => canCreateMore && setIsCreating(true)}
+                disabled={!canCreateMore || isGuest}
+                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl transition border
+                  ${canCreateMore && !isGuest
+                    ? 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border-purple-500/30'
+                    : 'bg-gray-700/50 text-gray-500 cursor-not-allowed border-gray-600'}
                 `}
               >
                 <Plus size={18} />
                 <span>Create Shared Map</span>
-                {!canCreateMore && (
-                  <span className="text-xs text-gray-500">({maxSharedMaps}/{maxSharedMaps})</span>
+                {isGuest ? (
+                  <span className="text-xs text-gray-500">(Sign in required)</span>
+                ) : !canCreateMore && (
+                  <span className="text-xs text-gray-500">(Limit reached)</span>
                 )}
               </button>
-            )}
-            {canCreateMore && !isCreating && (
-              <p className="text-xs text-gray-500 text-center mt-2">
-                {userSharedMapsCount}/{maxSharedMaps} shared maps created
-              </p>
             )}
           </div>
         </div>
