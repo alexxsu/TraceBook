@@ -43,6 +43,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Restaurant[]>([]);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isSearchClosing, setIsSearchClosing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Grade Filter State
@@ -60,6 +61,7 @@ function App() {
   const [isUserDetailOpen, setIsUserDetailOpen] = useState(false);
   const [isUserDetailClosing, setIsUserDetailClosing] = useState(false);
   const [isCompactCardOpen, setIsCompactCardOpen] = useState(false);
+  const [clickedMemberUid, setClickedMemberUid] = useState<string | null>(null);
 
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant, visit: Visit } | null>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
@@ -587,6 +589,16 @@ function App() {
     }, 200);
   };
 
+  const closeSearch = () => {
+    if (!isSearchFocused && !searchQuery) return;
+    setIsSearchClosing(true);
+    setTimeout(() => {
+      setSearchQuery('');
+      setIsSearchFocused(false);
+      setIsSearchClosing(false);
+    }, 150);
+  };
+
   const closeMenu = () => {
     setIsMenuClosing(true);
     setTimeout(() => {
@@ -799,6 +811,12 @@ function App() {
       return true;
     }
 
+    // Check if map has reached member limit (10 members max)
+    const currentMemberCount = foundMap.memberInfo?.length || 1;
+    if (currentMemberCount >= 10) {
+      throw new Error('This map has reached its member limit (10 members)');
+    }
+
     // Add user to members array and memberInfo
     const mapRef = doc(db, 'maps', foundMapId);
     const newMemberInfo = {
@@ -1006,10 +1024,9 @@ function App() {
           <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 w-[calc(100%-6rem)] max-w-sm pointer-events-none">
             {/* Header / Search Bar */}
             <div
-              className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 cursor-text"
-              onClick={() => setIsSearchFocused(true)}
+              className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500"
             >
-              <div className="flex items-center gap-2 relative overflow-hidden">
+              <div className="flex items-center gap-2 relative min-h-[40px]">
                 {/* Hamburger Menu Button */}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleMenuToggle(); }}
@@ -1018,20 +1035,20 @@ function App() {
                   <Menu size={20} />
                 </button>
 
-                {/* Logo/Title - hidden when search focused */}
-                {!isSearchFocused && !searchQuery && (
+                {/* Logo/Title - clickable to trigger search */}
+                {!(isSearchFocused || searchQuery || isSearchClosing) && (
                   <div
-                    onClick={(e) => { e.stopPropagation(); setIsSearchFocused(true); }}
-                    className="flex items-center gap-2 px-1 py-1 text-white cursor-pointer hover:opacity-80 animate-fade-in"
+                    onClick={() => setIsSearchFocused(true)}
+                    className="flex-1 flex items-center gap-2 px-1 text-white cursor-pointer hover:opacity-80 transition-opacity duration-200 animate-scale-in"
                   >
-                    <img src="/logo.svg" className="w-8 h-8 object-contain" alt="Logo" />
+                    <img src="/logo.svg" className="w-7 h-7 object-contain" alt="Logo" />
                     <span className="font-bold truncate">TraceBook</span>
                   </div>
                 )}
 
-                {/* Search Input - takes full width when focused */}
-                {(isSearchFocused || searchQuery) && (
-                  <div className="flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 py-1 animate-scale-in">
+                {/* Search Input - appears when search is active */}
+                {(isSearchFocused || searchQuery || isSearchClosing) && (
+                  <div className={`flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 h-[36px] ${isSearchClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
                     <Search size={14} className="text-gray-400 mr-2 flex-shrink-0" />
                     <input
                       ref={searchInputRef}
@@ -1040,38 +1057,35 @@ function App() {
                       className="bg-transparent border-none focus:outline-none text-sm text-white w-full placeholder-gray-500"
                       value={searchQuery}
                       onFocus={() => setIsSearchFocused(true)}
-                      onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                      onBlur={() => setTimeout(() => { if (!searchQuery) closeSearch(); }, 150)}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
-                    {(searchQuery || isSearchFocused) && (
-                      <button 
-                        onClick={(e) => { 
-                          e.stopPropagation(); 
-                          setSearchQuery(''); 
-                          setIsSearchFocused(false);
-                        }} 
-                        className="text-gray-400 hover:text-white p-1"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        closeSearch();
+                      }} 
+                      className="text-gray-400 hover:text-white p-1"
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
                 )}
 
-                {/* Search Icon Button - only when not searching */}
-                {!isSearchFocused && !searchQuery && (
-                  <>
+                {/* Search and Filter Buttons */}
+                {!(isSearchFocused || searchQuery || isSearchClosing) && (
+                  <div className="flex items-center gap-1 animate-scale-in">
                     <button
                       onClick={(e) => { e.stopPropagation(); setIsSearchFocused(true); }}
-                      className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white ml-auto"
+                      className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white"
                     >
                       <Search size={18} />
                     </button>
                     {/* Filter Button */}
                     <button
-                      onClick={(e) => { e.stopPropagation(); setIsFilterOpen(prev => !prev); }}
+                      onClick={(e) => { e.stopPropagation(); handleFilterToggle(); }}
                       className={`p-1.5 hover:bg-gray-700 rounded-lg transition-colors duration-200 relative ${
-                        selectedGrades.length < GRADES.length ? 'text-blue-400' : 'text-gray-400 hover:text-white'
+                        selectedGrades.length < GRADES.length || isFilterOpen ? 'text-blue-400' : 'text-gray-400 hover:text-white'
                       }`}
                     >
                       <Filter size={18} />
@@ -1079,7 +1093,7 @@ function App() {
                         <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-blue-500 rounded-full" />
                       )}
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
 
@@ -1100,6 +1114,36 @@ function App() {
                     <p className="text-gray-500 text-sm px-2 py-1">No places found.</p>
                   )}
                 </div>
+              )}
+
+              {/* Filter Dropdown - appears inside header bar */}
+              {(isFilterOpen || isFilterClosing) && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={closeFilter}></div>
+                  <div className={`mt-2 border-t border-gray-700 pt-3 pb-1 relative z-20 ${isFilterClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+                    <div className="text-xs text-gray-400 font-bold uppercase mb-2 px-1">Filter by Grade</div>
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {GRADES.map(grade => (
+                        <button
+                          key={grade}
+                          onClick={(e) => { e.stopPropagation(); toggleGradeFilter(grade); }}
+                          className={`
+                            text-sm font-bold py-2 rounded-lg transition border
+                            ${selectedGrades.includes(grade) 
+                              ? `${getGradeColor(grade)} bg-gray-700 border-gray-600` 
+                              : 'text-gray-600 border-transparent hover:bg-gray-700/50'}
+                          `}
+                        >
+                          {grade}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="border-t border-gray-700 mt-2 pt-2 flex justify-between text-xs px-1">
+                      <button onClick={(e) => { e.stopPropagation(); setSelectedGrades(GRADES); }} className="text-blue-400 hover:text-blue-300">Select All</button>
+                      <button onClick={(e) => { e.stopPropagation(); setSelectedGrades([]); }} className="text-gray-500 hover:text-gray-400">Clear All</button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
 
@@ -1168,29 +1212,39 @@ function App() {
                     >
                       {/* Default Maps Section */}
                       {userOwnMaps.filter(m => m.isDefault).length > 0 && (
-                        <optgroup label="── Your Default Map ──">
-                          {userOwnMaps.filter(m => m.isDefault).map((m) => (
-                            <option key={m.id} value={m.id}>
-                              🔒 {m.name}
-                            </option>
-                          ))}
-                        </optgroup>
+                        <>
+                          <optgroup label="Your Default Map">
+                            {userOwnMaps.filter(m => m.isDefault).map((m) => (
+                              <option key={m.id} value={m.id}>
+                                🔒 {m.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                          {(userSharedMaps.length > 0 || userJoinedMaps.length > 0) && (
+                            <option disabled>────────────</option>
+                          )}
+                        </>
                       )}
                       
                       {/* Created Shared Maps Section */}
                       {userSharedMaps.length > 0 && (
-                        <optgroup label="── Shared Maps (Owner) ──">
-                          {userSharedMaps.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              👥 {m.name}
-                            </option>
-                          ))}
-                        </optgroup>
+                        <>
+                          <optgroup label="Shared Maps (Owner)">
+                            {userSharedMaps.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                👥 {m.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                          {userJoinedMaps.length > 0 && (
+                            <option disabled>────────────</option>
+                          )}
+                        </>
                       )}
                       
                       {/* Joined Shared Maps Section */}
                       {userJoinedMaps.length > 0 && (
-                        <optgroup label="── Shared Maps (Joined) ──">
+                        <optgroup label="Shared Maps (Joined)">
                           {userJoinedMaps.map((m) => (
                             <option key={m.id} value={m.id}>
                               🌐 {m.name} ({m.ownerDisplayName})
@@ -1253,8 +1307,68 @@ function App() {
             restaurants={filteredMapRestaurants}
             onMapLoad={handleMapLoad}
             onMarkerClick={handleMarkerClick}
+            onMapClick={() => {
+              // Close filter dropdown when clicking on map
+              if (isFilterOpen) {
+                closeFilter();
+              }
+              // Close compact card
+              setIsCompactCardOpen(false);
+              // Close member tooltip
+              setClickedMemberUid(null);
+            }}
             mapType={mapType}
           />
+
+          {/* Member Avatars - Bottom Left for Shared Maps */}
+          {activeMap && !activeMap.isDefault && activeMap.memberInfo && activeMap.memberInfo.length > 0 && (
+            <div className="absolute bottom-24 left-4 z-10 flex flex-col-reverse gap-1 pointer-events-auto">
+              {activeMap.memberInfo.slice(0, 10).map((member, index) => (
+                <div key={member.uid} className="relative">
+                  <button
+                    onClick={() => {
+                      setClickedMemberUid(clickedMemberUid === member.uid ? null : member.uid);
+                      // Auto-hide tooltip after 3 seconds
+                      setTimeout(() => setClickedMemberUid(null), 3000);
+                    }}
+                    className={`w-10 h-10 rounded-full border-2 shadow-lg transition-all duration-200 overflow-hidden
+                      ${clickedMemberUid === member.uid 
+                        ? 'border-blue-400 scale-110 ring-2 ring-blue-400/50' 
+                        : 'border-gray-700 hover:border-gray-500 hover:scale-105'}
+                      ${member.uid === activeMap.ownerUid ? 'ring-2 ring-purple-500/50' : ''}
+                    `}
+                    style={{ zIndex: 10 - index }}
+                  >
+                    {member.photoURL ? (
+                      <img 
+                        src={member.photoURL} 
+                        alt={member.displayName} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+                        <UserIcon size={16} className="text-gray-400" />
+                      </div>
+                    )}
+                  </button>
+                  
+                  {/* Tooltip on click */}
+                  {clickedMemberUid === member.uid && (
+                    <div className="absolute left-12 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 shadow-xl whitespace-nowrap animate-scale-in z-20">
+                      <div className="text-white text-sm font-medium">
+                        {member.displayName}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {member.uid === activeMap.ownerUid ? 'Owner' : 'Member'}
+                      </div>
+                      {/* Arrow */}
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-2 h-2 bg-gray-800 border-l border-b border-gray-600 rotate-45" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Add Button */}
           {!hideAddButton && (
@@ -1289,57 +1403,6 @@ function App() {
           )}
         </>
       )}
-      {/* Top Right Buttons */}
-      <div className="absolute top-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto items-end">
-        {/* Filter Button */}
-        <div className="relative">
-           <button 
-             onClick={handleFilterToggle}
-             className={`p-3 rounded-full shadow-lg transition group backdrop-blur border flex items-center justify-center w-12 h-12
-               ${(isFilterOpen || isFilterClosing) || selectedGrades.length < GRADES.length ? 'bg-blue-600 text-white border-blue-400' : 'bg-gray-800/90 text-white border-gray-700 hover:bg-gray-700'}
-             `}
-             title="Filter Grades"
-           >
-              {selectedGrades.length === GRADES.length ? (
-                <Filter size={24} />
-              ) : (
-                 <span className="text-xs font-bold leading-none text-center">
-                   {selectedGrades.length <= 2 ? selectedGrades.join(' ') : selectedGrades.length}
-                 </span>
-              )}
-           </button>
-           
-           {(isFilterOpen || isFilterClosing) && (
-             <>
-               <div className="fixed inset-0 z-10" onClick={closeFilter}></div>
-               <div className={`absolute right-14 top-0 bg-gray-800 border border-gray-700 rounded-xl shadow-xl p-3 flex flex-col gap-2 z-20 w-32 origin-top-right ${isFilterClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                  <div className="text-xs text-gray-400 font-bold uppercase mb-1">Filter Map</div>
-                  <div className="grid grid-cols-2 gap-2">
-                     {GRADES.map(grade => (
-                       <button
-                         key={grade}
-                         onClick={() => toggleGradeFilter(grade)}
-                         className={`
-                           text-sm font-bold py-1.5 rounded transition border
-                           ${selectedGrades.includes(grade) 
-                              ? `${getGradeColor(grade)} bg-gray-700 border-gray-600` 
-                              : 'text-gray-600 border-transparent hover:bg-gray-700/50'}
-                         `}
-                       >
-                         {grade}
-                       </button>
-                     ))}
-                  </div>
-                  <div className="border-t border-gray-700 mt-1 pt-2 flex justify-between text-[10px]">
-                     <button onClick={() => setSelectedGrades(GRADES)} className="text-blue-400 hover:text-blue-300">All</button>
-                     <button onClick={() => setSelectedGrades([])} className="text-gray-500 hover:text-gray-400">None</button>
-                  </div>
-               </div>
-             </>
-           )}
-        </div>
-      </div>
-
       {/* Bottom Right Custom Map Controls */}
       <div className="absolute bottom-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
         <button
@@ -1647,7 +1710,7 @@ function App() {
           onKickMember={handleKickMember}
           onSelectMap={(map) => {
             setActiveMap(map);
-            setViewState(ViewState.MAP);
+            // Don't close modal - user manually closes
           }}
         />
       )}

@@ -524,43 +524,40 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                   {/* Create Map Button/Form - under created maps */}
                   {isCreating ? (
                     <div 
-                      className={`space-y-3 mt-2 p-3 bg-gray-700/50 rounded-xl border border-gray-600 transition-all duration-200 ${
-                        isCreatingClosing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+                      className={`mt-2 overflow-hidden transition-all duration-200 ease-out ${
+                        isCreatingClosing ? 'opacity-0 max-h-0' : 'opacity-100 max-h-[300px]'
                       }`}
-                      style={{ 
-                        maxHeight: isCreatingClosing ? '0px' : '200px',
-                        padding: isCreatingClosing ? '0px' : undefined,
-                        marginTop: isCreatingClosing ? '0px' : undefined,
-                        borderWidth: isCreatingClosing ? '0px' : undefined,
-                        overflow: 'hidden'
-                      }}
                     >
-                      <input
-                        type="text"
-                        value={newMapName}
-                        onChange={(e) => setNewMapName(e.target.value.slice(0, 25))}
-                        placeholder="Enter map name..."
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        maxLength={25}
-                        autoFocus
-                      />
-                      <div className="flex items-center justify-between text-xs text-gray-500">
-                        <span>{newMapName.length}/25 characters</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={closeCreateForm}
-                          className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleCreate}
-                          disabled={!newMapName.trim() || isSubmitting}
-                          className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded-lg transition"
-                        >
-                          {isSubmitting ? 'Creating...' : 'Create'}
-                        </button>
+                      <div className={`space-y-3 p-3 bg-gray-700/50 rounded-xl border border-gray-600 transform transition-transform duration-200 ${
+                        isCreatingClosing ? 'scale-95' : 'scale-100'
+                      }`}>
+                        <input
+                          type="text"
+                          value={newMapName}
+                          onChange={(e) => setNewMapName(e.target.value.slice(0, 25))}
+                          placeholder="Enter map name..."
+                          className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          maxLength={25}
+                          autoFocus
+                        />
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <span>{newMapName.length}/25 characters</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={closeCreateForm}
+                            className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleCreate}
+                            disabled={!newMapName.trim() || isSubmitting}
+                            className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded-lg transition"
+                          >
+                            {isSubmitting ? 'Creating...' : 'Create'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -599,55 +596,52 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                   {/* Join Map Button/Form - under joined maps */}
                   {isJoining ? (
                     <div 
-                      className={`space-y-3 mt-2 p-3 bg-gray-700/50 rounded-xl border border-gray-600 transition-all duration-200 ${
-                        isJoiningClosing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+                      className={`mt-2 overflow-hidden transition-all duration-200 ease-out ${
+                        isJoiningClosing ? 'opacity-0 max-h-0' : 'opacity-100 max-h-[300px]'
                       }`}
-                      style={{ 
-                        maxHeight: isJoiningClosing ? '0px' : '200px',
-                        padding: isJoiningClosing ? '0px' : undefined,
-                        marginTop: isJoiningClosing ? '0px' : undefined,
-                        borderWidth: isJoiningClosing ? '0px' : undefined,
-                        overflow: 'hidden'
-                      }}
                     >
-                      <div>
-                        <label className="text-xs text-gray-400 block mb-1">Enter 4-digit map code</label>
-                        <input
-                          type="text"
-                          value={joinCode}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                            setJoinCode(val);
-                            setJoinError(null);
-                          }}
-                          placeholder="0000"
-                          className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-center font-mono text-xl tracking-widest placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
-                          maxLength={4}
-                          autoFocus
-                        />
-                      </div>
-                      {joinError && (
-                        <p className="text-red-400 text-xs text-center">{joinError}</p>
-                      )}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={closeJoinForm}
-                          className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleJoin}
-                          disabled={joinCode.length !== 4 || isSubmitting}
-                          className="flex-1 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded-lg transition flex items-center justify-center gap-2"
-                        >
-                          {isSubmitting ? 'Joining...' : (
-                            <>
-                              <LogIn size={16} />
-                              Join
-                            </>
-                          )}
-                        </button>
+                      <div className={`space-y-3 p-3 bg-gray-700/50 rounded-xl border border-gray-600 transform transition-transform duration-200 ${
+                        isJoiningClosing ? 'scale-95' : 'scale-100'
+                      }`}>
+                        <div>
+                          <label className="text-xs text-gray-400 block mb-1">Enter 4-digit map code</label>
+                          <input
+                            type="text"
+                            value={joinCode}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                              setJoinCode(val);
+                              setJoinError(null);
+                            }}
+                            placeholder="0000"
+                            className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-center font-mono text-xl tracking-widest placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+                            maxLength={4}
+                            autoFocus
+                          />
+                        </div>
+                        {joinError && (
+                          <p className="text-red-400 text-xs text-center">{joinError}</p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={closeJoinForm}
+                            className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleJoin}
+                            disabled={joinCode.length !== 4 || isSubmitting}
+                            className="flex-1 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded-lg transition flex items-center justify-center gap-2"
+                          >
+                            {isSubmitting ? 'Joining...' : (
+                              <>
+                                <LogIn size={16} />
+                                Join
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
