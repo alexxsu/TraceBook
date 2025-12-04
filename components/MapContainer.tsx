@@ -90,39 +90,63 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         gestureHandling: 'greedy', 
       });
 
-      // Custom cluster renderer with blue gradient
+      // Custom cluster renderer with elegant blue gradient
       const renderer = {
         render: ({ count, position }: { count: number; position: google.maps.LatLng }) => {
-          // Logical color gradient: cyan → blue → dark blue → navy (cool gradient)
+          // Consistent blue gradient for all clusters
           let backgroundColor: string;
+          let borderColor = 'white';
           let textColor = 'white';
+          let size = 50;
 
           if (count < 10) {
-            // Small clusters: Cyan
-            backgroundColor = '#06B6D4'; // cyan-500
-          } else if (count < 30) {
-            // Medium clusters: Sky blue
+            // Small clusters: Bright cyan blue
             backgroundColor = '#0EA5E9'; // sky-500
+            size = 44;
+          } else if (count < 30) {
+            // Medium clusters: Royal blue
+            backgroundColor = '#3B82F6'; // blue-500
+            size = 50;
           } else if (count < 100) {
-            // Large clusters: Blue
+            // Large clusters: Deep blue
             backgroundColor = '#2563EB'; // blue-600
+            size = 56;
           } else {
-            // Very large clusters: Dark blue
+            // Very large clusters: Navy blue
             backgroundColor = '#1E40AF'; // blue-700
+            size = 62;
           }
 
-          // Create cluster marker element
+          // Elegant cluster design with gradient and shadow
           const svg = `
-            <svg width="50" height="50" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="25" cy="25" r="22" fill="${backgroundColor}" stroke="white" stroke-width="3" opacity="0.9"/>
-              <text x="25" y="25" font-size="14" font-weight="bold" fill="${textColor}" text-anchor="middle" dominant-baseline="central">${count}</text>
+            <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <filter id="shadow-${count}" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+                  <feOffset dx="0" dy="2" result="offsetblur"/>
+                  <feComponentTransfer>
+                    <feFuncA type="linear" slope="0.3"/>
+                  </feComponentTransfer>
+                  <feMerge>
+                    <feMergeNode/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+                <radialGradient id="grad-${count}">
+                  <stop offset="0%" style="stop-color:${backgroundColor};stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:${backgroundColor};stop-opacity:0.85" />
+                </radialGradient>
+              </defs>
+              <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 4}" fill="url(#grad-${count})" stroke="${borderColor}" stroke-width="3" filter="url(#shadow-${count})"/>
+              <text x="${size/2}" y="${size/2}" font-size="${size/3.5}" font-weight="bold" fill="${textColor}" text-anchor="middle" dominant-baseline="central">${count}</text>
             </svg>
           `;
 
           const icon = document.createElement('div');
           icon.innerHTML = svg;
-          icon.style.width = '50px';
-          icon.style.height = '50px';
+          icon.style.width = `${size}px`;
+          icon.style.height = `${size}px`;
+          icon.style.cursor = 'pointer';
 
           return new google.maps.marker.AdvancedMarkerElement({
             position,
@@ -172,12 +196,36 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         // A. Add New Markers
         restaurants.forEach(restaurant => {
           if (!markersRef.current.has(restaurant.id)) {
-            // Create View
+            // Create elegant blue pin matching cluster theme
             const pinView = document.createElement("div");
             pinView.className = "marker-pin group relative flex items-center justify-center cursor-pointer";
             pinView.innerHTML = `
-              <div class="w-6 h-6 bg-amber-500 rounded-full border-2 border-white shadow-lg transform transition-transform duration-200 group-hover:scale-125"></div>
-              <div class="absolute -bottom-1 w-2 h-2 bg-black/20 rounded-full blur-[2px]"></div>
+              <svg width="32" height="40" viewBox="0 0 32 40" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <filter id="pin-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+                    <feOffset dx="0" dy="2" result="offsetblur"/>
+                    <feComponentTransfer>
+                      <feFuncA type="linear" slope="0.4"/>
+                    </feComponentTransfer>
+                    <feMerge>
+                      <feMergeNode/>
+                      <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                  </filter>
+                  <radialGradient id="pin-gradient">
+                    <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#2563EB;stop-opacity:1" />
+                  </radialGradient>
+                </defs>
+                <path d="M16 0C9.373 0 4 5.373 4 12c0 8 12 24 12 24s12-16 12-24c0-6.627-5.373-12-12-12z"
+                      fill="url(#pin-gradient)"
+                      stroke="white"
+                      stroke-width="2"
+                      filter="url(#pin-shadow)"
+                      class="group-hover:opacity-90 transition-opacity"/>
+                <circle cx="16" cy="12" r="5" fill="white" opacity="0.9"/>
+              </svg>
             `;
 
             const marker = new AdvancedMarkerElement({

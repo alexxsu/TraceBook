@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, MapPin, Map as MapIcon, Info, LogOut, User as UserIcon, BarChart2, Search, X, Crosshair, Minus, LocateFixed, Filter, Lock, Clock, RefreshCw } from 'lucide-react';
+import { Plus, MapPin, Map as MapIcon, Info, LogOut, User as UserIcon, BarChart2, Search, X, Crosshair, Minus, LocateFixed, Filter, Lock, Clock, RefreshCw, Layers } from 'lucide-react';
 import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID, UserProfile } from './types';
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
@@ -43,7 +43,8 @@ function App() {
   // UI State
   const [hideAddButton, setHideAddButton] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
-  
+  const [mapType, setMapType] = useState<'satellite' | 'roadmap'>('satellite');
+
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant, visit: Visit } | null>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [currentMapCenter, setCurrentMapCenter] = useState<Coordinates>({ lat: 43.6532, lng: -79.3832 });
@@ -266,15 +267,11 @@ function App() {
     });
   }, []);
 
-  const handleZoomIn = () => {
+  const handleToggleMapType = () => {
     if (mapInstance) {
-      mapInstance.setZoom((mapInstance.getZoom() || 13) + 1);
-    }
-  };
-
-  const handleZoomOut = () => {
-    if (mapInstance) {
-      mapInstance.setZoom((mapInstance.getZoom() || 13) - 1);
+      const newType = mapType === 'satellite' ? 'roadmap' : 'satellite';
+      mapInstance.setMapTypeId(newType);
+      setMapType(newType);
     }
   };
 
@@ -718,33 +715,28 @@ function App() {
 
       {/* Bottom Right Custom Map Controls */}
       <div className="absolute bottom-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
-        <button 
+        <button
            onClick={handleResetView}
            className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
            title="Reset View to GTA"
         >
            <MapIcon size={24} className="group-hover:text-blue-400 transition" />
         </button>
-        <button 
+        <button
            onClick={handleLocateMe}
            className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
            title="Locate Me"
         >
            <Crosshair size={24} className="group-hover:text-blue-400 transition" />
         </button>
-        <button 
-           onClick={handleZoomIn}
-           className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
-           title="Zoom In"
+        <button
+           onClick={handleToggleMapType}
+           className={`bg-gray-800/90 backdrop-blur border p-3 rounded-full shadow-lg text-white transition group
+             ${mapType === 'satellite' ? 'border-blue-500' : 'border-gray-700 hover:bg-gray-700'}
+           `}
+           title={`Switch to ${mapType === 'satellite' ? 'Road' : 'Satellite'} View`}
         >
-           <Plus size={24} className="group-hover:text-blue-400 transition" />
-        </button>
-        <button 
-           onClick={handleZoomOut}
-           className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
-           title="Zoom Out"
-        >
-           <Minus size={24} className="group-hover:text-blue-400 transition" />
+           <Layers size={24} className="group-hover:text-blue-400 transition" />
         </button>
       </div>
 
