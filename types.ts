@@ -201,6 +201,8 @@ export interface UserMap {
   isDefault: boolean;
   createdAt?: string;
   updatedAt?: string;
+  shareCode?: string; // 4-digit unique code for shared maps
+  members?: string[]; // Array of user UIDs who have access to this shared map
 }
 
 export enum ViewState {
@@ -213,4 +215,5 @@ export enum ViewState {
   USER_HISTORY = 'USER_HISTORY',
   EDIT_ENTRY = 'EDIT_ENTRY',
   STATS = 'STATS',
+  MAP_MANAGEMENT = 'MAP_MANAGEMENT',
 }

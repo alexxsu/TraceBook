@@ -29,7 +29,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ onClose, onClearDatabase, isAdmin
       >
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
-          <h2 className="text-lg font-semibold text-white">About GourmetMaps</h2>
+          <h2 className="text-lg font-semibold text-white">About TraceBook</h2>
           <button onClick={handleClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
             <X size={20} />
           </button>
@@ -41,7 +41,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ onClose, onClearDatabase, isAdmin
             <ul className="space-y-3 text-sm text-gray-300">
               <li className="flex gap-2">
                 <Camera size={18} className="text-blue-400 flex-shrink-0" />
-                <span>Upload food photos. The app auto-detects the location from GPS data.</span>
+                <span>Upload photos. The app auto-detects the location from GPS data.</span>
               </li>
               <li className="flex gap-2">
                 <MapPin size={18} className="text-green-400 flex-shrink-0" />
@@ -97,7 +97,7 @@ const InfoModal: React.FC<InfoModalProps> = ({ onClose, onClearDatabase, isAdmin
                        <Trash2 size={18} />
                        Reset Database
                      </button>
-                     <p className="text-[10px] text-red-300/50 text-center mt-2">This will delete all restaurants and visits permanently.</p>
+                     <p className="text-[10px] text-red-300/50 text-center mt-2">This will delete all places and memories permanently.</p>
                    </div>
                  )}
                </div>

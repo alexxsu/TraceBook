@@ -281,6 +281,12 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
 
   return (
     <>
+      {/* Backdrop - click to close */}
+      <div
+        className={`fixed inset-0 bg-black/40 z-10 transition-opacity duration-300 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
+        onClick={() => handleClose('down')}
+      />
+
       <div
         className={`absolute left-0 right-0 sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] bg-gray-900 border-t sm:border-t-0 sm:border-l border-gray-800 shadow-2xl z-20 flex flex-col ${isExpanded ? 'rounded-none' : 'rounded-t-2xl'} sm:rounded-none ${animationClass}`}
         style={{

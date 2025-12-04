@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, MapPin, Map as MapIcon, Info, LogOut, User as UserIcon, BarChart2, Search, X, Crosshair, Minus, LocateFixed, Filter, Lock, Clock, RefreshCw, Layers, Menu } from 'lucide-react';
-import { Restaurant, ViewState, Coordinates, Visit, GUEST_ID, UserProfile, UserMap } from './types';
+import { Plus, MapPin, Map as MapIcon, Info, LogOut, User as UserIcon, BarChart2, Search, X, Crosshair, Minus, LocateFixed, Filter, Lock, Clock, RefreshCw, Layers, Menu, Building2, Settings } from 'lucide-react';
+import { Restaurant, ViewState, Coordinates, Visit, UserProfile, UserMap } from './types';
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
 import RestaurantDetail from './components/RestaurantDetail';
@@ -8,10 +8,11 @@ import InfoModal from './components/InfoModal';
 import UserHistoryModal from './components/UserHistoryModal';
 import EditVisitModal from './components/EditVisitModal';
 import StatsModal from './components/StatsModal';
+import MapManagementModal from './components/MapManagementModal';
 import { calculateAverageGrade, GRADES, getGradeColor } from './utils/rating';
 
 // Firebase Imports
-import { auth, googleProvider, db, GOOGLE_MAPS_API_KEY } from './firebaseConfig';
+import { auth, googleProvider, db, GOOGLE_MAPS_API_KEY, signInAsGuest } from './firebaseConfig';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { collection, onSnapshot, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc, getDocs } from 'firebase/firestore';
 
@@ -22,6 +23,7 @@ interface AppUser {
   displayName: string | null;
   photoURL: string | null;
   email: string | null;
+  isAnonymous?: boolean;
 }
 
 function App() {
@@ -31,6 +33,8 @@ function App() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [activeMap, setActiveMap] = useState<UserMap | null>(null);
   const [allMaps, setAllMaps] = useState<UserMap[]>([]); // For admin map selector
+  const [userOwnMaps, setUserOwnMaps] = useState<UserMap[]>([]); // User's own maps (default + shared they created)
+  const [userSharedMaps, setUserSharedMaps] = useState<UserMap[]>([]); // Shared maps user created
 
   const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
   
@@ -54,6 +58,7 @@ function App() {
   const [isMenuAnimatingIn, setIsMenuAnimatingIn] = useState(false);
   const [isUserDetailOpen, setIsUserDetailOpen] = useState(false);
   const [isUserDetailClosing, setIsUserDetailClosing] = useState(false);
+  const [isCompactCardOpen, setIsCompactCardOpen] = useState(false);
 
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant, visit: Visit } | null>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
@@ -65,33 +70,27 @@ function App() {
       if (currentUser) {
         setUser({
           uid: currentUser.uid,
-          displayName: currentUser.displayName,
+          displayName: currentUser.isAnonymous ? 'Guest' : currentUser.displayName,
           photoURL: currentUser.photoURL,
-          email: currentUser.email
+          email: currentUser.email,
+          isAnonymous: currentUser.isAnonymous
         });
         // We do NOT set ViewState.MAP here immediately for real users.
         // The checkUserStatus effect will handle it.
       } else {
         // If user logs out, or was never logged in
-        // Only reset to LOGIN if we are not currently in Guest Mode
-        setUser((prev) => (prev?.uid === GUEST_ID ? prev : null));
+        setUser(null);
         setUserProfile(null);
-        setViewState((prev) => {
-          // Fixed: Use local prev instead of stale user state
-          const currentUser = prev === ViewState.MAP ? user : null;
-          if (prev === ViewState.MAP && currentUser?.uid === GUEST_ID) return ViewState.MAP;
-          return ViewState.LOGIN;
-        });
+        setViewState(ViewState.LOGIN);
       }
     });
     return () => unsubscribe();
-    // Fixed: Removed user?.uid from dependencies to prevent unnecessary re-subscriptions
   }, []);
 
-  // Check User Approval Status (Real Users Only)
+  // Check User Approval Status (Real Users Only, skip anonymous/guest)
   useEffect(() => {
     const checkStatus = async () => {
-      if (!user || user.uid === GUEST_ID) return;
+      if (!user || user.isAnonymous) return;
       
       setIsCheckingStatus(true);
       try {
@@ -126,17 +125,18 @@ function App() {
       }
     };
 
-    if (user && user.uid !== GUEST_ID) {
+    if (user && !user.isAnonymous) {
       checkStatus();
-    } else if (user && user.uid === GUEST_ID) {
+    } else if (user && user.isAnonymous) {
+      // Anonymous/guest users go directly to map
       setViewState(ViewState.MAP);
     }
   }, [user]);
 
-  // Ensure default map for approved real users
+  // Ensure default map for approved users (including guest)
   useEffect(() => {
     const setupMap = async () => {
-      if (!user || user.uid === GUEST_ID) {
+      if (!user) {
         setActiveMap(null);
         return;
       }
@@ -160,7 +160,7 @@ function App() {
 
   // Admin: subscribe to all maps for selector
   useEffect(() => {
-    if (!user || user.uid === GUEST_ID) return;
+    if (!user || user.isAnonymous) return;
     if (!userProfile || userProfile.role !== 'admin') return;
 
     const mapsRef = collection(db, 'maps');
@@ -183,6 +183,45 @@ function App() {
 
     return () => unsubscribe();
   }, [user, userProfile]);
+
+  // Subscribe to user's own maps (default + shared they created)
+  useEffect(() => {
+    if (!user || user.isAnonymous) return;
+
+    // Subscribe to user's maps in maps/{userId}
+    const userMapsRef = collection(db, 'maps');
+    const unsubscribe = onSnapshot(userMapsRef, (snapshot) => {
+      const ownMaps: UserMap[] = [];
+      const sharedMaps: UserMap[] = [];
+
+      snapshot.docs.forEach((docSnap) => {
+        const d = docSnap.data() as any;
+        if (d.ownerUid === user.uid) {
+          const mapData: UserMap = {
+            id: docSnap.id,
+            ownerUid: d.ownerUid,
+            ownerDisplayName: d.ownerDisplayName,
+            name: d.name,
+            visibility: d.visibility,
+            isDefault: d.isDefault,
+            shareCode: d.shareCode,
+            members: d.members,
+            createdAt: d.createdAt?.toDate?.().toISOString?.() || d.createdAt,
+            updatedAt: d.updatedAt?.toDate?.().toISOString?.() || d.updatedAt,
+          };
+          ownMaps.push(mapData);
+          if (d.visibility === 'shared') {
+            sharedMaps.push(mapData);
+          }
+        }
+      });
+
+      setUserOwnMaps(ownMaps);
+      setUserSharedMaps(sharedMaps);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   // Data Fetching (Only when Map is Active)
   useEffect(() => {
@@ -287,13 +326,31 @@ function App() {
   };
 
   const handleGuestLogin = () => {
-    setUser({ uid: GUEST_ID, displayName: 'Guest', photoURL: null, email: null });
-    // Guest bypasses the approval check in useEffect via condition
+    // Set guest user state directly (view-only mode)
+    const guestProfile: UserProfile = {
+      email: 'guest@tracebook.app',
+      status: 'approved',
+      role: 'user',
+      createdAt: new Date().toISOString()
+    };
+
+    setUser({
+      uid: 'guest-user',
+      displayName: 'Guest',
+      photoURL: null,
+      email: 'guest@tracebook.app',
+      isAnonymous: true
+    });
+    setUserProfile(guestProfile);
+    setViewState(ViewState.MAP);
   };
 
   const handleLogout = async () => {
-    if (user?.uid === GUEST_ID) {
+    if (user?.isAnonymous) {
+      // Guest user - just clear state
       setUser(null);
+      setUserProfile(null);
+      setActiveMap(null);
     } else {
       await signOut(auth);
     }
@@ -301,7 +358,7 @@ function App() {
   };
 
   const handleRefreshStatus = async () => {
-    if (!user || user.uid === GUEST_ID) return;
+    if (!user || user.isAnonymous) return;
     setIsCheckingStatus(true);
     try {
       const userRef = doc(db, "users", user.uid);
@@ -403,11 +460,78 @@ function App() {
   const handleResetView = () => {
     if (mapInstance) {
       const bounds = new google.maps.LatLngBounds(
-        { lat: 43.48, lng: -79.80 }, 
+        { lat: 43.48, lng: -79.80 },
         { lat: 43.90, lng: -79.00 }
       );
       mapInstance.fitBounds(bounds);
     }
+  };
+
+  const handleZoomToMunicipality = () => {
+    if (!navigator.geolocation || !mapInstance) {
+      alert("Geolocation is not supported by this browser.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const userPos = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ location: userPos }, (results, status) => {
+          if (status === 'OK' && results && results.length > 0) {
+            // Find the locality (city/municipality) result
+            let municipalityResult = results.find(r =>
+              r.types.includes('locality') || r.types.includes('sublocality')
+            );
+
+            // Fallback to administrative_area_level_3 or level_2
+            if (!municipalityResult) {
+              municipalityResult = results.find(r =>
+                r.types.includes('administrative_area_level_3') ||
+                r.types.includes('administrative_area_level_2')
+              );
+            }
+
+            if (municipalityResult && municipalityResult.geometry.bounds) {
+              // Smooth pan to center first, then fit bounds
+              const center = municipalityResult.geometry.location;
+              mapInstance.panTo(center);
+
+              // After a short delay, fit the bounds with smooth animation
+              setTimeout(() => {
+                mapInstance.fitBounds(municipalityResult!.geometry.bounds!);
+              }, 300);
+            } else if (municipalityResult && municipalityResult.geometry.viewport) {
+              const center = municipalityResult.geometry.location;
+              mapInstance.panTo(center);
+
+              setTimeout(() => {
+                mapInstance.fitBounds(municipalityResult!.geometry.viewport!);
+              }, 300);
+            } else {
+              // Fallback: just zoom to user location at city level
+              mapInstance.panTo(userPos);
+              setTimeout(() => {
+                mapInstance.setZoom(13);
+              }, 300);
+            }
+          } else {
+            // Geocoding failed, fallback to user location
+            mapInstance.panTo(userPos);
+            setTimeout(() => {
+              mapInstance.setZoom(13);
+            }, 300);
+          }
+        });
+      },
+      () => {
+        alert("Could not access your location. Please check browser permissions.");
+      }
+    );
   };
 
   const toggleGradeFilter = (grade: string) => {
@@ -551,52 +675,56 @@ function App() {
     }
   };
 
-  // TEMP: one-time migration of old restaurants into the current active map
-  const handleMigrateOldRestaurants = async () => {
-    try {
-      if (!user || user.uid === GUEST_ID) {
-        alert('You must be logged in as a real user to run migration.');
-        return;
+  // Generate a unique 4-digit share code
+  const generateShareCode = async (): Promise<string> => {
+    const generateCode = () => Math.floor(1000 + Math.random() * 9000).toString();
+
+    // Try up to 10 times to find a unique code
+    for (let i = 0; i < 10; i++) {
+      const code = generateCode();
+      // Check if code is already used
+      const mapsRef = collection(db, 'maps');
+      const snapshot = await getDocs(mapsRef);
+      const existingCodes = snapshot.docs.map(d => d.data().shareCode).filter(Boolean);
+
+      if (!existingCodes.includes(code)) {
+        return code;
       }
-      if (!userProfile || userProfile.role !== 'admin') {
-        alert('Only admin users can run migration.');
-        return;
-      }
-      if (!activeMap) {
-        alert('No active map found. Make sure your profile is approved and map is initialized.');
-        return;
-      }
-
-      const confirmRun = window.confirm(
-        'This will copy ALL old restaurants from the legacy "restaurants" collection into your current map.\n\nContinue?'
-      );
-      if (!confirmRun) return;
-
-      const oldRestaurantsRef = collection(db, 'restaurants');
-      const snapshot = await getDocs(oldRestaurantsRef);
-
-      if (snapshot.empty) {
-        alert('No old restaurants found to migrate.');
-        return;
-      }
-
-      const writes: Promise<any>[] = [];
-
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        const newRef = doc(db, 'maps', activeMap.id, 'restaurants', docSnap.id);
-        writes.push(setDoc(newRef, data, { merge: true }));
-      });
-
-      await Promise.all(writes);
-
-      alert('Migration complete! Your old experiences should now appear on your map.');
-    } catch (err) {
-      console.error('Migration error:', err);
-      alert('Migration failed. Check console for details.');
     }
+
+    // Fallback: use timestamp-based code
+    return Date.now().toString().slice(-4);
   };
 
+  const handleCreateSharedMap = async (name: string) => {
+    if (!user || user.isAnonymous) {
+      throw new Error('Must be logged in to create shared maps');
+    }
+
+    // Check if user already has 3 shared maps
+    if (userSharedMaps.length >= 3) {
+      throw new Error('Maximum of 3 shared maps allowed');
+    }
+
+    const shareCode = await generateShareCode();
+    const mapId = `shared_${user.uid}_${Date.now()}`;
+
+    const newMap: UserMap = {
+      id: mapId,
+      ownerUid: user.uid,
+      ownerDisplayName: user.displayName || 'Unknown',
+      name: name,
+      visibility: 'shared',
+      isDefault: false,
+      shareCode: shareCode,
+      members: [user.uid],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Create the map document
+    await setDoc(doc(db, 'maps', mapId), newMap);
+  };
 
   const openAddModal = () => setViewState(ViewState.ADD_ENTRY);
 
@@ -666,12 +794,12 @@ function App() {
         <div className="bg-gray-800/80 backdrop-blur p-8 rounded-2xl shadow-2xl max-w-md w-full border border-gray-700 z-10 text-center animate-fade-in-up">
           {/* Logo Section */}
           <div className="flex justify-center mb-8">
-            <img src="/logo.svg" alt="GourmetMaps Logo" className="w-32 h-32 object-contain drop-shadow-2xl hover:scale-105 transition-transform duration-500" />
+            <img src="/logo.svg" alt="TraceBook Logo" className="w-40 h-40 object-contain drop-shadow-2xl hover:scale-105 transition-transform duration-500" />
           </div>
           
-          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">GourmetMaps</h1>
+          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">TraceBook</h1>
           <p className="text-gray-400 mb-8 leading-relaxed">
-            Map your culinary journey. Share food memories with your partner in real-time.
+            Trace your experiences. Share memories with your partner in real-time.
           </p>
           
           {/* Informational Badge */}
@@ -719,29 +847,127 @@ function App() {
         viewState === ViewState.USER_HISTORY
       ) && (
         <>
-          {activeMap && (
-            <div className="absolute top-24 right-6 z-[60] bg-gray-900/80 border border-gray-700 px-3 py-1.5 rounded-xl backdrop-blur pointer-events-auto">
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-2 text-xs text-gray-200">
-                  <span className="inline-flex h-2 w-2 rounded-full bg-green-400" />
-                  <span>
-                    Viewing: <span className="font-semibold">{activeMap.name}</span>
-                    {activeMap.visibility === 'private' && (
-                      <span className="text-[10px] text-gray-400"> (Private to you)</span>
-                    )}
-                  </span>
-                  {userProfile?.role === 'admin' && activeMap.ownerDisplayName && (
-                    <span className="text-[10px] text-gray-400 ml-1">
-                      Owner: {activeMap.ownerDisplayName}
-                    </span>
+          {/* Top Left Controls */}
+          <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 w-[calc(100%-6rem)] max-w-sm pointer-events-none">
+            {/* Header / Search Bar */}
+            <div
+              className="bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 cursor-text"
+              onClick={() => setIsSearchFocused(true)}
+            >
+              <div className="flex items-center gap-2 relative overflow-hidden">
+                {/* Hamburger Menu Button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleMenuToggle(); }}
+                  className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors duration-200 flex-shrink-0"
+                >
+                  <Menu size={20} />
+                </button>
+
+                {/* Logo/Title - slides out when search focused */}
+                <div
+                  className={`flex items-center gap-2 px-1 py-1 text-white transition-all duration-300 ease-out ${
+                    isSearchFocused || searchQuery
+                      ? 'opacity-0 scale-95 absolute -translate-x-4 pointer-events-none'
+                      : 'opacity-100 scale-100'
+                  }`}
+                >
+                  <img src="/logo.svg" className="w-6 h-6 object-contain" alt="Logo" />
+                  <span className="font-bold truncate">TraceBook</span>
+                </div>
+
+                {/* Search Input - slides in when focused */}
+                <div
+                  className={`flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 py-1 transition-all duration-300 ease-out ${
+                    isSearchFocused || searchQuery
+                      ? 'opacity-100 scale-100 translate-x-0'
+                      : 'opacity-0 scale-95 translate-x-4 absolute right-10 pointer-events-none'
+                  }`}
+                >
+                  <Search size={14} className="text-gray-400 mr-2 flex-shrink-0" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search your memories..."
+                    className="bg-transparent border-none focus:outline-none text-sm text-white w-full placeholder-gray-500"
+                    value={searchQuery}
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button onClick={(e) => { e.stopPropagation(); setSearchQuery(''); }} className="text-gray-400 hover:text-white">
+                      <X size={14} />
+                    </button>
                   )}
                 </div>
 
+                {/* Search Icon Button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setIsSearchFocused(true); }}
+                  className={`p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white ml-auto transition-all duration-300 ${
+                    isSearchFocused || searchQuery ? 'opacity-0 scale-75 pointer-events-none' : 'opacity-100 scale-100'
+                  }`}
+                >
+                  <Search size={18} />
+                </button>
+              </div>
+
+              {searchQuery && (
+                <div className="mt-2 border-t border-gray-700 pt-2 max-h-60 overflow-y-auto">
+                  {searchResults.length > 0 ? (
+                    searchResults.map(r => (
+                      <button
+                        key={r.id}
+                        onClick={(e) => { e.stopPropagation(); handleSearchSelect(r); }}
+                        className="w-full text-left px-2 py-2 hover:bg-gray-700 rounded text-sm text-gray-300 hover:text-white flex flex-col"
+                      >
+                        <span className="font-semibold">{r.name}</span>
+                        <span className="text-xs text-gray-500 truncate">{r.address}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-sm px-2 py-1">No places found.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Default Map Pill */}
+            <button
+              onClick={() => setIsCompactCardOpen(prev => !prev)}
+              className={`flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full backdrop-blur border shadow-lg transition-all duration-200 text-sm font-medium pointer-events-auto self-start
+                ${isCompactCardOpen
+                  ? 'bg-blue-600/90 border-blue-400/50 text-white'
+                  : 'bg-gray-900/80 border-gray-700 text-gray-200 hover:bg-gray-800/90 hover:border-gray-600'}
+              `}
+            >
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="" className="w-6 h-6 rounded-full object-cover border border-gray-600" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center">
+                  <UserIcon size={14} className="text-gray-400" />
+                </div>
+              )}
+              <span>Default Map</span>
+            </button>
+
+            {/* Compact Viewing Card - shows active map info */}
+            {isCompactCardOpen && activeMap && (
+              <div className="bg-gray-900/90 backdrop-blur border border-gray-700 rounded-xl px-3 py-2 shadow-xl animate-scale-in pointer-events-auto self-start">
+                <div className="flex items-center gap-2 text-xs text-gray-200">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-green-400 flex-shrink-0" />
+                  <span className="truncate">
+                    Viewing: <span className="font-semibold">{activeMap.name}</span>
+                    {activeMap.visibility === 'private' && (
+                      <span className="text-[10px] text-gray-400 ml-1">(Private)</span>
+                    )}
+                  </span>
+                </div>
+
                 {userProfile?.role === 'admin' && allMaps.length > 0 && (
-                  <label className="flex items-center gap-2 text-[10px] text-gray-400">
-                    <span className="uppercase tracking-wide">Map</span>
+                  <div className="mt-2 pt-2 border-t border-gray-700">
                     <select
-                      className="bg-gray-800 text-gray-100 text-[11px] rounded-md px-2 py-1 border border-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full bg-gray-800 text-gray-100 text-[11px] rounded-md px-2 py-1 border border-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       value={activeMap.id}
                       onChange={(e) => {
                         const selected = allMaps.find((m) => m.id === e.target.value);
@@ -754,17 +980,40 @@ function App() {
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </div>
+                )}
+
+                <div className="flex gap-4 mt-2 pt-2 border-t border-gray-700 text-xs">
+                  <div className="flex gap-1">
+                    <span className="text-gray-500">Pins:</span>
+                    <span className="text-gray-200">{restaurants.length}</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <span className="text-gray-500">Visible:</span>
+                    <span className="text-gray-200">{filteredMapRestaurants.length}</span>
+                  </div>
+                </div>
+
+                {/* Manage Maps Button - only for non-anonymous users */}
+                {!user?.isAnonymous && (
+                  <button
+                    onClick={() => setViewState(ViewState.MAP_MANAGEMENT)}
+                    className="mt-2 pt-2 border-t border-gray-700 w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400 hover:text-white transition"
+                  >
+                    <Settings size={12} />
+                    <span>Manage Maps</span>
+                  </button>
                 )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <MapContainer
             apiKey={GOOGLE_MAPS_API_KEY}
             restaurants={filteredMapRestaurants}
             onMapLoad={handleMapLoad}
             onMarkerClick={handleMarkerClick}
+            mapType={mapType}
           />
 
           {/* Add Button */}
@@ -772,12 +1021,12 @@ function App() {
             <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-[60] pointer-events-auto">
               <button 
                 onClick={handleToggleAdd}
-                className={\`group relative flex items-center justify-center w-16 h-16 rounded-full border backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out active:scale-95
-                  ${isAddModalOpen 
-                    ? 'bg-red-500/80 border-red-400/50 shadow-red-500/20' 
+                className={`group relative flex items-center justify-center w-16 h-16 rounded-full border backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out active:scale-95
+                  ${isAddModalOpen
+                    ? 'bg-red-500/80 border-red-400/50 shadow-red-500/20'
                     : 'bg-gray-900/40 border-white/20 hover:bg-gray-900/60 hover:shadow-blue-500/20 hover:scale-105'
                   }
-                \`}
+                `}
                 title={isAddModalOpen ? "Close" : "Add Memory"}
               >
                 {!isAddModalOpen && (
@@ -865,26 +1114,17 @@ function App() {
           >
             <Info size={24} className="group-hover:text-blue-400 transition" />
         </button>
-        {userProfile?.role === 'admin' && (
-          <button
-            onClick={handleMigrateOldRestaurants}
-            className="bg-yellow-600/90 backdrop-blur border border-yellow-400/70 rounded-full shadow-lg text-yellow-50 hover:bg-yellow-500 transition w-12 h-12 flex items-center justify-center text-[10px] leading-tight text-center px-2"
-            title="Migrate old data"
-          >
-            MIG
-          </button>
-        )}
 
       </div>
 
       {/* Bottom Right Custom Map Controls */}
       <div className="absolute bottom-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
         <button
-           onClick={handleResetView}
+           onClick={handleZoomToMunicipality}
            className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 transition group"
-           title="Reset View to GTA"
+           title="Zoom to My City"
         >
-           <MapIcon size={24} className="group-hover:text-blue-400 transition" />
+           <Building2 size={24} className="group-hover:text-blue-400 transition" />
         </button>
         <button
            onClick={handleLocateMe}
@@ -922,8 +1162,8 @@ function App() {
               <div className="flex items-center gap-3">
                 <img src="/logo.svg" className="w-10 h-10 object-contain" alt="Logo" />
                 <div>
-                  <h2 className="text-white font-bold text-lg">GourmetMaps</h2>
-                  <p className="text-gray-500 text-xs">Map your culinary journey</p>
+                  <h2 className="text-white font-bold text-lg">TraceBook</h2>
+                  <p className="text-gray-500 text-xs">Trace your experiences</p>
                 </div>
               </div>
             </div>
@@ -1094,9 +1334,23 @@ function App() {
       )}
 
       {viewState === ViewState.STATS && (
-        <StatsModal 
+        <StatsModal
           restaurants={restaurants}
           onClose={() => setViewState(ViewState.MAP)}
+        />
+      )}
+
+      {viewState === ViewState.MAP_MANAGEMENT && (
+        <MapManagementModal
+          userMaps={userOwnMaps.filter(m => m.isDefault)}
+          sharedMaps={userSharedMaps}
+          activeMap={activeMap}
+          onClose={() => setViewState(ViewState.MAP)}
+          onCreateSharedMap={handleCreateSharedMap}
+          onSelectMap={(map) => {
+            setActiveMap(map);
+            setViewState(ViewState.MAP);
+          }}
         />
       )}
     </div>

@@ -8,25 +8,30 @@ interface MapContainerProps {
   restaurants: Restaurant[];
   onMarkerClick: (restaurant: Restaurant) => void;
   onMapLoad: (map: google.maps.Map) => void;
+  mapType?: 'satellite' | 'roadmap' | 'dark';
 }
 
 const DEFAULT_CENTER = { lat: 43.6532, lng: -79.3832 };
 
-// SVG icon for pins - matches UI button style (gray-800 with gray-700 border)
-const createPinSvg = () => {
+// SVG icon for pins - matches UI button style
+const createPinSvg = (isDarkMode: boolean = false) => {
+  const fillColor = isDarkMode ? 'rgba(255, 255, 255, 0.95)' : 'rgba(31, 41, 55, 0.95)';
+  const strokeColor = isDarkMode ? 'rgba(200, 200, 200, 1)' : 'rgba(75, 85, 99, 1)';
+  const dotColor = isDarkMode ? 'rgba(31, 41, 55, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+
   return `data:image/svg+xml,${encodeURIComponent(`
     <svg width="36" height="48" viewBox="0 0 36 48" xmlns="http://www.w3.org/2000/svg">
       <path d="M18 0C9.72 0 3 6.72 3 15c0 10.5 15 33 15 33s15-22.5 15-33c0-8.28-6.72-15-15-15z"
-            fill="rgba(31, 41, 55, 0.95)"/>
+            fill="${fillColor}"/>
       <path d="M18 1.5C10.56 1.5 4.5 7.56 4.5 15c0 9.5 13.5 30 13.5 30s13.5-20.5 13.5-30c0-7.44-6.06-13.5-13.5-13.5z"
-            fill="none" stroke="rgba(75, 85, 99, 1)" stroke-width="1.5"/>
-      <circle cx="18" cy="15" r="5" fill="rgba(255, 255, 255, 0.95)"/>
+            fill="none" stroke="${strokeColor}" stroke-width="1.5"/>
+      <circle cx="18" cy="15" r="5" fill="${dotColor}"/>
     </svg>
   `)}`;
 };
 
 // SVG icon for clusters
-const createClusterSvg = (count: number) => {
+const createClusterSvg = (count: number, isDarkMode: boolean = false) => {
   let size = 48;
   let fontSize = 16;
 
@@ -44,18 +49,22 @@ const createClusterSvg = (count: number) => {
     fontSize = 20;
   }
 
+  const fillColor = isDarkMode ? 'rgba(255, 255, 255, 0.95)' : 'rgba(31, 41, 55, 0.95)';
+  const strokeColor = isDarkMode ? 'rgba(200, 200, 200, 1)' : 'rgba(75, 85, 99, 1)';
+  const textColor = isDarkMode ? 'rgba(31, 41, 55, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+
   const svg = `
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 1}" fill="rgba(31, 41, 55, 0.95)"/>
-      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 2}" fill="none" stroke="rgba(75, 85, 99, 1)" stroke-width="1.5"/>
-      <text x="${size/2}" y="${size/2}" font-size="${fontSize}" font-weight="600" fill="rgba(255, 255, 255, 0.95)" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif">${count}</text>
+      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 1}" fill="${fillColor}"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 2}" fill="none" stroke="${strokeColor}" stroke-width="1.5"/>
+      <text x="${size/2}" y="${size/2}" font-size="${fontSize}" font-weight="600" fill="${textColor}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif">${count}</text>
     </svg>
   `;
 
   return { svg, size };
 };
 
-const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMarkerClick, onMapLoad }) => {
+const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMarkerClick, onMapLoad, mapType = 'satellite' }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -64,6 +73,8 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
   const clustererRef = useRef<MarkerClusterer | null>(null);
   // Store marker instances to manage updates (using regular Marker)
   const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
+  // Track current map type for marker updates
+  const currentMapTypeRef = useRef<string>(mapType);
 
   // 1. Load Map
   useEffect(() => {
@@ -177,6 +188,8 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
     const updateMarkers = async () => {
       if (!mapInstance || !clustererRef.current) return;
 
+      const isDarkMode = mapType === 'dark';
+
       try {
         const currentIds = new Set(restaurants.map(r => r.id));
         const newMarkers: google.maps.Marker[] = [];
@@ -188,7 +201,7 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
               position: restaurant.location,
               title: restaurant.name,
               icon: {
-                url: createPinSvg(),
+                url: createPinSvg(isDarkMode),
                 scaledSize: new google.maps.Size(36, 48),
                 anchor: new google.maps.Point(18, 48),
               },
@@ -228,7 +241,62 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
     };
 
     updateMarkers();
-  }, [mapInstance, restaurants, onMarkerClick]);
+  }, [mapInstance, restaurants, onMarkerClick, mapType]);
+
+  // 3. Update marker icons when map type changes (dark mode toggle)
+  useEffect(() => {
+    if (!mapInstance || !clustererRef.current) return;
+    if (currentMapTypeRef.current === mapType) return;
+
+    currentMapTypeRef.current = mapType;
+    const isDarkMode = mapType === 'dark';
+
+    // Update all existing marker icons
+    for (const [, marker] of markersRef.current) {
+      marker.setIcon({
+        url: createPinSvg(isDarkMode),
+        scaledSize: new google.maps.Size(36, 48),
+        anchor: new google.maps.Point(18, 48),
+      });
+    }
+
+    // Recreate clusterer with new renderer for dark mode
+    const allMarkers = Array.from(markersRef.current.values());
+    clustererRef.current.clearMarkers();
+
+    const renderer = {
+      render: ({ count, position }: { count: number; position: google.maps.LatLng }) => {
+        const { svg, size } = createClusterSvg(count, isDarkMode);
+
+        return new google.maps.Marker({
+          position,
+          icon: {
+            url: `data:image/svg+xml,${encodeURIComponent(svg)}`,
+            scaledSize: new google.maps.Size(size, size),
+            anchor: new google.maps.Point(size / 2, size / 2),
+          },
+          zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
+        });
+      }
+    };
+
+    clustererRef.current = new MarkerClusterer({
+      map: mapInstance,
+      renderer,
+      markers: allMarkers,
+      onClusterClick: (event, cluster, map) => {
+        const bounds = new google.maps.LatLngBounds();
+        if (cluster.markers) {
+          cluster.markers.forEach(m => {
+            if ((m as any).position) {
+              bounds.extend((m as any).position);
+            }
+          });
+          map.fitBounds(bounds, 50);
+        }
+      }
+    });
+  }, [mapType, mapInstance]);
 
   if (authError) {
     return (
