@@ -143,6 +143,12 @@ function App() {
         setActiveMap(null);
         return;
       }
+
+      // Guest demo user: skip default-map logic. They should stay on the shared "guest-demo-map".
+      if (user.uid === 'guest-user' || user.isAnonymous) {
+        return;
+      }
+
       if (!userProfile || userProfile.status !== 'approved') {
         return;
       }
@@ -239,12 +245,7 @@ function App() {
     if (!user || viewState === ViewState.PENDING || viewState === ViewState.LOGIN) return;
     if (!activeMap) return;
 
-    // Guest users get an empty map - no Firebase access
-    if (user.isAnonymous) {
-      setRestaurants([]);
-      return;
-    }
-
+    // Note: Guest users CAN access guest-demo-map (Firestore rules allow it)
     const restaurantsRef = collection(db, 'maps', activeMap.id, 'restaurants');
 
     const unsubscribe = onSnapshot(restaurantsRef, (snapshot) => {
@@ -343,7 +344,7 @@ function App() {
   };
 
   const handleGuestLogin = async () => {
-    // Set guest user state directly (view-only mode)
+    // Set guest user state directly
     const guestProfile: UserProfile = {
       email: 'guest@tracebook.app',
       status: 'approved',
@@ -362,9 +363,9 @@ function App() {
     setUser(guestUser);
     setUserProfile(guestProfile);
     
-    // Set a demo map for guest users
+    // Set the shared demo map for guest users (matches Firestore rules)
     const demoMap: UserMap = {
-      id: 'demo-map',
+      id: 'guest-demo-map',
       ownerUid: 'guest-user',
       ownerDisplayName: 'Demo',
       name: 'Demo Map',
@@ -372,6 +373,18 @@ function App() {
       isDefault: true,
       createdAt: new Date().toISOString()
     };
+
+    // Ensure the guest-demo-map document exists in Firestore
+    try {
+      const mapRef = doc(db, 'maps', 'guest-demo-map');
+      const mapDoc = await getDoc(mapRef);
+      if (!mapDoc.exists()) {
+        await setDoc(mapRef, demoMap);
+      }
+    } catch (e) {
+      console.error("Error creating guest demo map:", e);
+    }
+
     setActiveMap(demoMap);
     setViewState(ViewState.MAP);
   };
@@ -1635,6 +1648,7 @@ function App() {
           }}
           onSave={handleSaveVisit}
           onPhotosUploaded={(hasPhotos) => setHideAddButton(hasPhotos)}
+          isGuest={user?.uid === 'guest-user' || user?.isAnonymous || false}
         />
       )}
 
