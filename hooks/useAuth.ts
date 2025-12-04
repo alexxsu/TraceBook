@@ -141,27 +141,41 @@ export function useAuth(): UseAuthReturn {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
-      
+
       // Check email verification
       const needsVerification = !firebaseUser.emailVerified;
-      
+
       // Check admin approval
       const userRef = doc(db, "users", firebaseUser.uid);
       const userSnap = await getDoc(userRef);
       let needsApproval = true;
-      
+
       if (userSnap.exists()) {
         const profile = userSnap.data() as UserProfile;
         needsApproval = profile.status !== 'approved';
       }
-      
+
       return { needsVerification, needsApproval };
     } catch (error: any) {
       console.error("Login failed", error);
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        throw new Error("Invalid email or password.");
+      // Handle various Firebase auth error codes
+      switch (error.code) {
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+        case 'auth/invalid-login-credentials':
+          throw new Error("Invalid email or password. Please check your credentials and try again.");
+        case 'auth/user-disabled':
+          throw new Error("This account has been disabled. Please contact support.");
+        case 'auth/too-many-requests':
+          throw new Error("Too many failed login attempts. Please try again later or reset your password.");
+        case 'auth/network-request-failed':
+          throw new Error("Network error. Please check your internet connection and try again.");
+        case 'auth/invalid-email':
+          throw new Error("Invalid email address format.");
+        default:
+          throw new Error("Login failed. Please try again.");
       }
-      throw new Error("Login failed. Please try again.");
     }
   };
 
