@@ -5,6 +5,14 @@ import { Restaurant, Visit, GUEST_ID } from '../types';
 import { getGradeColor, calculateAverageGrade } from '../utils/rating';
 import html2canvas from 'html2canvas';
 import ImageSlider from './ImageSlider';
+import {
+  SWIPE_UP_THRESHOLD,
+  SWIPE_DOWN_THRESHOLD,
+  MODAL_TRANSITION_DURATION,
+  DRAG_RESET_DELAY,
+  CLOSE_ANIMATION_DURATION,
+  MOBILE_BREAKPOINT
+} from '../constants';
 
 interface RestaurantDetailProps {
   restaurant: Restaurant;
@@ -42,8 +50,20 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   const handleClose = (direction: 'right' | 'down' = 'right') => {
     if (direction === 'down') setIsClosingDown(true);
     setIsClosing(true);
-    setTimeout(onClose, 400); // Increased from 250ms for smoother animation
+    setTimeout(onClose, CLOSE_ANIMATION_DURATION);
   };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -77,21 +97,41 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   const onTouchEnd = () => {
     setIsDragging(false);
 
+    // Haptic feedback helper
+    const vibrate = (duration: number = 10) => {
+      if (navigator.vibrate) {
+        navigator.vibrate(duration);
+      }
+    };
+
     // Swipe up to expand (when not already expanded)
-    if (!isExpanded && dragY < -100) {
+    if (!isExpanded && dragY < SWIPE_UP_THRESHOLD) {
+      vibrate(15); // Subtle haptic feedback
       setDragY(0);
-      setIsExpanding(true);
-      // Trigger expansion immediately, let CSS handle the animation
-      requestAnimationFrame(() => {
-        setIsExpanded(true);
-        // Clean up isExpanding state after animation completes
-        setTimeout(() => {
-          setIsExpanding(false);
-        }, 400);
-      });
+      setTimeout(() => {
+        setIsExpanding(true);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setIsExpanded(true);
+            setTimeout(() => {
+              setIsExpanding(false);
+            }, MODAL_TRANSITION_DURATION);
+          });
+        });
+      }, DRAG_RESET_DELAY);
     }
-    // Swipe down to close
-    else if (dragY > 150) {
+    // Swipe down from expanded (100%) - collapse to 80% first
+    else if (isExpanded && dragY > SWIPE_DOWN_THRESHOLD) {
+      vibrate(15); // Subtle haptic feedback
+      setDragY(0);
+      setIsExpanded(false);
+      setTimeout(() => {
+        setIsExpanding(false);
+      }, MODAL_TRANSITION_DURATION);
+    }
+    // Swipe down from partial (80%) - close completely
+    else if (!isExpanded && dragY > SWIPE_DOWN_THRESHOLD) {
+      vibrate(20); // Slightly stronger feedback for close
       setTimeout(() => handleClose('down'), 100);
     }
     // Snap back if threshold not met
@@ -242,13 +282,17 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   return (
     <>
       <div
-        className={`absolute bottom-0 left-0 right-0 ${isExpanded || isExpanding ? 'h-full top-0' : 'h-[80%]'} sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] bg-gray-900 border-t sm:border-t-0 sm:border-l border-gray-800 shadow-2xl z-20 flex flex-col ${isExpanded || isExpanding ? 'rounded-none' : 'rounded-t-2xl'} sm:rounded-none ${animationClass}`}
+        className={`absolute left-0 right-0 sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] bg-gray-900 border-t sm:border-t-0 sm:border-l border-gray-800 shadow-2xl z-20 flex flex-col ${isExpanded ? 'rounded-none' : 'rounded-t-2xl'} sm:rounded-none ${animationClass}`}
         style={{
-          transform: isDragging ? `translateY(${dragY}px)` : undefined,
+          // Use bottom positioning with height for smooth animation
+          bottom: window.innerWidth < MOBILE_BREAKPOINT ? 0 : 'auto',
+          top: window.innerWidth < MOBILE_BREAKPOINT ? 'auto' : 0,
+          height: window.innerWidth < MOBILE_BREAKPOINT ? ((isExpanding || isExpanded) ? '100%' : '80%') : '100%',
+          transform: isDragging ? `translateY(${dragY}px)` : 'translateY(0)',
           transition: isDragging
             ? 'none'
-            : 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-          willChange: isDragging ? 'transform' : isExpanding ? 'height' : 'auto'
+            : `height ${MODAL_TRANSITION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1), border-radius ${MODAL_TRANSITION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1), transform ${CLOSE_ANIMATION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+          willChange: 'height, transform'
         }}
       >
         

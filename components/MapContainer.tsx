@@ -12,15 +12,58 @@ interface MapContainerProps {
 
 const DEFAULT_CENTER = { lat: 43.6532, lng: -79.3832 };
 
+// SVG icon for pins - matches UI button style (gray-800 with gray-700 border)
+const createPinSvg = () => {
+  return `data:image/svg+xml,${encodeURIComponent(`
+    <svg width="36" height="48" viewBox="0 0 36 48" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18 0C9.72 0 3 6.72 3 15c0 10.5 15 33 15 33s15-22.5 15-33c0-8.28-6.72-15-15-15z"
+            fill="rgba(31, 41, 55, 0.95)"/>
+      <path d="M18 1.5C10.56 1.5 4.5 7.56 4.5 15c0 9.5 13.5 30 13.5 30s13.5-20.5 13.5-30c0-7.44-6.06-13.5-13.5-13.5z"
+            fill="none" stroke="rgba(75, 85, 99, 1)" stroke-width="1.5"/>
+      <circle cx="18" cy="15" r="5" fill="rgba(255, 255, 255, 0.95)"/>
+    </svg>
+  `)}`;
+};
+
+// SVG icon for clusters
+const createClusterSvg = (count: number) => {
+  let size = 48;
+  let fontSize = 16;
+
+  if (count < 10) {
+    size = 44;
+    fontSize = 15;
+  } else if (count < 30) {
+    size = 50;
+    fontSize = 17;
+  } else if (count < 100) {
+    size = 56;
+    fontSize = 18;
+  } else {
+    size = 62;
+    fontSize = 20;
+  }
+
+  const svg = `
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 1}" fill="rgba(31, 41, 55, 0.95)"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 2}" fill="none" stroke="rgba(75, 85, 99, 1)" stroke-width="1.5"/>
+      <text x="${size/2}" y="${size/2}" font-size="${fontSize}" font-weight="600" fill="rgba(255, 255, 255, 0.95)" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif">${count}</text>
+    </svg>
+  `;
+
+  return { svg, size };
+};
+
 const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMarkerClick, onMapLoad }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  
+
   // Store clusterer instance
   const clustererRef = useRef<MarkerClusterer | null>(null);
-  // Store marker instances to manage updates
-  const markersRef = useRef<Map<string, google.maps.marker.AdvancedMarkerElement>>(new Map());
+  // Store marker instances to manage updates (using regular Marker)
+  const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
 
   // 1. Load Map
   useEffect(() => {
@@ -73,28 +116,43 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
 
     try {
       const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
-      await google.maps.importLibrary("marker"); // Ensure Marker is loaded for Clusterer if needed
 
       const map = new Map(mapRef.current, {
         center: DEFAULT_CENTER,
         zoom: 13,
         mapTypeId: 'satellite',
-        mapId: "DEMO_MAP_ID",
-        disableDefaultUI: true, // Explicitly disable all default controls
+        disableDefaultUI: true,
         zoomControl: false,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
         rotateControl: false,
         scaleControl: false,
-        gestureHandling: 'greedy', 
+        gestureHandling: 'greedy',
       });
 
-      // Initialize MarkerClusterer with robust click handler
-      clustererRef.current = new MarkerClusterer({ 
+      // Custom cluster renderer using regular Marker
+      const renderer = {
+        render: ({ count, position }: { count: number; position: google.maps.LatLng }) => {
+          const { svg, size } = createClusterSvg(count);
+
+          return new google.maps.Marker({
+            position,
+            icon: {
+              url: `data:image/svg+xml,${encodeURIComponent(svg)}`,
+              scaledSize: new google.maps.Size(size, size),
+              anchor: new google.maps.Point(size / 2, size / 2),
+            },
+            zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
+          });
+        }
+      };
+
+      // Initialize MarkerClusterer with custom renderer and click handler
+      clustererRef.current = new MarkerClusterer({
         map,
+        renderer,
         onClusterClick: (event, cluster, map) => {
-          // Explicit fitBounds ensures consistent zoom animation
           const bounds = new google.maps.LatLngBounds();
           if (cluster.markers) {
             cluster.markers.forEach(m => {
@@ -102,8 +160,7 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
                 bounds.extend(m.position);
               }
             });
-            // Padding ensures markers aren't right on the edge
-            map.fitBounds(bounds, 50); 
+            map.fitBounds(bounds, 50);
           }
         }
       });
@@ -121,27 +178,20 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
       if (!mapInstance || !clustererRef.current) return;
 
       try {
-        const { AdvancedMarkerElement } = await google.maps.importLibrary("marker") as google.maps.MarkerLibrary;
-
         const currentIds = new Set(restaurants.map(r => r.id));
-        const newMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+        const newMarkers: google.maps.Marker[] = [];
 
         // A. Add New Markers
         restaurants.forEach(restaurant => {
           if (!markersRef.current.has(restaurant.id)) {
-            // Create View
-            const pinView = document.createElement("div");
-            pinView.className = "marker-pin group relative flex items-center justify-center cursor-pointer";
-            pinView.innerHTML = `
-              <div class="w-6 h-6 bg-amber-500 rounded-full border-2 border-white shadow-lg transform transition-transform duration-200 group-hover:scale-125"></div>
-              <div class="absolute -bottom-1 w-2 h-2 bg-black/20 rounded-full blur-[2px]"></div>
-            `;
-
-            const marker = new AdvancedMarkerElement({
+            const marker = new google.maps.Marker({
               position: restaurant.location,
               title: restaurant.name,
-              content: pinView,
-              gmpClickable: true,
+              icon: {
+                url: createPinSvg(),
+                scaledSize: new google.maps.Size(36, 48),
+                anchor: new google.maps.Point(18, 48),
+              },
             });
 
             marker.addListener('click', () => {
@@ -159,11 +209,11 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         }
 
         // B. Remove Deleted Markers
-        const markersToRemove: google.maps.marker.AdvancedMarkerElement[] = [];
+        const markersToRemove: google.maps.Marker[] = [];
         for (const [id, marker] of markersRef.current) {
           if (!currentIds.has(id)) {
             markersToRemove.push(marker);
-            marker.map = null; // Detach from map just in case
+            marker.setMap(null);
             markersRef.current.delete(id);
           }
         }
