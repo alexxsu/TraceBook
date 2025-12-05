@@ -69,7 +69,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       setTimeout(() => {
         setIsNotifOpen(false);
         setIsNotifClosing(false);
-      }, 200);
+      }, 300);
     } else {
       setIsNotifOpen(true);
     }
@@ -80,7 +80,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     setTimeout(() => {
       setIsNotifOpen(false);
       setIsNotifClosing(false);
-    }, 200);
+    }, 300);
   };
 
   return (

@@ -192,7 +192,10 @@ export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({
           {/* Manage Maps Button - only for non-anonymous users */}
           {!user?.isAnonymous && (
             <button
-              onClick={onManageMaps}
+              onClick={() => {
+                setIsCompactCardOpen(false);
+                onManageMaps();
+              }}
               className="mt-2 pt-2 border-t border-gray-700 w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-gray-400 hover:text-white transition"
             >
               <Settings size={12} />

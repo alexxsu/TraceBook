@@ -208,6 +208,7 @@ export interface UserMap {
   ownerUid: string;
   ownerDisplayName?: string;
   ownerEmail?: string; // Owner's email for fallback display
+  ownerPhotoURL?: string | null; // Owner's profile picture URL
   name: string; // e.g. "Default Map"
   visibility: 'private' | 'public' | 'shared';
   isDefault: boolean;
@@ -227,6 +228,7 @@ export type NotificationType =
   | 'post_added'         // Someone added a post to your shared map
   | 'post_deleted'       // Someone deleted a post from your shared map
   | 'map_invite'         // You were invited to a map (future feature)
+  | 'welcome'            // Welcome notification when user first joins
   | 'system';            // System announcements
 
 export interface AppNotification {
