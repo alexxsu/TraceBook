@@ -2,6 +2,17 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { useLanguageState, LanguageContext } from './hooks/useLanguage';
+
+// Language Provider Component
+const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const languageState = useLanguageState();
+  return (
+    <LanguageContext.Provider value={languageState}>
+      {children}
+    </LanguageContext.Provider>
+  );
+};
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -21,6 +32,8 @@ if ('serviceWorker' in navigator) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <LanguageProvider>
+      <App />
+    </LanguageProvider>
   </React.StrictMode>
 );

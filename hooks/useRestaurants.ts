@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, onSnapshot, doc, setDoc, getDoc, updateDoc, deleteDoc, arrayUnion } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, getDoc, updateDoc, deleteDoc, arrayUnion, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import { Restaurant, Visit, UserMap, ViewState } from '../types';
+import { Restaurant, Visit, UserMap, ViewState, UserProfile } from '../types';
 import { AppUser } from './useAuth';
 
 interface UseRestaurantsReturn {
@@ -16,6 +16,7 @@ interface UseRestaurantsReturn {
 
 export function useRestaurants(
   user: AppUser | null,
+  userProfile: UserProfile | null,
   activeMap: UserMap | null,
   viewState: ViewState,
   onViewStateChange: (state: ViewState) => void
@@ -72,11 +73,26 @@ export function useRestaurants(
   const saveVisit = useCallback(async (restaurantInfo: Restaurant, visit: Visit) => {
     if (!user || !activeMap) throw new Error("No active user or map");
 
+    // Build the best display name from all available sources
+    // Priority: userProfile.displayName > user.displayName > user.email username > 'User'
+    let creatorDisplayName = 'User';
+    if (userProfile?.displayName && userProfile.displayName.trim()) {
+      creatorDisplayName = userProfile.displayName;
+    } else if (user.displayName && user.displayName.trim()) {
+      creatorDisplayName = user.displayName;
+    } else if (user.email) {
+      // Use email username as fallback
+      creatorDisplayName = user.email.split('@')[0];
+    }
+    
+    // Build the best photo URL from all available sources
+    const creatorPhotoURL = userProfile?.photoURL || user.photoURL || null;
+
     const fullVisit: Visit = {
       ...visit,
       createdBy: user.uid,
-      creatorName: user.displayName || 'Anonymous',
-      creatorPhotoURL: user.photoURL
+      creatorName: creatorDisplayName,
+      creatorPhotoURL: creatorPhotoURL
     };
 
     const restaurantRef = doc(db, "maps", activeMap.id, "restaurants", restaurantInfo.id);
@@ -88,7 +104,33 @@ export function useRestaurants(
       const newRestaurant = { ...restaurantInfo, visits: [fullVisit] };
       await setDoc(restaurantRef, newRestaurant);
     }
-  }, [user, activeMap, restaurants]);
+
+    // Send notifications to other members if this is a shared map
+    if (activeMap.visibility === 'shared' && activeMap.members && activeMap.members.length > 1) {
+      const notificationsRef = collection(db, 'notifications');
+      const batch = writeBatch(db);
+      
+      activeMap.members.forEach((memberUid: string) => {
+        // Don't notify the person who added the post
+        if (memberUid !== user.uid) {
+          const newNotifRef = doc(notificationsRef);
+          batch.set(newNotifRef, {
+            recipientUid: memberUid,
+            type: 'post_added',
+            message: `${creatorDisplayName} added a memory at "${restaurantInfo.name}" to "${activeMap.name}"`,
+            mapId: activeMap.id,
+            mapName: activeMap.name,
+            actorUid: user.uid,
+            actorName: creatorDisplayName,
+            read: false,
+            createdAt: serverTimestamp(),
+          });
+        }
+      });
+      
+      await batch.commit();
+    }
+  }, [user, userProfile, activeMap, restaurants]);
 
   const updateVisit = useCallback(async (restaurantId: string, oldVisit: Visit, newVisit: Visit) => {
     if (!user || !activeMap) return;
@@ -104,7 +146,17 @@ export function useRestaurants(
   }, [user, activeMap]);
 
   const deleteVisit = useCallback(async (restaurant: Restaurant, visitToDelete: Visit): Promise<boolean> => {
-    if (!activeMap) throw new Error("No active map");
+    if (!user || !activeMap) throw new Error("No active user or map");
+
+    // Build the best display name from all available sources
+    let creatorDisplayName = 'Someone';
+    if (userProfile?.displayName && userProfile.displayName.trim()) {
+      creatorDisplayName = userProfile.displayName;
+    } else if (user.displayName && user.displayName.trim()) {
+      creatorDisplayName = user.displayName;
+    } else if (user.email) {
+      creatorDisplayName = user.email.split('@')[0];
+    }
 
     const restaurantRef = doc(db, "maps", activeMap.id, "restaurants", restaurant.id);
     const restaurantDoc = await getDoc(restaurantRef);
@@ -116,14 +168,68 @@ export function useRestaurants(
       if (updatedVisits.length === 0) {
         await deleteDoc(restaurantRef);
         setSelectedRestaurant(null);
+        
+        // Send notifications for post deletion on shared map
+        if (activeMap.visibility === 'shared' && activeMap.members && activeMap.members.length > 1) {
+          const notificationsRef = collection(db, 'notifications');
+          const batch = writeBatch(db);
+          
+          activeMap.members.forEach((memberUid: string) => {
+            // Don't notify the person who deleted the post
+            if (memberUid !== user.uid) {
+              const newNotifRef = doc(notificationsRef);
+              batch.set(newNotifRef, {
+                recipientUid: memberUid,
+                type: 'post_deleted',
+                message: `${creatorDisplayName} removed a memory at "${restaurant.name}" from "${activeMap.name}"`,
+                mapId: activeMap.id,
+                mapName: activeMap.name,
+                actorUid: user.uid,
+                actorName: creatorDisplayName,
+                read: false,
+                createdAt: serverTimestamp(),
+              });
+            }
+          });
+          
+          await batch.commit();
+        }
+        
         return true; // Restaurant was deleted
       } else {
         await updateDoc(restaurantRef, { visits: updatedVisits });
+        
+        // Send notifications for post deletion on shared map
+        if (activeMap.visibility === 'shared' && activeMap.members && activeMap.members.length > 1) {
+          const notificationsRef = collection(db, 'notifications');
+          const batch = writeBatch(db);
+          
+          activeMap.members.forEach((memberUid: string) => {
+            // Don't notify the person who deleted the post
+            if (memberUid !== user.uid) {
+              const newNotifRef = doc(notificationsRef);
+              batch.set(newNotifRef, {
+                recipientUid: memberUid,
+                type: 'post_deleted',
+                message: `${creatorDisplayName} removed a memory at "${restaurant.name}" from "${activeMap.name}"`,
+                mapId: activeMap.id,
+                mapName: activeMap.name,
+                actorUid: user.uid,
+                actorName: creatorDisplayName,
+                read: false,
+                createdAt: serverTimestamp(),
+              });
+            }
+          });
+          
+          await batch.commit();
+        }
+        
         return false; // Restaurant still exists
       }
     }
     return false;
-  }, [activeMap]);
+  }, [user, userProfile, activeMap]);
 
   const clearDatabase = useCallback(async () => {
     if (!activeMap) return;

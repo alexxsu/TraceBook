@@ -21,18 +21,20 @@ interface MapSelectorPillProps {
 
 // Helper to get owner display name with fallbacks
 const getOwnerDisplayName = (map: UserMap): string => {
-  // First try displayName if it's valid (not Anonymous/Unknown)
+  // ownerDisplayName should now be enriched from user profiles for admin view
   if (map.ownerDisplayName &&
       map.ownerDisplayName !== 'Anonymous' &&
-      map.ownerDisplayName !== 'Unknown') {
+      map.ownerDisplayName !== 'Unknown' &&
+      map.ownerDisplayName !== 'Unknown User' &&
+      map.ownerDisplayName !== 'Default Map') {
     return map.ownerDisplayName;
   }
-  // Then try email
+  // Then try email (extract username part)
   if (map.ownerEmail) {
-    return map.ownerEmail;
+    return map.ownerEmail.split('@')[0];
   }
-  // Fallback to just showing the map name (no owner prefix)
-  return map.name;
+  // Final fallback
+  return 'Unknown';
 };
 
 export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({

@@ -3,6 +3,7 @@ import { Menu, Search, Filter, X, Bell } from 'lucide-react';
 import { Restaurant, AppNotification } from '../types';
 import { GRADES, getGradeColor } from '../utils/rating';
 import { NotificationPanel } from './NotificationPanel';
+import { useLanguage } from '../hooks/useLanguage';
 
 interface HeaderBarProps {
   // Search props
@@ -59,6 +60,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onMarkAllAsRead,
   showNotifications = false
 }) => {
+  const { t, language } = useLanguage();
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isNotifClosing, setIsNotifClosing] = useState(false);
   const showSearchInput = isSearchFocused || searchQuery || isSearchClosing;
@@ -199,7 +201,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               </button>
             ))
           ) : (
-            <p className="text-gray-500 text-sm px-2 py-1">No places found.</p>
+            <p className="text-gray-500 text-sm px-2 py-1">{t('noResults')}</p>
           )}
         </div>
       )}
@@ -209,7 +211,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <>
           <div className="fixed inset-0 z-10" onClick={closeFilter}></div>
           <div className={`mt-2 border-t border-gray-700 pt-3 pb-1 relative z-20 ${isFilterClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-            <div className="text-xs text-gray-400 font-bold uppercase mb-2 px-1">Filter by Grade</div>
+            <div className="text-xs text-gray-400 font-bold uppercase mb-2 px-1">{t('filterByRating')}</div>
             <div className="grid grid-cols-6 gap-1.5">
               {GRADES.map(grade => (
                 <button
@@ -227,8 +229,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               ))}
             </div>
             <div className="border-t border-gray-700 mt-2 pt-2 flex justify-between text-xs px-1">
-              <button onClick={(e) => { e.stopPropagation(); onSelectAllGrades(); }} className="text-blue-400 hover:text-blue-300">Select All</button>
-              <button onClick={(e) => { e.stopPropagation(); onClearAllGrades(); }} className="text-gray-500 hover:text-gray-400">Clear All</button>
+              <button onClick={(e) => { e.stopPropagation(); onSelectAllGrades(); }} className="text-blue-400 hover:text-blue-300">{language === 'zh' ? '全选' : 'Select All'}</button>
+              <button onClick={(e) => { e.stopPropagation(); onClearAllGrades(); }} className="text-gray-500 hover:text-gray-400">{language === 'zh' ? '清除' : 'Clear All'}</button>
             </div>
           </div>
         </>

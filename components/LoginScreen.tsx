@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, Lock, User, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react';
+import { useLanguage } from '../hooks/useLanguage';
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -16,6 +17,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   onEmailLogin,
   onEmailSignUp 
 }) => {
+  const { t, language } = useLanguage();
   const [mode, setMode] = useState<AuthMode>('initial');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,7 +30,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      setError('Please fill in all fields');
+      setError(language === 'zh' ? '请填写所有字段' : 'Please fill in all fields');
       return;
     }
     
@@ -39,7 +41,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       const result = await onEmailLogin(email, password);
       // The parent component will handle the pending/verification state
     } catch (err: any) {
-      setError(err.message || 'Sign in failed');
+      setError(err.message || t('loginFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -48,12 +50,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || !displayName) {
-      setError('Please fill in all fields');
+      setError(language === 'zh' ? '请填写所有字段' : 'Please fill in all fields');
       return;
     }
     
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(language === 'zh' ? '密码至少需要6个字符' : 'Password must be at least 6 characters');
       return;
     }
     
@@ -62,10 +64,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     
     try {
       await onEmailSignUp(email, password, displayName);
-      setSuccessMessage('Account created! Please check your email to verify your account.');
-      // After signup, the user will be logged in and the pending screen will handle the rest
+      setSuccessMessage(language === 'zh' ? '账号创建成功！请查看邮箱验证您的账号。' : 'Account created! Please check your email to verify your account.');
     } catch (err: any) {
-      setError(err.message || 'Sign up failed');
+      setError(err.message || (language === 'zh' ? '注册失败' : 'Sign up failed'));
     } finally {
       setIsLoading(false);
     }
@@ -98,14 +99,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <img src="/logo.svg" alt="TraceBook Logo" className="w-40 h-40 object-contain drop-shadow-2xl hover:scale-105 transition-transform duration-500" />
           </div>
 
-          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">TraceBook</h1>
+          <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">{t('appName')}</h1>
           <p className="text-gray-400 mb-8 leading-relaxed">
-            Trace your experiences. Share memories with friends in real-time.
+            {language === 'zh' ? '记录你的美食足迹，与朋友实时分享。' : 'Trace your experiences. Share memories with friends in real-time.'}
           </p>
 
           {/* Informational Badge */}
           <div className="flex items-center justify-center gap-2 mb-6 bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-full mx-auto w-fit">
-            <span className="text-blue-200 text-sm font-medium tracking-wide">Log in to post and edit experiences</span>
+            <span className="text-blue-200 text-sm font-medium tracking-wide">
+              {language === 'zh' ? '登录后可发布和编辑体验' : 'Log in to post and edit experiences'}
+            </span>
           </div>
 
           {/* Section 1: Google Sign In */}
@@ -120,14 +123,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z" fill="#FBBC05"/>
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
               </svg>
-              Sign in with Google
+              {language === 'zh' ? '使用 Google 登录' : 'Sign in with Google'}
             </button>
           </div>
 
           {/* Divider */}
           <div className="flex items-center gap-3 my-4">
             <div className="flex-1 h-px bg-gray-600"></div>
-            <span className="text-gray-500 text-sm">or</span>
+            <span className="text-gray-500 text-sm">{language === 'zh' ? '或' : 'or'}</span>
             <div className="flex-1 h-px bg-gray-600"></div>
           </div>
 
@@ -138,7 +141,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               className="w-full flex items-center justify-center gap-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-xl transition shadow-lg shadow-black/20 transform hover:scale-[1.02] active:scale-95"
             >
               <Mail size={20} />
-              Sign in with Email
+              {language === 'zh' ? '使用邮箱登录' : 'Sign in with Email'}
             </button>
 
             <button
@@ -146,7 +149,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-6 rounded-xl transition shadow-lg shadow-black/20 transform hover:scale-[1.02] active:scale-95"
             >
               <User size={20} />
-              Create Account
+              {language === 'zh' ? '创建账号' : 'Create Account'}
             </button>
           </div>
 
@@ -156,7 +159,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               onClick={onGuestLogin}
               className="w-full text-sm text-gray-400 hover:text-white transition py-2"
             >
-              Continue as guest to view
+              {language === 'zh' ? '以游客身份浏览' : 'Continue as guest to view'}
             </button>
           </div>
         </div>
@@ -178,12 +181,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             className="flex items-center gap-2 text-gray-400 hover:text-white transition mb-6"
           >
             <ArrowLeft size={18} />
-            Back
+            {language === 'zh' ? '返回' : 'Back'}
           </button>
 
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">Welcome Back</h1>
-            <p className="text-gray-400">Sign in to your account</p>
+            <h1 className="text-2xl font-bold text-white mb-2">{language === 'zh' ? '欢迎回来' : 'Welcome Back'}</h1>
+            <p className="text-gray-400">{language === 'zh' ? '登录你的账号' : 'Sign in to your account'}</p>
           </div>
 
           {error && (
@@ -194,7 +197,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
           <form onSubmit={handleEmailSignIn} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">{t('email')}</label>
               <div className="relative">
                 <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input
@@ -208,7 +211,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">{t('password')}</label>
               <div className="relative">
                 <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
                 <input
@@ -234,17 +237,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white font-semibold py-3 px-6 rounded-xl transition shadow-lg shadow-blue-900/20"
             >
               {isLoading && <Loader2 size={18} className="animate-spin" />}
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? (language === 'zh' ? '登录中...' : 'Signing in...') : t('login')}
             </button>
           </form>
 
           <p className="mt-6 text-center text-gray-400 text-sm">
-            Don't have an account?{' '}
+            {t('noAccount')}{' '}
             <button 
               onClick={() => { resetForm(); setMode('signup'); }}
               className="text-blue-400 hover:text-blue-300 transition"
             >
-              Create one
+              {language === 'zh' ? '创建账号' : 'Create one'}
             </button>
           </p>
         </div>
@@ -265,12 +268,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           className="flex items-center gap-2 text-gray-400 hover:text-white transition mb-6"
         >
           <ArrowLeft size={18} />
-          Back
+          {language === 'zh' ? '返回' : 'Back'}
         </button>
 
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-white mb-2">Create Account</h1>
-          <p className="text-gray-400">Join TraceBook to start mapping your experiences</p>
+          <h1 className="text-2xl font-bold text-white mb-2">{language === 'zh' ? '创建账号' : 'Create Account'}</h1>
+          <p className="text-gray-400">{language === 'zh' ? '加入 TraceBook 开始记录你的美食足迹' : 'Join TraceBook to start mapping your experiences'}</p>
         </div>
 
         {error && (
@@ -287,21 +290,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
         <form onSubmit={handleEmailSignUp} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Display Name</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">{t('displayName')}</label>
             <div className="relative">
               <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Your name"
+                placeholder={language === 'zh' ? '你的名字' : 'Your name'}
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">{t('email')}</label>
             <div className="relative">
               <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input
@@ -315,14 +318,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+            <label className="block text-sm font-medium text-gray-300 mb-2">{t('password')}</label>
             <div className="relative">
               <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder={language === 'zh' ? '至少6个字符' : 'At least 6 characters'}
                 className="w-full bg-gray-900 border border-gray-700 rounded-xl py-3 pl-10 pr-12 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
               />
               <button
@@ -336,10 +339,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </div>
 
           <div className="bg-yellow-500/10 border border-yellow-500/30 px-4 py-3 rounded-xl text-sm text-yellow-200">
-            <p>After signing up:</p>
+            <p>{language === 'zh' ? '注册后：' : 'After signing up:'}</p>
             <ul className="list-disc list-inside mt-1 text-yellow-300/80 space-y-1">
-              <li>Verify your email address</li>
-              <li>Wait for admin approval</li>
+              <li>{language === 'zh' ? '验证你的邮箱地址' : 'Verify your email address'}</li>
+              <li>{language === 'zh' ? '等待管理员审核' : 'Wait for admin approval'}</li>
             </ul>
           </div>
 
@@ -349,17 +352,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white font-semibold py-3 px-6 rounded-xl transition shadow-lg shadow-blue-900/20"
           >
             {isLoading && <Loader2 size={18} className="animate-spin" />}
-            {isLoading ? 'Creating account...' : 'Create Account'}
+            {isLoading ? (language === 'zh' ? '创建中...' : 'Creating account...') : (language === 'zh' ? '创建账号' : 'Create Account')}
           </button>
         </form>
 
         <p className="mt-6 text-center text-gray-400 text-sm">
-          Already have an account?{' '}
+          {t('hasAccount')}{' '}
           <button 
             onClick={() => { resetForm(); setMode('signin'); }}
             className="text-blue-400 hover:text-blue-300 transition"
           >
-            Sign in
+            {t('login')}
           </button>
         </p>
       </div>

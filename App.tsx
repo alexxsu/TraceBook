@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { Restaurant, Visit, ViewState, UserMap } from './types';
 import { GOOGLE_MAPS_API_KEY } from './firebaseConfig';
 
@@ -33,7 +33,7 @@ import { SideMenu } from './components/SideMenu';
 import { UserDetailModal } from './components/UserDetailModal';
 import { MemberAvatars } from './components/MemberAvatars';
 import { AddButton } from './components/AddButton';
-import { MapControls } from './components/MapControls';
+import { MapControls, MapControlsRef } from './components/MapControls';
 
 function App() {
   // Auth hook
@@ -87,7 +87,7 @@ function App() {
     updateVisit,
     deleteVisit,
     clearDatabase
-  } = useRestaurants(user, activeMap, viewState, setViewState);
+  } = useRestaurants(user, userProfile, activeMap, viewState, setViewState);
 
   // Search hook
   const {
@@ -126,6 +126,9 @@ function App() {
     handleResetView,
     handleZoomToMunicipality
   } = useMapControls();
+
+  // Ref for MapControls to reset click state
+  const mapControlsRef = useRef<MapControlsRef>(null);
 
   // UI State
   const [hideAddButton, setHideAddButton] = useState(false);
@@ -347,6 +350,8 @@ function App() {
       closeFilter();
     }
     setIsCompactCardOpen(false);
+    // Reset map controls click state
+    mapControlsRef.current?.resetClickState();
   }, [isFilterOpen, closeFilter]);
 
   // Check if we should show the map view
@@ -457,6 +462,7 @@ function App() {
 
           {/* Bottom Right Map Controls */}
           <MapControls
+            ref={mapControlsRef}
             mapType={mapType}
             onZoomToMunicipality={handleZoomToMunicipality}
             onToggleMapType={handleToggleMapType}
