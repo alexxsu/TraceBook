@@ -365,6 +365,7 @@ const translations = {
     tutorialAddButtonDesc: 'Tap the + button to add a new experience. Search for a place, add photos, rate it, and write your thoughts!',
     tutorialComplete: 'You\'re All Set! 🎉',
     tutorialCompleteDesc: 'You now know the basics of TraceBook. Start exploring and adding your experiences to create your personal journey map!',
+    tutorialFindInMenu: 'Find tutorial anytime in the side menu',
 
     // Help section
     helpSection: 'Help',
@@ -733,6 +734,7 @@ const translations = {
     tutorialAddButtonDesc: '点击 + 按钮添加新体验。搜索地点、添加照片、评分并写下你的感想！',
     tutorialComplete: '准备就绪！🎉',
     tutorialCompleteDesc: '你现在已经了解了 TraceBook 的基本功能。开始探索并添加你的体验，创建属于你的旅程地图吧！',
+    tutorialFindInMenu: '随时可在侧边菜单中找到教程',
 
     // Help section
     helpSection: '帮助',

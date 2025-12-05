@@ -704,28 +704,45 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
             )}
           </div>
 
-          {/* Call to Action Footer */}
+          {/* Call to Action with QR Code */}
           <div
-            className="mx-6 mb-6 p-4 rounded-xl text-center"
-            style={{ background: 'linear-gradient(135deg, rgba(102,126,234,0.3) 0%, rgba(118,75,162,0.3) 100%)', border: '1px solid rgba(102,126,234,0.3)' }}
+            className="mx-6 mb-4 p-4 rounded-xl"
+            style={{ background: 'linear-gradient(135deg, rgba(102,126,234,0.25) 0%, rgba(118,75,162,0.25) 100%)', border: '1px solid rgba(102,126,234,0.3)' }}
           >
-            <p className="text-sm text-white font-medium mb-1">
-              {language === 'zh' ? '加入 TraceBook 发现更多精彩' : 'Join TraceBook to discover more!'}
-            </p>
-            <p className="text-xs text-white/60">
-              {language === 'zh'
-                ? '探索朋友们的美食发现，分享你的体验'
-                : 'See all your friends\' discoveries & share your experiences'}
-            </p>
+            <div className="flex items-center gap-4">
+              {/* QR Code */}
+              <div className="flex-shrink-0">
+                <div className="w-16 h-16 bg-white rounded-lg p-1 flex items-center justify-center">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=56x56&data=https://TraceMap.ca&bgcolor=ffffff&color=000000&margin=0"
+                    alt="QR Code"
+                    className="w-14 h-14"
+                    crossOrigin="anonymous"
+                  />
+                </div>
+              </div>
+              {/* Text Content */}
+              <div className="flex-1 text-left">
+                <p className="text-sm text-white font-semibold mb-1">
+                  {language === 'zh' ? '扫码加入 TraceBook' : 'Scan to join TraceBook'}
+                </p>
+                <p className="text-xs text-white/70 leading-relaxed">
+                  {language === 'zh'
+                    ? '发现美食，分享体验'
+                    : 'Discover great food, share experiences'}
+                </p>
+                <p className="text-[10px] text-white/50 mt-1 font-medium">TraceMap.ca</p>
+              </div>
+            </div>
           </div>
 
           {/* Footer Branding */}
-          <div className="px-6 pb-5 flex items-center justify-between">
+          <div className="px-6 pb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
                 <span className="text-white font-bold text-[10px]">TB</span>
               </div>
-              <span className="text-white/70 text-xs font-medium">tracebook.app</span>
+              <span className="text-white/60 text-xs font-medium">TraceMap.ca</span>
             </div>
             <span className="text-[10px] text-white/40">{language === 'zh' ? '记录美好体验' : 'Map Your Memories'}</span>
           </div>

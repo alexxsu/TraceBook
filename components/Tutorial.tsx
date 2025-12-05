@@ -19,6 +19,8 @@ interface TutorialProps {
   isActive: boolean;
   onClose: () => void;
   onComplete?: () => void;
+  onOpenMapManagement?: () => void;
+  isGuestUser?: boolean;
 }
 
 interface StepConfig {
@@ -32,7 +34,9 @@ interface StepConfig {
 export const Tutorial: React.FC<TutorialProps> = ({
   isActive,
   onClose,
-  onComplete
+  onComplete,
+  onOpenMapManagement,
+  isGuestUser = false
 }) => {
   const { t } = useLanguage();
   const [currentStep, setCurrentStep] = useState<TutorialStep>('welcome');
@@ -41,11 +45,27 @@ export const Tutorial: React.FC<TutorialProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   const [isWaitingForInteraction, setIsWaitingForInteraction] = useState(false);
   const onCompleteRef = useRef(onComplete);
+  const onOpenMapManagementRef = useRef(onOpenMapManagement);
 
-  // Keep ref updated
+  // Keep refs updated
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
+
+  useEffect(() => {
+    onOpenMapManagementRef.current = onOpenMapManagement;
+  }, [onOpenMapManagement]);
+
+  // Open map management modal when reaching map_management step
+  useEffect(() => {
+    if (isActive && currentStep === 'map_management' && onOpenMapManagementRef.current) {
+      // Small delay to let previous step transition complete
+      const timer = setTimeout(() => {
+        onOpenMapManagementRef.current?.();
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive, currentStep]);
 
   // Memoize steps array to prevent recreation on every render
   // Reduced interactionDelay values for faster transitions
@@ -398,7 +418,12 @@ export const Tutorial: React.FC<TutorialProps> = ({
               <Check size={40} className="text-white" />
             </div>
             <h2 className="text-2xl font-bold text-white mb-3">{t('tutorialComplete')}</h2>
-            <p className="text-gray-300 mb-6">{t('tutorialCompleteDesc')}</p>
+            <p className="text-gray-300 mb-4">{t('tutorialCompleteDesc')}</p>
+            {/* Tip about finding tutorial in side menu */}
+            <div className="flex items-center gap-2 justify-center mb-6 text-amber-400/90 text-sm bg-amber-500/10 px-4 py-2 rounded-lg">
+              <GraduationCap size={16} />
+              <span>{t('tutorialFindInMenu')}</span>
+            </div>
             <button
               onClick={handleComplete}
               className="px-8 py-3 bg-green-500 hover:bg-green-600 text-white font-medium rounded-xl transition-all duration-200"
@@ -587,21 +612,38 @@ export const Tutorial: React.FC<TutorialProps> = ({
   );
 };
 
-// Tutorial button component
+// Tutorial button component - animated for guest users
 interface TutorialButtonProps {
   onClick: () => void;
+  isGuestUser?: boolean;
+  showPulse?: boolean;
 }
 
-export const TutorialButton: React.FC<TutorialButtonProps> = ({ onClick }) => {
-  const { t } = useLanguage();
+export const TutorialButton: React.FC<TutorialButtonProps> = ({ onClick, isGuestUser = false, showPulse = false }) => {
+  const { t, language } = useLanguage();
 
   return (
-    <button
-      onClick={onClick}
-      className="w-11 h-11 bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-xl group"
-      title={t('tutorialButton')}
-    >
-      <GraduationCap size={22} className="group-hover:animate-bounce" />
-    </button>
+    <div className="relative">
+      {/* Pulse animation ring for attention */}
+      {(isGuestUser || showPulse) && (
+        <div className="absolute inset-0 rounded-full bg-amber-500/40 animate-ping" />
+      )}
+      <button
+        onClick={onClick}
+        className={`relative w-11 h-11 bg-gradient-to-br from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-xl group ${
+          isGuestUser ? 'animate-bounce' : ''
+        }`}
+        title={t('tutorialButton')}
+      >
+        <GraduationCap size={22} className="group-hover:animate-bounce" />
+      </button>
+      {/* Tooltip for guest users */}
+      {isGuestUser && (
+        <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 whitespace-nowrap bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg animate-pulse">
+          {language === 'zh' ? '点击开始教程' : 'Start tutorial!'}
+          <div className="absolute right-[-6px] top-1/2 -translate-y-1/2 border-l-[6px] border-l-gray-800 border-y-[6px] border-y-transparent" />
+        </div>
+      )}
+    </div>
   );
 };

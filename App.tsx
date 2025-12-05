@@ -23,7 +23,7 @@ import EditVisitModal from './components/EditVisitModal';
 import StatsModal from './components/StatsModal';
 import MapManagementModal from './components/MapManagementModal';
 import { SiteManagementModal } from './components/SiteManagementModal';
-import { Tutorial } from './components/Tutorial';
+import { Tutorial, TutorialButton } from './components/Tutorial';
 
 // New extracted components
 import { LoginScreen } from './components/LoginScreen';
@@ -151,15 +151,32 @@ function App() {
     setIsUserDetailOpen(false);
     closeSearch();
     closeFilter();
+    // Close map management if it's open
+    if (viewState === ViewState.MAP_MANAGEMENT) {
+      setViewState(ViewState.MAP);
+    }
     setIsTutorialActive(true);
-  }, [closeSearch, closeFilter]);
+  }, [closeSearch, closeFilter, viewState]);
 
   const handleTutorialComplete = useCallback(() => {
     setIsTutorialActive(false);
-  }, []);
+    // Close map management modal after tutorial ends
+    if (viewState === ViewState.MAP_MANAGEMENT) {
+      setViewState(ViewState.MAP);
+    }
+  }, [viewState]);
 
   const handleTutorialSkip = useCallback(() => {
     setIsTutorialActive(false);
+    // Close map management modal after tutorial skip
+    if (viewState === ViewState.MAP_MANAGEMENT) {
+      setViewState(ViewState.MAP);
+    }
+  }, [viewState]);
+
+  // Open map management for tutorial
+  const handleOpenMapManagementForTutorial = useCallback(() => {
+    setViewState(ViewState.MAP_MANAGEMENT);
   }, []);
 
   // Derive view state from user/profile status
@@ -669,10 +686,19 @@ function App() {
         />
       )}
 
+      {/* Floating Tutorial Button for Guest Users - Always visible */}
+      {user?.isAnonymous && !isTutorialActive && showMapView && (
+        <div className="fixed bottom-24 left-4 z-30">
+          <TutorialButton onClick={handleStartTutorial} isGuestUser={true} />
+        </div>
+      )}
+
       {/* Tutorial Overlay */}
       <Tutorial
         isActive={isTutorialActive}
         onClose={handleTutorialComplete}
+        onOpenMapManagement={handleOpenMapManagementForTutorial}
+        isGuestUser={user?.isAnonymous || false}
       />
     </div>
   );
