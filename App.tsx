@@ -306,11 +306,11 @@ function App() {
     } else if (user.isAnonymous) {
       setViewState(ViewState.MAP);
     } else if (userProfile) {
-      // Check if email is verified AND admin approved
+      // Check if email is verified OR admin approved (only one condition needed)
       const emailVerified = user.emailVerified ?? userProfile.emailVerified ?? false;
       const isApproved = userProfile.status === 'approved';
-      
-      if (emailVerified && isApproved) {
+
+      if (emailVerified || isApproved) {
         if (viewState === ViewState.LOGIN || viewState === ViewState.PENDING) {
           setViewState(ViewState.MAP);
         }

@@ -52,7 +52,7 @@ export const PendingScreen: React.FC<PendingScreenProps> = ({
         
         <h1 className="text-2xl font-bold text-white mb-2 text-center">Account Pending</h1>
         <p className="text-gray-400 mb-8 leading-relaxed text-center">
-          Please complete the following steps to access your account.
+          Complete <span className="text-yellow-400 font-medium">one</span> of the following to access your account.
         </p>
 
         {/* Status Checklist */}
