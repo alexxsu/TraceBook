@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, X, Check, CheckCheck, Users, UserMinus, UserPlus, MapPin, Trash2, LogOut, Info, PartyPopper } from 'lucide-react';
 import { AppNotification, NotificationType } from '../types';
+import { useLanguage } from '../hooks/useLanguage';
 
 interface NotificationPanelProps {
   notifications: AppNotification[];
@@ -37,21 +38,6 @@ const getNotificationIcon = (type: NotificationType) => {
   }
 };
 
-const formatTimeAgo = (dateStr: string): string => {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
-
 export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   notifications,
   unreadCount,
@@ -61,6 +47,31 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   onMarkAsRead,
   onMarkAllAsRead,
 }) => {
+  const { t, language } = useLanguage();
+
+  const formatTimeAgo = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (language === 'zh') {
+      if (diffMins < 1) return '刚刚';
+      if (diffMins < 60) return `${diffMins}分钟前`;
+      if (diffHours < 24) return `${diffHours}小时前`;
+      if (diffDays < 7) return `${diffDays}天前`;
+      return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+    }
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  
   if (!isOpen && !isClosing) return null;
 
   const handleBackdropClick = () => {
@@ -99,7 +110,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
           <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">
             <div className="flex items-center gap-2">
               <Bell size={18} className="text-blue-400" />
-              <span className="font-semibold text-white">Notifications</span>
+              <span className="font-semibold text-white">{t('notifications')}</span>
               {unreadCount > 0 && (
                 <span className="bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                   {unreadCount}
@@ -116,7 +127,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                   className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 rounded-md hover:bg-blue-500/10"
                 >
                   <CheckCheck size={14} />
-                  Mark all
+                  {language === 'zh' ? '全部已读' : 'Mark all'}
                 </button>
               )}
               <button
@@ -136,9 +147,9 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
             {notifications.length === 0 ? (
               <div className="p-8 text-center">
                 <Bell size={32} className="text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm">No notifications yet</p>
+                <p className="text-gray-500 text-sm">{t('noNotifications')}</p>
                 <p className="text-gray-600 text-xs mt-1">
-                  You'll be notified about map activity here
+                  {language === 'zh' ? '地图活动将在此处通知你' : "You'll be notified about map activity here"}
                 </p>
               </div>
             ) : (
@@ -171,7 +182,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
                       </div>
                       {notif.createdAt && (
                         <div className="mt-1 text-[11px] text-gray-500">
-                          {new Date(notif.createdAt).toLocaleString()}
+                          {formatTimeAgo(notif.createdAt)}
                         </div>
                       )}
                     </div>

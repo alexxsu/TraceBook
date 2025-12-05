@@ -65,11 +65,29 @@ export function useAuth(): UseAuthReturn {
 
         if (userSnap.exists()) {
           const profile = userSnap.data() as UserProfile;
-          // Update emailVerified status from Firebase Auth
+          const updates: Partial<UserProfile> = {};
+          
+          // Sync emailVerified from Firebase Auth
           if (profile.emailVerified !== user.emailVerified) {
-            await updateDoc(userRef, { emailVerified: user.emailVerified });
-            profile.emailVerified = user.emailVerified;
+            updates.emailVerified = user.emailVerified;
           }
+          
+          // Sync displayName from Firebase Auth if profile doesn't have it
+          if (!profile.displayName && user.displayName) {
+            updates.displayName = user.displayName;
+          }
+          
+          // Sync photoURL from Firebase Auth if profile doesn't have it
+          if (!profile.photoURL && user.photoURL) {
+            updates.photoURL = user.photoURL;
+          }
+          
+          // Apply updates if any
+          if (Object.keys(updates).length > 0) {
+            await updateDoc(userRef, updates);
+            Object.assign(profile, updates);
+          }
+          
           setUserProfile(profile);
         } else {
           const newProfile: UserProfile = {

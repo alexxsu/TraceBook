@@ -6,6 +6,7 @@ import { compressImage } from '../utils/image';
 import { GRADES, getGradeDescription, getGradeColor } from '../utils/rating';
 import { storage } from '../firebaseConfig';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { useLanguage } from '../hooks/useLanguage';
 // Import heic2any properly
 import heic2any from 'heic2any';
 
@@ -38,6 +39,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   isGuest,
   externalIsClosing
 }) => {
+  const { t, language } = useLanguage();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isClosing, setIsClosing] = useState(false);
 
@@ -320,9 +322,9 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h2 className="text-lg font-semibold text-white">
-            {step === 1 && 'Add a Memory'}
-            {step === 2 && 'Where was this?'}
-            {step === 3 && 'How was it?'}
+            {step === 1 && t('addMemory')}
+            {step === 2 && (language === 'zh' ? '这是哪里？' : 'Where was this?')}
+            {step === 3 && (language === 'zh' ? '感觉如何？' : 'How was it?')}
           </h2>
           <button onClick={handleClose} className="p-1 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition">
             <X size={20} />
@@ -336,7 +338,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
               {isProcessingImg ? (
                 <div className="flex flex-col items-center text-blue-400">
                   <Loader2 className="animate-spin mb-2" size={32} />
-                  <span className="text-sm">Compressing {previewUrls.length > 0 ? previewUrls.length : ''} images...</span>
+                  <span className="text-sm">{language === 'zh' ? `压缩 ${previewUrls.length > 0 ? previewUrls.length : ''} 张图片中...` : `Compressing ${previewUrls.length > 0 ? previewUrls.length : ''} images...`}</span>
                 </div>
               ) : (
                 <>
@@ -348,8 +350,8 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
                     onChange={handleFileChange}
                   />
                   <Camera size={48} className="text-gray-400 mb-2" />
-                  <p className="text-gray-400 font-medium">Tap to upload photos</p>
-                  <p className="text-xs text-gray-500 mt-2">Supports multi-select (JPG, PNG, HEIC)</p>
+                  <p className="text-gray-400 font-medium">{language === 'zh' ? '点击上传照片' : 'Tap to upload photos'}</p>
+                  <p className="text-xs text-gray-500 mt-2">{language === 'zh' ? '支持多选 (JPG, PNG, HEIC)' : 'Supports multi-select (JPG, PNG, HEIC)'}</p>
                 </>
               )}
             </div>
@@ -365,11 +367,11 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
                    {/* GPS Indicator (Always based on 1st img) */}
                    {foundLocation ? (
                      <div className="absolute top-2 right-2 bg-green-600/90 px-2 py-1 rounded text-xs text-white flex items-center gap-1 shadow-lg">
-                       <MapPin size={12} /> Location Detected
+                       <MapPin size={12} /> {language === 'zh' ? '已检测到位置' : 'Location Detected'}
                      </div>
                    ) : (
                       <div className="absolute top-2 right-2 bg-yellow-600/90 px-2 py-1 rounded text-xs text-white flex items-center gap-1 shadow-lg">
-                       <MapPin size={12} /> No GPS (Image 1)
+                       <MapPin size={12} /> {language === 'zh' ? '无GPS (图片1)' : 'No GPS (Image 1)'}
                      </div>
                    )}
 
@@ -396,13 +398,13 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
 
               <div className="space-y-2">
                 <div className="sticky top-0 bg-gray-800 z-10 pb-2">
-                   <label className="text-xs text-gray-400 mb-1 block uppercase font-bold">Search or Select</label>
+                   <label className="text-xs text-gray-400 mb-1 block uppercase font-bold">{language === 'zh' ? '搜索或选择' : 'Search or Select'}</label>
                    <div className="flex gap-2">
                      <input 
                        type="text" 
                        value={manualSearch}
                        onChange={(e) => handleManualSearch(e.target.value)}
-                       placeholder="Search place manually..."
+                       placeholder={language === 'zh' ? '手动搜索地点...' : 'Search place manually...'}
                        className="flex-1 bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
                      />
                      <div className="bg-gray-700 px-3 py-2 rounded flex items-center justify-center">
@@ -429,8 +431,8 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
                   ) : (
                     <div className="text-center py-8 text-gray-500">
                       <ImageIcon className="mx-auto mb-2 opacity-50" size={32}/>
-                      <p className="text-sm">No places found nearby.</p>
-                      <p className="text-xs">Try typing the name above.</p>
+                      <p className="text-sm">{language === 'zh' ? '附近没有找到地点' : 'No places found nearby.'}</p>
+                      <p className="text-xs">{language === 'zh' ? '请尝试在上方输入名称' : 'Try typing the name above.'}</p>
                     </div>
                   )}
                 </div>
@@ -451,7 +453,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Grade</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">{t('rating')}</label>
                 <div className="flex gap-2 justify-between">
                   {GRADES.map((grade) => (
                     <button 
@@ -469,16 +471,16 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
                   ))}
                 </div>
                 <div className={`text-center mt-3 text-sm font-medium transition-colors ${getGradeColor(rating)}`}>
-                  {getGradeDescription(rating)}
+                  {getGradeDescription(rating, language)}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Notes</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">{language === 'zh' ? '备注' : 'Notes'}</label>
                 <textarea 
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="What did you eat? How was the vibe?"
+                  placeholder={language === 'zh' ? '你吃了什么？感觉如何？' : 'What did you eat? How was the vibe?'}
                   className="w-full h-24 bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-blue-500 resize-none"
                 />
               </div>
@@ -489,7 +491,9 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-900/20 transition transform hover:scale-[1.02] disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
               >
                 {isSaving && <Loader2 size={18} className="animate-spin"/>}
-                {isSaving ? `Uploading ${previewBlobs.length} Photos...` : 'Save Experience'}
+                {isSaving 
+                  ? (language === 'zh' ? `上传 ${previewBlobs.length} 张照片中...` : `Uploading ${previewBlobs.length} Photos...`)
+                  : (language === 'zh' ? '保存体验' : 'Save Experience')}
               </button>
             </div>
           )}

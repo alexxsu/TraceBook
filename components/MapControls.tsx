@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useImperativeHandle, forwardRef } from 'react';
 import { Crosshair, Map } from 'lucide-react';
+import { useLanguage } from '../hooks/useLanguage';
 
 interface MapControlsProps {
   mapType: 'satellite' | 'roadmap' | 'dark';
@@ -7,26 +8,40 @@ interface MapControlsProps {
   onToggleMapType: () => void;
 }
 
-export const MapControls: React.FC<MapControlsProps> = ({
+export interface MapControlsRef {
+  resetClickState: () => void;
+}
+
+export const MapControls = forwardRef<MapControlsRef, MapControlsProps>(({
   mapType,
   onZoomToMunicipality,
   onToggleMapType
-}) => {
+}, ref) => {
+  const { t } = useLanguage();
+  const [clickedButton, setClickedButton] = useState<'zoom' | 'mapType' | null>(null);
+
   const getMapTypeTitle = () => {
-    if (mapType === 'satellite') return 'Switch to Road View';
-    if (mapType === 'roadmap') return 'Switch to Dark Mode';
-    return 'Switch to Satellite View';
+    if (mapType === 'satellite') return t('switchToRoad');
+    if (mapType === 'roadmap') return t('switchToDark');
+    return t('switchToSatellite');
   };
 
+  // Expose reset function to parent
+  useImperativeHandle(ref, () => ({
+    resetClickState: () => {
+      setClickedButton(null);
+    }
+  }));
+
   const handleZoomClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    setClickedButton('zoom');
     onZoomToMunicipality();
-    // Remove focus to clear visual feedback
     e.currentTarget.blur();
   };
 
   const handleMapTypeClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    setClickedButton('mapType');
     onToggleMapType();
-    // Remove focus to clear visual feedback
     e.currentTarget.blur();
   };
 
@@ -34,20 +49,26 @@ export const MapControls: React.FC<MapControlsProps> = ({
     <div className="absolute bottom-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
       <button
         onClick={handleZoomClick}
-        className="bg-gray-800/90 backdrop-blur border border-gray-700 p-3 rounded-full shadow-lg text-white hover:bg-gray-700 active:bg-gray-600 transition group focus:outline-none"
-        title="Zoom to My City"
+        className={`bg-gray-800/90 backdrop-blur border p-3 rounded-full shadow-lg text-white hover:bg-gray-700 active:bg-gray-600 transition group focus:outline-none focus:ring-0
+          ${clickedButton === 'zoom' ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-700'}
+        `}
+        title={t('zoomToCity')}
       >
-        <Crosshair size={24} className="group-hover:text-blue-400 group-active:text-blue-300 transition" />
+        <Crosshair size={24} className={`transition ${clickedButton === 'zoom' ? 'text-blue-400' : 'group-hover:text-blue-400 group-active:text-blue-300'}`} />
       </button>
       <button
         onClick={handleMapTypeClick}
-        className={`bg-gray-800/90 backdrop-blur border p-3 rounded-full shadow-lg text-white transition group focus:outline-none active:bg-gray-600
-          ${mapType !== 'roadmap' ? 'border-blue-500' : 'border-gray-700 hover:bg-gray-700'}
+        className={`bg-gray-800/90 backdrop-blur border p-3 rounded-full shadow-lg text-white transition group focus:outline-none focus:ring-0 active:bg-gray-600
+          ${clickedButton === 'mapType' 
+            ? 'border-blue-500 ring-2 ring-blue-500/50' 
+            : mapType !== 'roadmap' 
+              ? 'border-blue-500 hover:bg-gray-700' 
+              : 'border-gray-700 hover:bg-gray-700'}
         `}
         title={getMapTypeTitle()}
       >
-        <Map size={24} className="group-hover:text-blue-400 group-active:text-blue-300 transition" />
+        <Map size={24} className={`transition ${clickedButton === 'mapType' ? 'text-blue-400' : 'group-hover:text-blue-400 group-active:text-blue-300'}`} />
       </button>
     </div>
   );
-};
+});

@@ -93,11 +93,24 @@ export const MemberAvatars: React.FC<MemberAvatarsProps> = ({ activeMap }) => {
               style={{ zIndex: 10 - index }}
             >
               {member.photoURL ? (
-                <img
-                  src={member.photoURL}
-                  alt={member.displayName}
-                  className="w-full h-full object-cover"
-                />
+                <>
+                  <img
+                    src={member.photoURL}
+                    alt={member.displayName}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      // Hide failed image and show fallback
+                      const img = e.target as HTMLImageElement;
+                      img.style.display = 'none';
+                      const fallback = img.nextElementSibling as HTMLElement;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
+                  />
+                  <div className="w-full h-full bg-gray-700 items-center justify-center hidden" style={{ display: 'none' }}>
+                    <UserIcon size={16} className="text-gray-400" />
+                  </div>
+                </>
               ) : (
                 <div className="w-full h-full bg-gray-700 flex items-center justify-center">
                   <UserIcon size={16} className="text-gray-400" />

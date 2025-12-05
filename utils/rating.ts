@@ -36,7 +36,18 @@ export const getGradeColor = (grade: string): string => {
   }
 };
 
-export const getGradeDescription = (grade: string): string => {
+export const getGradeDescription = (grade: string, language: string = 'en'): string => {
+  if (language === 'zh') {
+    switch (grade) {
+      case 'S': return '神级';
+      case 'A': return '优秀';
+      case 'B': return '良好';
+      case 'C': return '一般';
+      case 'D': return '糟糕';
+      case 'E': return '噩梦';
+      default: return '';
+    }
+  }
   switch (grade) {
     case 'S': return 'God';
     case 'A': return 'Excellent';

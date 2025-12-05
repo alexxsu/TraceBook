@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Users, Lock, Copy, Check, LogIn, Globe, User, Settings, Crown, UserMinus, LogOut as LeaveIcon, Info } from 'lucide-react';
 import { UserMap, MapMember } from '../types';
+import { useLanguage } from '../hooks/useLanguage';
 
 interface MapManagementModalProps {
   userMaps: UserMap[];           // User's default map
@@ -50,6 +51,8 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
   const [settingsClosing, setSettingsClosing] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState<string | null>(null);
   const [confirmKick, setConfirmKick] = useState<{ mapId: string; memberUid: string } | null>(null);
+
+  const { t, language } = useLanguage();
 
   const userSharedMapsCount = sharedMaps.length;
   const totalSharedMapsCount = sharedMaps.length + joinedMaps.length;
@@ -199,21 +202,21 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
             icon: <Lock size={18} className="text-blue-400" />,
             bgColor: 'bg-blue-500/20',
             activeBg: 'bg-blue-600/20 border border-blue-500/50',
-            label: 'Private'
+            label: t('private')
           };
         case 'created':
           return {
             icon: <Users size={18} className="text-purple-400" />,
             bgColor: 'bg-purple-500/20',
             activeBg: 'bg-purple-600/20 border border-purple-500/50',
-            label: 'Shared (Owner)'
+            label: language === 'zh' ? '共享 (所有者)' : 'Shared (Owner)'
           };
         case 'joined':
           return {
             icon: <Globe size={18} className="text-green-400" />,
             bgColor: 'bg-green-500/20',
             activeBg: 'bg-green-600/20 border border-green-500/50',
-            label: 'Shared (Member)'
+            label: language === 'zh' ? '共享 (成员)' : 'Shared (Member)'
           };
       }
     };
@@ -245,7 +248,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
               <div className="flex items-center gap-2">
                 <span className="text-white font-medium truncate">{map.name}</span>
                 {map.isDefault && (
-                  <span className="text-[10px] bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">Default</span>
+                  <span className="text-[10px] bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">{t('defaultMap')}</span>
                 )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
@@ -311,7 +314,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
               // Created map settings - show members list
               <div className="p-3">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                  Members ({map.memberInfo?.length || 1})
+                  {t('members')} ({map.memberInfo?.length || 1})
                 </h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {/* Owner */}
@@ -321,9 +324,9 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                     </div>
                     <div className="flex-1 min-w-0">
                       <span className="text-white text-sm font-medium truncate block">
-                        {map.ownerDisplayName || 'You'}
+                        {map.ownerDisplayName || (language === 'zh' ? '你' : 'You')}
                       </span>
-                      <span className="text-xs text-purple-400">Creator</span>
+                      <span className="text-xs text-purple-400">{language === 'zh' ? '创建者' : 'Creator'}</span>
                     </div>
                   </div>
 
@@ -341,7 +344,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                         <span className="text-white text-sm font-medium truncate block">
                           {member.displayName}
                         </span>
-                        <span className="text-xs text-gray-400">Member</span>
+                        <span className="text-xs text-gray-400">{t('member')}</span>
                       </div>
                       {confirmKick?.mapId === map.id && confirmKick?.memberUid === member.uid ? (
                         <div className="flex gap-1">
@@ -350,13 +353,13 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                             disabled={isSubmitting}
                             className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded transition"
                           >
-                            {isSubmitting ? '...' : 'Confirm'}
+                            {isSubmitting ? '...' : t('confirm')}
                           </button>
                           <button
                             onClick={() => setConfirmKick(null)}
                             className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded transition"
                           >
-                            Cancel
+                            {t('cancel')}
                           </button>
                         </div>
                       ) : (
@@ -372,13 +375,13 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                   ))}
 
                   {(!map.memberInfo || map.memberInfo.filter(m => m.uid !== map.ownerUid).length === 0) && (
-                    <p className="text-gray-500 text-xs text-center py-2">No other members yet</p>
+                    <p className="text-gray-500 text-xs text-center py-2">{language === 'zh' ? '暂无其他成员' : 'No other members yet'}</p>
                   )}
                   
                   {/* Member limit indicator */}
                   <div className="mt-2 pt-2 border-t border-gray-700">
                     <p className="text-xs text-gray-500 text-center">
-                      {map.memberInfo?.length || 1}/{maxMembers} members
+                      {map.memberInfo?.length || 1}/{maxMembers} {t('members').toLowerCase()}
                     </p>
                   </div>
                 </div>
@@ -389,7 +392,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                 {/* Members list for joined maps */}
                 <div>
                   <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                    Members ({map.memberInfo?.length || 1}/{maxMembers})
+                    {t('members')} ({map.memberInfo?.length || 1}/{maxMembers})
                   </h4>
                   <div className="space-y-2 max-h-32 overflow-y-auto">
                     {/* Owner */}
@@ -399,9 +402,9 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="text-white text-xs font-medium truncate block">
-                          {map.ownerDisplayName || 'Owner'}
+                          {map.ownerDisplayName || t('owner')}
                         </span>
-                        <span className="text-[10px] text-purple-400">Owner</span>
+                        <span className="text-[10px] text-purple-400">{t('owner')}</span>
                       </div>
                     </div>
 
@@ -418,9 +421,9 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                         <div className="flex-1 min-w-0">
                           <span className="text-white text-xs font-medium truncate block">
                             {member.displayName}
-                            {member.uid === currentUserUid && <span className="text-blue-400 ml-1">(You)</span>}
+                            {member.uid === currentUserUid && <span className="text-blue-400 ml-1">({language === 'zh' ? '你' : 'You'})</span>}
                           </span>
-                          <span className="text-[10px] text-gray-400">Member</span>
+                          <span className="text-[10px] text-gray-400">{t('member')}</span>
                         </div>
                       </div>
                     ))}
@@ -432,14 +435,14 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                   {confirmLeave === map.id ? (
                     <div className="space-y-2">
                       <p className="text-sm text-gray-300 text-center">
-                        Leave "{map.name}"?
+                        {language === 'zh' ? `离开 "${map.name}"？` : `Leave "${map.name}"?`}
                       </p>
                       <div className="flex gap-2">
                         <button
                           onClick={() => setConfirmLeave(null)}
                           className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition text-sm"
                         >
-                          Cancel
+                          {t('cancel')}
                         </button>
                         <button
                           onClick={() => handleLeave(map.id)}
@@ -447,7 +450,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                           className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition text-sm flex items-center justify-center gap-1"
                         >
                           <LeaveIcon size={14} />
-                          {isSubmitting ? 'Leaving...' : 'Leave'}
+                          {isSubmitting ? (language === 'zh' ? '离开中...' : 'Leaving...') : (language === 'zh' ? '离开' : 'Leave')}
                         </button>
                       </div>
                     </div>
@@ -457,7 +460,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                       className="w-full flex items-center justify-center gap-2 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition"
                     >
                       <LeaveIcon size={16} />
-                      <span>Leave this map</span>
+                      <span>{language === 'zh' ? '离开此地图' : 'Leave this map'}</span>
                     </button>
                   )}
                 </div>
@@ -486,9 +489,11 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-700">
             <div>
-              <h2 className="text-lg font-bold text-white">Map Management</h2>
+              <h2 className="text-lg font-bold text-white">{t('mapManagement')}</h2>
               <p className="text-xs text-gray-400 mt-0.5">
-                {isGuest ? 'View your demo map' : 'Manage your maps and collaborations'}
+                {isGuest 
+                  ? (language === 'zh' ? '查看您的演示地图' : 'View your demo map') 
+                  : (language === 'zh' ? '管理您的地图和协作' : 'Manage your maps and collaborations')}
               </p>
             </div>
             <button
@@ -506,13 +511,15 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
             <div>
               <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                 <Lock size={12} />
-                {isGuest ? 'Demo Map' : 'Your Default Map'}
+                {isGuest 
+                  ? (language === 'zh' ? '演示地图' : 'Demo Map') 
+                  : (language === 'zh' ? '您的默认地图' : 'Your Default Map')}
               </h3>
               <div className="space-y-2">
                 {userMaps.length > 0 ? (
                   userMaps.map((map) => renderMapItem(map, 'default'))
                 ) : (
-                  <p className="text-gray-500 text-sm text-center py-2">No default map</p>
+                  <p className="text-gray-500 text-sm text-center py-2">{language === 'zh' ? '没有默认地图' : 'No default map'}</p>
                 )}
               </div>
             </div>
@@ -522,13 +529,13 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
               <div>
                 <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                   <Users size={12} />
-                  Shared Maps You Created ({sharedMaps.length}/{maxSharedMaps})
+                  {language === 'zh' ? `您创建的共享地图 (${sharedMaps.length}/${maxSharedMaps})` : `Shared Maps You Created (${sharedMaps.length}/${maxSharedMaps})`}
                 </h3>
                 <div className="space-y-2">
                   {sharedMaps.length > 0 ? (
                     sharedMaps.map((map) => renderMapItem(map, 'created'))
                   ) : (
-                    <p className="text-gray-500 text-sm text-center py-2">No shared maps created yet</p>
+                    <p className="text-gray-500 text-sm text-center py-2">{language === 'zh' ? '尚未创建共享地图' : 'No shared maps created yet'}</p>
                   )}
 
                   {/* Create Map Button/Form - under created maps */}
@@ -546,27 +553,27 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                           type="text"
                           value={newMapName}
                           onChange={(e) => setNewMapName(e.target.value.slice(0, 25))}
-                          placeholder="Enter map name..."
+                          placeholder={language === 'zh' ? '输入地图名称...' : 'Enter map name...'}
                           className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
                           maxLength={25}
                           autoFocus={isCreating}
                         />
                         <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span>{newMapName.length}/25 characters</span>
+                          <span>{newMapName.length}/25 {language === 'zh' ? '字符' : 'characters'}</span>
                         </div>
                         <div className="flex gap-2">
                           <button
                             onClick={closeCreateForm}
                             className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
                           >
-                            Cancel
+                            {t('cancel')}
                           </button>
                           <button
                             onClick={handleCreate}
                             disabled={!newMapName.trim() || isSubmitting}
                             className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded-lg transition"
                           >
-                            {isSubmitting ? 'Creating...' : 'Create'}
+                            {isSubmitting ? (language === 'zh' ? '创建中...' : 'Creating...') : (language === 'zh' ? '创建' : 'Create')}
                           </button>
                         </div>
                       </div>
@@ -591,8 +598,8 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                         `}
                       >
                         <Plus size={14} />
-                        <span>Create Shared Map</span>
-                        {!canCreateMore && <span className="text-xs text-gray-500">(Limit reached)</span>}
+                        <span>{t('createSharedMap')}</span>
+                        {!canCreateMore && <span className="text-xs text-gray-500">({language === 'zh' ? '已达上限' : 'Limit reached'})</span>}
                       </button>
                     </div>
                   </div>
@@ -605,13 +612,13 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
               <div>
                 <h3 className="text-xs font-bold text-green-400 uppercase tracking-wider mb-2 flex items-center gap-2">
                   <Globe size={12} />
-                  Shared Maps You Joined ({joinedMaps.length}/{maxSharedMaps})
+                  {language === 'zh' ? `您加入的共享地图 (${joinedMaps.length}/${maxSharedMaps})` : `Shared Maps You Joined (${joinedMaps.length}/${maxSharedMaps})`}
                 </h3>
                 <div className="space-y-2">
                   {joinedMaps.length > 0 ? (
                     joinedMaps.map((map) => renderMapItem(map, 'joined'))
                   ) : (
-                    <p className="text-gray-500 text-sm text-center py-2">No joined maps yet</p>
+                    <p className="text-gray-500 text-sm text-center py-2">{language === 'zh' ? '尚未加入共享地图' : 'No joined maps yet'}</p>
                   )}
 
                   {/* Join Map Button/Form - under joined maps */}
@@ -626,7 +633,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                     >
                       <div className="space-y-3 p-3 bg-gray-700/50 rounded-xl border border-gray-600 mb-2">
                         <div>
-                          <label className="text-xs text-gray-400 block mb-1">Enter 4-digit map code</label>
+                          <label className="text-xs text-gray-400 block mb-1">{language === 'zh' ? '输入4位地图代码' : 'Enter 4-digit map code'}</label>
                           <input
                             type="text"
                             value={joinCode}
@@ -649,17 +656,17 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                             onClick={closeJoinForm}
                             className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition"
                           >
-                            Cancel
+                            {t('cancel')}
                           </button>
                           <button
                             onClick={handleJoin}
                             disabled={joinCode.length !== 4 || isSubmitting}
                             className="flex-1 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:text-gray-400 text-white rounded-lg transition flex items-center justify-center gap-2"
                           >
-                            {isSubmitting ? 'Joining...' : (
+                            {isSubmitting ? (language === 'zh' ? '加入中...' : 'Joining...') : (
                               <>
                                 <LogIn size={16} />
-                                Join
+                                {language === 'zh' ? '加入' : 'Join'}
                               </>
                             )}
                           </button>
@@ -686,8 +693,8 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
                         `}
                       >
                         <LogIn size={14} />
-                        <span>Join a Shared Map</span>
-                        {!canJoinMore && <span className="text-xs text-gray-500">(Limit reached)</span>}
+                        <span>{t('joinSharedMap')}</span>
+                        {!canJoinMore && <span className="text-xs text-gray-500">({language === 'zh' ? '已达上限' : 'Limit reached'})</span>}
                       </button>
                     </div>
                   </div>
@@ -699,7 +706,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
             {isGuest && (
               <div className="bg-gray-700/30 rounded-xl p-4 border border-gray-600">
                 <p className="text-gray-400 text-sm text-center">
-                  Sign in to create or join shared maps with others.
+                  {language === 'zh' ? '登录后可创建或加入共享地图。' : 'Sign in to create or join shared maps with others.'}
                 </p>
               </div>
             )}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Users, Check, XIcon, Trash2, Loader2, ChevronRight, ArrowLeft, Shield, Mail, Clock } from 'lucide-react';
-import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { UserProfile } from '../types';
 
@@ -80,6 +80,17 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
     try {
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, { status: 'approved' });
+      
+      // Send notification to the approved user
+      const notificationsRef = collection(db, 'notifications');
+      await addDoc(notificationsRef, {
+        recipientUid: userId,
+        type: 'join_approved',
+        message: 'Welcome! Your account has been approved. You can now start adding your food memories.',
+        read: false,
+        createdAt: serverTimestamp(),
+      });
+      
       setUsers(prev => prev.map(u => 
         u.id === userId ? { ...u, status: 'approved' } : u
       ));

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, onSnapshot, doc, setDoc, getDoc, getDocs, updateDoc, arrayUnion, query, where, or } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, getDoc, getDocs, updateDoc, arrayUnion, query, where, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { UserMap, UserProfile } from '../types';
 import { ensureDefaultMapForUser } from '../services/maps';
@@ -45,9 +45,19 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
       }
 
       try {
+        // Build the best display name from all available sources
+        let displayName = user.displayName;
+        if (userProfile?.displayName && userProfile.displayName.trim()) {
+          displayName = userProfile.displayName;
+        } else if (user.displayName && user.displayName.trim()) {
+          displayName = user.displayName;
+        } else if (user.email) {
+          displayName = user.email.split('@')[0];
+        }
+        
         const map = await ensureDefaultMapForUser({
           uid: user.uid,
-          displayName: user.displayName,
+          displayName: displayName,
           email: user.email,
         });
         setActiveMap(map);
@@ -65,15 +75,40 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
     if (!userProfile || userProfile.role !== 'admin') return;
 
     const mapsRef = collection(db, 'maps');
-    const unsubscribe = onSnapshot(mapsRef, (snapshot) => {
+    const usersRef = collection(db, 'users');
+    
+    const unsubscribe = onSnapshot(mapsRef, async (snapshot) => {
+      // First, get all unique owner UIDs
+      const ownerUids = new Set<string>();
+      snapshot.docs.forEach((docSnap) => {
+        const d = docSnap.data() as any;
+        if (d.ownerUid) ownerUids.add(d.ownerUid);
+      });
+      
+      // Fetch all user profiles for these owners
+      const userProfiles: Record<string, UserProfile> = {};
+      const userDocs = await getDocs(usersRef);
+      userDocs.forEach((userDoc) => {
+        if (ownerUids.has(userDoc.id)) {
+          userProfiles[userDoc.id] = userDoc.data() as UserProfile;
+        }
+      });
+      
+      // Build maps with enriched owner info
       const data: UserMap[] = snapshot.docs.map((docSnap) => {
         const d = docSnap.data() as any;
+        const ownerProfile = userProfiles[d.ownerUid];
+        
+        // Get the best display name from profile or stored data
+        const enrichedOwnerDisplayName = ownerProfile?.displayName || d.ownerDisplayName || d.ownerEmail || 'Unknown User';
+        const enrichedOwnerPhotoURL = ownerProfile?.photoURL || d.ownerPhotoURL;
+        
         return {
           id: docSnap.id,
           ownerUid: d.ownerUid,
-          ownerDisplayName: d.ownerDisplayName,
-          ownerEmail: d.ownerEmail,
-          ownerPhotoURL: d.ownerPhotoURL,
+          ownerDisplayName: enrichedOwnerDisplayName,
+          ownerEmail: d.ownerEmail || ownerProfile?.email,
+          ownerPhotoURL: enrichedOwnerPhotoURL,
           name: d.name,
           visibility: d.visibility,
           isDefault: d.isDefault,
@@ -216,19 +251,29 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
     const shareCode = await generateShareCode();
     const mapId = `shared_${user.uid}_${Date.now()}`;
 
+    // Build the best display name from all available sources
+    let ownerName = 'User';
+    if (userProfile?.displayName && userProfile.displayName.trim()) {
+      ownerName = userProfile.displayName;
+    } else if (user.displayName && user.displayName.trim()) {
+      ownerName = user.displayName;
+    } else if (user.email) {
+      ownerName = user.email.split('@')[0];
+    }
+
     const creatorMemberInfo = {
       uid: user.uid,
-      displayName: user.displayName || user.email || user.uid,
-      photoURL: user.photoURL,
+      displayName: ownerName,
+      photoURL: userProfile?.photoURL || user.photoURL || null,
       joinedAt: new Date().toISOString()
     };
 
     const newMap = {
       id: mapId,
       ownerUid: user.uid,
-      ownerDisplayName: user.displayName || user.email || user.uid,
+      ownerDisplayName: ownerName,
       ownerEmail: user.email || undefined,
-      ownerPhotoURL: user.photoURL || null,
+      ownerPhotoURL: userProfile?.photoURL || user.photoURL || null,
       name: name,
       visibility: 'shared',
       isDefault: false,
@@ -240,7 +285,7 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
     };
 
     await setDoc(doc(db, 'maps', mapId), newMap);
-  }, [user, userSharedMaps.length]);
+  }, [user, userProfile, userSharedMaps.length]);
 
   const joinSharedMap = useCallback(async (code: string): Promise<boolean> => {
     if (!user || user.isAnonymous) {
@@ -278,11 +323,21 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
       throw new Error('This map has reached its member limit (10 members)');
     }
 
+    // Build the best display name from all available sources
+    let displayName = 'User';
+    if (userProfile?.displayName && userProfile.displayName.trim()) {
+      displayName = userProfile.displayName;
+    } else if (user.displayName && user.displayName.trim()) {
+      displayName = user.displayName;
+    } else if (user.email) {
+      displayName = user.email.split('@')[0];
+    }
+
     const mapRef = doc(db, 'maps', foundMapId);
     const newMemberInfo = {
       uid: user.uid,
-      displayName: user.displayName || user.email || user.uid,
-      photoURL: user.photoURL,
+      displayName: displayName,
+      photoURL: userProfile?.photoURL || user.photoURL || null,
       joinedAt: new Date().toISOString()
     };
 
@@ -291,8 +346,35 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
       memberInfo: arrayUnion(newMemberInfo)
     });
 
+    // Notify ALL existing members (including owner) that a new member joined
+    const existingMembers = foundMap.members || [];
+    if (existingMembers.length > 0) {
+      const notificationsRef = collection(db, 'notifications');
+      const batch = writeBatch(db);
+      
+      existingMembers.forEach((memberUid: string) => {
+        // Don't notify the person who just joined
+        if (memberUid !== user.uid) {
+          const newNotifRef = doc(notificationsRef);
+          batch.set(newNotifRef, {
+            recipientUid: memberUid,
+            type: 'member_joined',
+            message: `${displayName} joined the shared map "${foundMap.name}"`,
+            mapId: foundMapId,
+            mapName: foundMap.name,
+            actorUid: user.uid,
+            actorName: displayName,
+            read: false,
+            createdAt: serverTimestamp(),
+          });
+        }
+      });
+      
+      await batch.commit();
+    }
+
     return true;
-  }, [user, userSharedMaps.length, userJoinedMaps.length]);
+  }, [user, userProfile, userSharedMaps.length, userJoinedMaps.length]);
 
   const leaveSharedMap = useCallback(async (mapId: string): Promise<void> => {
     if (!user || user.isAnonymous) {
@@ -315,13 +397,46 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
       memberInfo: updatedMemberInfo
     });
 
+    // Build the best display name from all available sources
+    let displayName = 'A member';
+    if (userProfile?.displayName && userProfile.displayName.trim()) {
+      displayName = userProfile.displayName;
+    } else if (user.displayName && user.displayName.trim()) {
+      displayName = user.displayName;
+    } else if (user.email) {
+      displayName = user.email.split('@')[0];
+    }
+
+    // Notify ALL remaining members (including owner) that someone left
+    if (updatedMembers.length > 0) {
+      const notificationsRef = collection(db, 'notifications');
+      const batch = writeBatch(db);
+      
+      updatedMembers.forEach((memberUid: string) => {
+        const newNotifRef = doc(notificationsRef);
+        batch.set(newNotifRef, {
+          recipientUid: memberUid,
+          type: 'member_left',
+          message: `${displayName} left the shared map "${mapData.name}"`,
+          mapId: mapId,
+          mapName: mapData.name,
+          actorUid: user.uid,
+          actorName: displayName,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      });
+      
+      await batch.commit();
+    }
+
     if (activeMap?.id === mapId) {
       const defaultMap = userOwnMaps.find(m => m.isDefault);
       if (defaultMap) {
         setActiveMap(defaultMap);
       }
     }
-  }, [user, activeMap, userOwnMaps]);
+  }, [user, userProfile, activeMap, userOwnMaps]);
 
   const kickMember = useCallback(async (mapId: string, memberUid: string): Promise<void> => {
     if (!user || user.isAnonymous) {
@@ -348,7 +463,31 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
       members: updatedMembers,
       memberInfo: updatedMemberInfo
     });
-  }, [user]);
+
+    // Build the best display name for the actor
+    let actorName = 'The owner';
+    if (userProfile?.displayName && userProfile.displayName.trim()) {
+      actorName = userProfile.displayName;
+    } else if (user.displayName && user.displayName.trim()) {
+      actorName = user.displayName;
+    } else if (user.email) {
+      actorName = user.email.split('@')[0];
+    }
+
+    // Send notification to the kicked member
+    const notificationsRef = collection(db, 'notifications');
+    await addDoc(notificationsRef, {
+      recipientUid: memberUid,
+      type: 'member_removed',
+      message: `You were removed from the shared map "${mapData.name}"`,
+      mapId: mapId,
+      mapName: mapData.name,
+      actorUid: user.uid,
+      actorName: actorName,
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  }, [user, userProfile]);
 
   return {
     activeMap,

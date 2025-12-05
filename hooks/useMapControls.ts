@@ -124,45 +124,58 @@ export function useMapControls(): UseMapControlsReturn {
           lng: position.coords.longitude,
         };
 
-        const geocoder = new google.maps.Geocoder();
-        geocoder.geocode({ location: userPos }, (results, status) => {
-          if (status === 'OK' && results && results.length > 0) {
-            let municipalityResult = results.find(r =>
-              r.types.includes('locality') || r.types.includes('sublocality')
-            );
-
-            if (!municipalityResult) {
-              municipalityResult = results.find(r =>
-                r.types.includes('administrative_area_level_3') ||
-                r.types.includes('administrative_area_level_2')
+        // Try geocoding, but fallback to simple zoom if it fails
+        try {
+          const geocoder = new google.maps.Geocoder();
+          geocoder.geocode({ location: userPos }, (results, status) => {
+            if (status === 'OK' && results && results.length > 0) {
+              let municipalityResult = results.find(r =>
+                r.types.includes('locality') || r.types.includes('sublocality')
               );
-            }
 
-            if (municipalityResult && municipalityResult.geometry.bounds) {
-              const center = municipalityResult.geometry.location;
-              mapInstance.panTo(center);
-              setTimeout(() => {
-                mapInstance.fitBounds(municipalityResult!.geometry.bounds!);
-              }, 300);
-            } else if (municipalityResult && municipalityResult.geometry.viewport) {
-              const center = municipalityResult.geometry.location;
-              mapInstance.panTo(center);
-              setTimeout(() => {
-                mapInstance.fitBounds(municipalityResult!.geometry.viewport!);
-              }, 300);
+              if (!municipalityResult) {
+                municipalityResult = results.find(r =>
+                  r.types.includes('administrative_area_level_3') ||
+                  r.types.includes('administrative_area_level_2')
+                );
+              }
+
+              if (municipalityResult && municipalityResult.geometry.bounds) {
+                const center = municipalityResult.geometry.location;
+                mapInstance.panTo(center);
+                setTimeout(() => {
+                  mapInstance.fitBounds(municipalityResult!.geometry.bounds!);
+                }, 300);
+              } else if (municipalityResult && municipalityResult.geometry.viewport) {
+                const center = municipalityResult.geometry.location;
+                mapInstance.panTo(center);
+                setTimeout(() => {
+                  mapInstance.fitBounds(municipalityResult!.geometry.viewport!);
+                }, 300);
+              } else {
+                // Fallback: just pan to user location with city-level zoom
+                mapInstance.panTo(userPos);
+                setTimeout(() => {
+                  mapInstance.setZoom(13);
+                }, 300);
+              }
             } else {
+              // Geocoding failed, fallback to simple zoom
+              console.warn('Geocoding failed, using fallback zoom. Status:', status);
               mapInstance.panTo(userPos);
               setTimeout(() => {
                 mapInstance.setZoom(13);
               }, 300);
             }
-          } else {
-            mapInstance.panTo(userPos);
-            setTimeout(() => {
-              mapInstance.setZoom(13);
-            }, 300);
-          }
-        });
+          });
+        } catch (error) {
+          // Geocoder not available (API not enabled), fallback to simple zoom
+          console.warn('Geocoding API not available, using fallback zoom:', error);
+          mapInstance.panTo(userPos);
+          setTimeout(() => {
+            mapInstance.setZoom(13);
+          }, 300);
+        }
       },
       () => {
         alert("Could not access your location. Please check browser permissions.");

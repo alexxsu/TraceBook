@@ -1,10 +1,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Calendar, MapPin, Share2, User, Trash2, Pencil, Loader2, ExternalLink } from 'lucide-react';
+import { X, Calendar, MapPin, Share2, User, Trash2, Pencil, Loader2, ExternalLink, Languages } from 'lucide-react';
 import { Restaurant, Visit, GUEST_ID } from '../types';
 import { getGradeColor, calculateAverageGrade } from '../utils/rating';
 import html2canvas from 'html2canvas';
 import ImageSlider from './ImageSlider';
+import { useLanguage, translateText } from '../hooks/useLanguage';
 import {
   SWIPE_UP_THRESHOLD,
   SWIPE_DOWN_THRESHOLD,
@@ -31,10 +32,16 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   onDeleteVisit,
   onEditVisit
 }) => {
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'timeline' | 'info'>('timeline');
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [shareBase64Map, setShareBase64Map] = useState<Record<string, string>>({});
   const shareRef = useRef<HTMLDivElement>(null);
+  
+  // Translation state for comments
+  const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({});
+  const [translatingComments, setTranslatingComments] = useState<Record<string, boolean>>({});
+  const [showTranslated, setShowTranslated] = useState<Record<string, boolean>>({});
   
   // Animation & Drag State
   const [isClosing, setIsClosing] = useState(false);
@@ -46,6 +53,27 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   const startYRef = useRef<number>(0);
   
   const sortedVisits = [...restaurant.visits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Handle comment translation
+  const handleTranslateComment = async (visitId: string, comment: string) => {
+    if (translatedComments[visitId]) {
+      // Toggle between original and translated
+      setShowTranslated(prev => ({ ...prev, [visitId]: !prev[visitId] }));
+      return;
+    }
+    
+    setTranslatingComments(prev => ({ ...prev, [visitId]: true }));
+    try {
+      const targetLang = language === 'en' ? 'zh' : 'en';
+      const translated = await translateText(comment, targetLang);
+      setTranslatedComments(prev => ({ ...prev, [visitId]: translated }));
+      setShowTranslated(prev => ({ ...prev, [visitId]: true }));
+    } catch (error) {
+      console.error('Translation failed:', error);
+    } finally {
+      setTranslatingComments(prev => ({ ...prev, [visitId]: false }));
+    }
+  };
 
   const handleClose = (direction: 'right' | 'down' = 'right') => {
     if (direction === 'down') setIsClosingDown(true);
@@ -66,7 +94,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   }, []);
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return new Date(dateStr).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -244,7 +272,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   };
 
   const handleDelete = (visit: Visit) => {
-    if (window.confirm("Are you sure you want to delete this memory? This cannot be undone.")) {
+    if (window.confirm(t('confirmDeleteExperience'))) {
       onDeleteVisit(restaurant, visit);
     }
   };
@@ -317,7 +345,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
             <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1.5 bg-gray-400/50 rounded-full z-30 sm:hidden transition-all duration-300"></div>
             {!isExpanded && (
               <div className="absolute top-5 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 z-30 sm:hidden pointer-events-none">
-                Swipe up to expand
+                {language === 'zh' ? '上滑展开' : 'Swipe up to expand'}
               </div>
             )}
 
@@ -348,13 +376,13 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
           <div className="flex border-b border-gray-800 bg-gray-900/50 backdrop-blur">
             <div className="flex-1 p-3 text-center border-r border-gray-800">
               <span className="block text-lg font-bold text-white">{restaurant.visits.length}</span>
-              <span className="text-xs text-gray-500 uppercase">Visits</span>
+              <span className="text-xs text-gray-500 uppercase">{language === 'zh' ? '访问' : 'Visits'}</span>
             </div>
             <div className="flex-1 p-3 text-center">
               <span className={`block text-lg font-bold ${getGradeColor(avgGrade)}`}>
                 {avgGrade}
               </span>
-              <span className="text-xs text-gray-500 uppercase">Avg Grade</span>
+              <span className="text-xs text-gray-500 uppercase">{language === 'zh' ? '平均评分' : 'Avg Grade'}</span>
             </div>
           </div>
         </div>
@@ -365,13 +393,13 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
             onClick={() => setActiveTab('timeline')}
             className={`flex-1 py-3 text-sm font-medium transition ${activeTab === 'timeline' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
           >
-            Timeline
+            {language === 'zh' ? '时间线' : 'Timeline'}
           </button>
           <button 
             onClick={() => setActiveTab('info')}
             className={`flex-1 py-3 text-sm font-medium transition ${activeTab === 'info' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
           >
-            Info
+            {language === 'zh' ? '详情' : 'Info'}
           </button>
         </div>
 
@@ -382,20 +410,20 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
           {activeTab === 'timeline' && (
             <>
               <div className="flex justify-between items-center">
-                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Memories</h3>
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">{t('memories')}</h3>
                   <button 
                     onClick={handleShareAsImage} 
                     disabled={isGeneratingShare}
                     className="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-xs bg-blue-900/20 px-2 py-1 rounded transition disabled:opacity-50"
                   >
                     {isGeneratingShare ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />}
-                    Share Card
+                    {language === 'zh' ? '分享卡片' : 'Share Card'}
                   </button>
               </div>
 
               {restaurant.visits.length === 0 ? (
                  <div className="text-center text-gray-500 py-10">
-                   <p>No visits recorded.</p>
+                   <p>{t('noExperiences')}</p>
                  </div>
               ) : (
                 sortedVisits.map((visit, index) => {
@@ -454,7 +482,32 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
                       
                       <div className="p-4">
                         {visit.comment && (
-                          <p className="text-gray-300 text-sm mb-2">"{visit.comment}"</p>
+                          <div className="mb-2">
+                            <p className="text-gray-300 text-sm">
+                              "{showTranslated[visit.id] && translatedComments[visit.id] 
+                                ? translatedComments[visit.id] 
+                                : visit.comment}"
+                            </p>
+                            <button
+                              onClick={() => handleTranslateComment(visit.id, visit.comment!)}
+                              disabled={translatingComments[visit.id]}
+                              className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-500 hover:text-blue-400 transition-colors"
+                            >
+                              {translatingComments[visit.id] ? (
+                                <>
+                                  <Loader2 size={10} className="animate-spin" />
+                                  {t('translating')}
+                                </>
+                              ) : (
+                                <>
+                                  <Languages size={10} />
+                                  {showTranslated[visit.id] && translatedComments[visit.id] 
+                                    ? t('showOriginal')
+                                    : t('translate')}
+                                </>
+                              )}
+                            </button>
+                          </div>
                         )}
                         
                         <div className="flex items-center gap-1 text-gray-500 text-xs">
@@ -473,21 +526,23 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
           {activeTab === 'info' && (
             <div className="space-y-6 animate-fade-in-up">
                <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Location Details</h3>
+                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">
+                   {language === 'zh' ? '位置详情' : 'Location Details'}
+                 </h3>
                  
                  <div className="space-y-4">
                    <div>
-                     <label className="text-xs text-gray-500">Name</label>
+                     <label className="text-xs text-gray-500">{language === 'zh' ? '名称' : 'Name'}</label>
                      <p className="text-white font-medium">{restaurant.name}</p>
                    </div>
                    
                    <div>
-                     <label className="text-xs text-gray-500">Address</label>
+                     <label className="text-xs text-gray-500">{language === 'zh' ? '地址' : 'Address'}</label>
                      <p className="text-white font-medium">{restaurant.address}</p>
                    </div>
 
                    <div>
-                      <label className="text-xs text-gray-500">Coordinates</label>
+                      <label className="text-xs text-gray-500">{language === 'zh' ? '坐标' : 'Coordinates'}</label>
                       <p className="text-gray-400 font-mono text-xs">
                         {restaurant.location.lat.toFixed(5)}, {restaurant.location.lng.toFixed(5)}
                       </p>
@@ -498,7 +553,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
                      className="w-full flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-lg transition border border-gray-600"
                    >
                      <MapPin size={18} />
-                     Open in Google Maps
+                     {language === 'zh' ? '在 Google 地图中打开' : 'Open in Google Maps'}
                      <ExternalLink size={14} className="opacity-70" />
                    </button>
                  </div>
@@ -516,7 +571,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
                 onClick={onAddAnotherVisit}
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg transition"
               >
-                Add Another Visit Here
+                {language === 'zh' ? '在此添加另一个记忆' : 'Add Another Visit Here'}
               </button>
             )}
           </div>
@@ -540,11 +595,11 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
         <div className="flex justify-between border-t border-b border-gray-700 py-3 mb-6">
            <div className="text-center w-1/2 border-r border-gray-700">
              <span className="block text-xl font-bold">{restaurant.visits.length}</span>
-             <span className="text-xs text-gray-500 uppercase tracking-widest">Visits</span>
+             <span className="text-xs text-gray-500 uppercase tracking-widest">{language === 'zh' ? '访问' : 'Visits'}</span>
            </div>
            <div className="text-center w-1/2">
              <span className={`block text-xl font-bold ${getGradeColor(avgGrade)}`}>{avgGrade}</span>
-             <span className="text-xs text-gray-500 uppercase tracking-widest">Score</span>
+             <span className="text-xs text-gray-500 uppercase tracking-widest">{language === 'zh' ? '评分' : 'Score'}</span>
            </div>
         </div>
 
