@@ -48,13 +48,14 @@ export const Tutorial: React.FC<TutorialProps> = ({
   }, [onComplete]);
 
   // Memoize steps array to prevent recreation on every render
+  // Reduced interactionDelay values for faster transitions
   const steps: StepConfig[] = useMemo(() => [
     { id: 'welcome' },
     { id: 'map_overview' },
-    { id: 'search_bar', targetSelector: '[data-tutorial="search-bar"]', requiresClick: true, waitForInteraction: true, interactionDelay: 1500 },
-    { id: 'filter_button', targetSelector: '[data-tutorial="filter-button"]', requiresClick: true, waitForInteraction: true, interactionDelay: 2000 },
-    { id: 'side_menu', targetSelector: '[data-tutorial="menu-button"]', requiresClick: true, waitForInteraction: true, interactionDelay: 1500 },
-    { id: 'map_pill', targetSelector: '[data-tutorial="map-pill"]', requiresClick: true, waitForInteraction: true, interactionDelay: 1500 },
+    { id: 'search_bar', targetSelector: '[data-tutorial="search-bar"]', requiresClick: true, waitForInteraction: true, interactionDelay: 2000 },
+    { id: 'filter_button', targetSelector: '[data-tutorial="filter-button"]', requiresClick: true, waitForInteraction: true, interactionDelay: 2500 },
+    { id: 'side_menu', targetSelector: '[data-tutorial="menu-button"]', requiresClick: true, waitForInteraction: true, interactionDelay: 2500 },
+    { id: 'map_pill', targetSelector: '[data-tutorial="map-pill"]', requiresClick: true, waitForInteraction: true, interactionDelay: 2000 },
     { id: 'map_management' }, // Info about map management inside the modal
     { id: 'map_types' }, // Info about the 3 map types
     { id: 'map_controls', targetSelector: '[data-tutorial="map-controls"]' },
@@ -95,8 +96,20 @@ export const Tutorial: React.FC<TutorialProps> = ({
       if (element) {
         const rect = element.getBoundingClientRect();
         // Store as plain object to avoid DOMRect reference issues
-        // Add extra padding for better visibility and touch targets
-        const padding = 4;
+        // Use element-specific padding for better alignment
+        let padding = 4;
+
+        // Smaller padding for specific elements that need tighter fit
+        if (targetSelector === '[data-tutorial="add-button"]') {
+          padding = 2; // Tight fit for add button
+        } else if (targetSelector === '[data-tutorial="filter-button"]') {
+          padding = 2; // Tight fit for filter button
+        } else if (targetSelector === '[data-tutorial="map-pill"]') {
+          padding = 3; // Slightly tighter for map pill
+        } else if (targetSelector === '[data-tutorial="menu-button"]') {
+          padding = 2; // Tight fit for menu button
+        }
+
         setHighlightRect({
           top: rect.top - padding,
           left: rect.left - padding,
@@ -108,8 +121,8 @@ export const Tutorial: React.FC<TutorialProps> = ({
       }
     };
 
-    // Initial update with small delay to let DOM settle
-    const initialTimer = setTimeout(updateHighlight, 100);
+    // Initial update with minimal delay to let DOM settle - faster transitions
+    const initialTimer = setTimeout(updateHighlight, 50);
 
     // Update on resize/scroll
     window.addEventListener('resize', updateHighlight);
@@ -133,7 +146,7 @@ export const Tutorial: React.FC<TutorialProps> = ({
       setTimeout(() => {
         setCurrentStep(steps[currentStepIndex + 1].id);
         setIsTransitioning(false);
-      }, 200);
+      }, 150); // Faster transition
     }
   }, [currentStepIndex, steps]);
 
@@ -432,8 +445,16 @@ export const Tutorial: React.FC<TutorialProps> = ({
 
   const cardPosition = getCardPosition();
 
-  // Calculate highlight box dimensions with extra padding for touch targets
-  const highlightPadding = 6;
+  // Calculate highlight box dimensions with element-specific padding for touch targets
+  const getHighlightPadding = () => {
+    if (!targetSelector) return 6;
+    if (targetSelector === '[data-tutorial="add-button"]') return 3;
+    if (targetSelector === '[data-tutorial="filter-button"]') return 3;
+    if (targetSelector === '[data-tutorial="menu-button"]') return 3;
+    if (targetSelector === '[data-tutorial="map-pill"]') return 4;
+    return 6;
+  };
+  const highlightPadding = getHighlightPadding();
   const highlightStyle = highlightRect ? {
     top: highlightRect.top - highlightPadding,
     left: highlightRect.left - highlightPadding,
@@ -447,66 +468,69 @@ export const Tutorial: React.FC<TutorialProps> = ({
       style={{ pointerEvents: 'none' }}
     >
       {/* Dark overlay with cutout for highlighted element */}
-      {highlightStyle ? (
-        <>
-          {/* Top overlay */}
+      {/* When isWaitingForInteraction is true, hide overlay so user can see expanded panels */}
+      {!isWaitingForInteraction && (
+        highlightStyle ? (
+          <>
+            {/* Top overlay */}
+            <div
+              className="absolute left-0 right-0 top-0 bg-black/85 transition-opacity duration-200"
+              style={{ height: highlightStyle.top, pointerEvents: 'auto' }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            {/* Bottom overlay */}
+            <div
+              className="absolute left-0 right-0 bottom-0 bg-black/85 transition-opacity duration-200"
+              style={{ top: highlightStyle.top + highlightStyle.height, pointerEvents: 'auto' }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            {/* Left overlay */}
+            <div
+              className="absolute left-0 bg-black/85 transition-opacity duration-200"
+              style={{
+                top: highlightStyle.top,
+                width: highlightStyle.left,
+                height: highlightStyle.height,
+                pointerEvents: 'auto'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            {/* Right overlay */}
+            <div
+              className="absolute right-0 bg-black/85 transition-opacity duration-200"
+              style={{
+                top: highlightStyle.top,
+                left: highlightStyle.left + highlightStyle.width,
+                height: highlightStyle.height,
+                pointerEvents: 'auto'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            {/* Clickable cutout area */}
+            <div
+              className="absolute bg-transparent cursor-pointer"
+              style={{
+                ...highlightStyle,
+                borderRadius: 12,
+                pointerEvents: currentConfig?.requiresClick ? 'auto' : 'none',
+              }}
+              onClick={currentConfig?.requiresClick ? handleHighlightClick : undefined}
+            />
+          </>
+        ) : (
+          /* Full overlay when no highlight */
           <div
-            className="absolute left-0 right-0 top-0 bg-black/85"
-            style={{ height: highlightStyle.top, pointerEvents: 'auto' }}
+            className="absolute inset-0 bg-black/85 transition-opacity duration-300"
+            style={{ pointerEvents: 'auto' }}
             onClick={(e) => e.stopPropagation()}
           />
-          {/* Bottom overlay */}
-          <div
-            className="absolute left-0 right-0 bottom-0 bg-black/85"
-            style={{ top: highlightStyle.top + highlightStyle.height, pointerEvents: 'auto' }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          {/* Left overlay */}
-          <div
-            className="absolute left-0 bg-black/85"
-            style={{
-              top: highlightStyle.top,
-              width: highlightStyle.left,
-              height: highlightStyle.height,
-              pointerEvents: 'auto'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          {/* Right overlay */}
-          <div
-            className="absolute right-0 bg-black/85"
-            style={{
-              top: highlightStyle.top,
-              left: highlightStyle.left + highlightStyle.width,
-              height: highlightStyle.height,
-              pointerEvents: 'auto'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          {/* Clickable cutout area */}
-          <div
-            className="absolute bg-transparent cursor-pointer"
-            style={{
-              ...highlightStyle,
-              borderRadius: 12,
-              pointerEvents: currentConfig?.requiresClick ? 'auto' : 'none',
-            }}
-            onClick={currentConfig?.requiresClick ? handleHighlightClick : undefined}
-          />
-        </>
-      ) : (
-        /* Full overlay when no highlight */
-        <div
-          className="absolute inset-0 bg-black/85 transition-opacity duration-300"
-          style={{ pointerEvents: 'auto' }}
-          onClick={(e) => e.stopPropagation()}
-        />
+        )
       )}
 
-      {/* Highlight border animation */}
-      {highlightStyle && (
+      {/* Highlight border animation - hide during waiting so user can fully see expanded panels */}
+      {highlightStyle && !isWaitingForInteraction && (
         <div
-          className="absolute border-2 border-blue-400 rounded-xl"
+          className="absolute border-2 border-blue-400 rounded-xl transition-opacity duration-200"
           style={{
             ...highlightStyle,
             pointerEvents: 'none',
