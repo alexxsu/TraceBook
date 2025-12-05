@@ -183,36 +183,77 @@ function App() {
     }
   }, [user, userProfile]);
 
-  // Welcome notification - send when user first joins the app
-  const [hasShownWelcome, setHasShownWelcome] = React.useState(false);
+  // Time-based greeting notification - send once per part of day (morning/afternoon/evening/night)
+  const [hasShownGreeting, setHasShownGreeting] = React.useState(false);
   React.useEffect(() => {
-    const sendWelcomeNotification = async () => {
-      if (!user || user.isAnonymous || hasShownWelcome) return;
+    const sendGreetingNotification = async () => {
+      if (!user || user.isAnonymous || hasShownGreeting) return;
       if (!userProfile || userProfile.status !== 'approved') return;
-      
-      // Check localStorage to see if we've already sent a welcome notification
-      const welcomeKey = `welcome_sent_${user.uid}`;
-      const alreadySent = localStorage.getItem(welcomeKey);
-      
+
+      // Get current time info
+      const now = new Date();
+      const hour = now.getHours();
+      const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+      const dateKey = now.toISOString().split('T')[0]; // YYYY-MM-DD
+
+      // Determine time period
+      let timePeriod: 'morning' | 'afternoon' | 'evening' | 'night';
+      let greeting: string;
+      let greetingZh: string;
+
+      if (hour >= 5 && hour < 12) {
+        timePeriod = 'morning';
+        greeting = `Good morning`;
+        greetingZh = '早上好';
+      } else if (hour >= 12 && hour < 17) {
+        timePeriod = 'afternoon';
+        greeting = `Good afternoon`;
+        greetingZh = '下午好';
+      } else if (hour >= 17 && hour < 21) {
+        timePeriod = 'evening';
+        greeting = `Good evening`;
+        greetingZh = '晚上好';
+      } else {
+        timePeriod = 'night';
+        greeting = `Good night`;
+        greetingZh = '晚安';
+      }
+
+      // Check if we've already sent a greeting for this time period today
+      const greetingKey = `greeting_${user.uid}_${dateKey}_${timePeriod}`;
+      const alreadySent = localStorage.getItem(greetingKey);
+
       if (!alreadySent) {
         try {
+          const userName = user.displayName || userProfile?.displayName || 'friend';
+          const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+
+          // Create personalized message with day context
+          let message: string;
+          if (isWeekend) {
+            message = `${greeting}, ${userName}! Happy ${dayOfWeek}! Perfect time to explore and add new memories to your map. 🗺️`;
+          } else {
+            message = `${greeting}, ${userName}! It's ${dayOfWeek}. Ready to discover some new places today? 🌟`;
+          }
+
           await createNotification({
             recipientUid: user.uid,
             type: 'welcome',
-            message: `Welcome to TraceBook, ${user.displayName || 'friend'}! Start exploring and adding your food memories.`
+            message
           });
-          localStorage.setItem(welcomeKey, 'true');
-          setHasShownWelcome(true);
+
+          localStorage.setItem(greetingKey, 'true');
+          setHasShownGreeting(true);
         } catch (error) {
-          console.error('Failed to send welcome notification:', error);
+          console.error('Failed to send greeting notification:', error);
         }
       } else {
-        setHasShownWelcome(true);
+        setHasShownGreeting(true);
       }
     };
 
-    sendWelcomeNotification();
-  }, [user, userProfile, hasShownWelcome, createNotification]);
+    sendGreetingNotification();
+  }, [user, userProfile, hasShownGreeting, createNotification]);
 
   // Menu handlers
   const closeMenu = useCallback(() => {
