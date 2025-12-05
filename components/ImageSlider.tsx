@@ -1,10 +1,105 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Image as ImageIcon } from 'lucide-react';
 
 interface ImageSliderProps {
   photos: string[];
 }
+
+// Individual image with loading state
+const SliderImage: React.FC<{ src: string; alt: string; className?: string }> = ({ src, alt, className = '' }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isError, setIsError] = useState(false);
+
+  useEffect(() => {
+    setIsLoaded(false);
+    setIsError(false);
+  }, [src]);
+
+  return (
+    <div className={`relative ${className}`}>
+      {/* Loading placeholder */}
+      {!isLoaded && !isError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-8 h-8 rounded-full border-2 border-gray-600 border-t-blue-500 animate-spin" />
+          </div>
+          {/* Shimmer effect */}
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+          </div>
+        </div>
+      )}
+      
+      {/* Error state */}
+      {isError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
+          <div className="flex flex-col items-center gap-2 text-gray-500">
+            <ImageIcon size={24} />
+            <span className="text-xs">Failed to load</span>
+          </div>
+        </div>
+      )}
+
+      {/* Actual image */}
+      <img 
+        src={src}
+        alt={alt}
+        className={`w-full h-full object-cover select-none pointer-events-none transition-opacity duration-300 ${
+          isLoaded ? 'opacity-100' : 'opacity-0'
+        }`}
+        loading="lazy"
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setIsError(true)}
+      />
+    </div>
+  );
+};
+
+// Lightbox image with loading state
+const LightboxImage: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isError, setIsError] = useState(false);
+
+  useEffect(() => {
+    setIsLoaded(false);
+    setIsError(false);
+  }, [src]);
+
+  return (
+    <div className="w-full h-full flex items-center justify-center p-2 md:p-12 relative">
+      {/* Loading state */}
+      {!isLoaded && !isError && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 rounded-full border-3 border-gray-700 border-t-blue-500 animate-spin" />
+            <span className="text-gray-400 text-sm">Loading...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error state */}
+      {isError && (
+        <div className="flex flex-col items-center gap-3 text-gray-500">
+          <ImageIcon size={48} />
+          <span>Failed to load image</span>
+        </div>
+      )}
+
+      {/* Image */}
+      <img 
+        src={src}
+        alt={alt}
+        className={`max-w-full max-h-full object-contain shadow-2xl select-none cursor-zoom-out transition-opacity duration-300 ${
+          isLoaded ? 'opacity-100' : 'opacity-0'
+        }`}
+        loading="lazy"
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setIsError(true)}
+      />
+    </div>
+  );
+};
 
 const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
   const [index, setIndex] = useState(0);
@@ -41,7 +136,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
     setTimeout(() => {
       setIsLightboxOpen(false);
       setIsClosing(false);
-    }, 200); // Duration matches CSS scaleOut animation
+    }, 200);
   };
 
   // Keyboard navigation for lightbox
@@ -60,8 +155,7 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-    // Fixed: Added handleLightboxClose to dependencies
-  }, [isLightboxOpen, photos.length, index, handleLightboxClose]);
+  }, [isLightboxOpen, photos.length, index]);
 
   // Touch Handlers
   const onTouchStart = (e: React.TouchEvent) => {
@@ -123,12 +217,11 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
           }}
         >
           {photos.map((photo, i) => (
-            <img 
+            <SliderImage 
               key={i}
               src={photo} 
-              className="w-full h-full object-cover flex-shrink-0 select-none pointer-events-none" 
-              alt={`Food ${i + 1}`} 
-              loading="lazy"
+              alt={`Food ${i + 1}`}
+              className="w-full h-full flex-shrink-0"
             />
           ))}
         </div>
@@ -210,13 +303,8 @@ const ImageSlider: React.FC<ImageSliderProps> = ({ photos }) => {
               }}
             >
               {photos.map((photo, i) => (
-                <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center p-2 md:p-12">
-                   <img 
-                     src={photo} 
-                     className="max-w-full max-h-full object-contain shadow-2xl select-none cursor-zoom-out"
-                     alt={`Full view ${i + 1}`}
-                     loading="lazy"
-                   />
+                <div key={i} className="w-full h-full flex-shrink-0">
+                  <LightboxImage src={photo} alt={`Full view ${i + 1}`} />
                 </div>
               ))}
             </div>

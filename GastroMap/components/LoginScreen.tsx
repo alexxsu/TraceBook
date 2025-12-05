@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Mail, Lock, User, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mail, Lock, User, Eye, EyeOff, Loader2, ArrowLeft, ChevronDown, Sparkles } from 'lucide-react';
 import { useLanguage } from '../hooks/useLanguage';
 
 interface LoginScreenProps {
@@ -153,14 +153,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             </button>
           </div>
 
-          {/* Section 3: Guest Login */}
-          <div className="pt-4 border-t border-gray-700">
+          {/* Section 3: Guest Login with Animated Prompt */}
+          <div className="pt-4 border-t border-gray-700 relative">
+            {/* Animated "Try Demo" indicator */}
+            <div className="flex flex-col items-center mb-2">
+              <div className="flex items-center gap-1 text-emerald-400 text-xs animate-bounce">
+                <Sparkles size={14} />
+                <span>{language === 'zh' ? '新用户？先试试看！' : 'New here? Try it first!'}</span>
+                <Sparkles size={14} />
+              </div>
+              <ChevronDown size={18} className="text-emerald-400 animate-bounce" style={{ animationDelay: '0.1s' }} />
+            </div>
             <button
               onClick={onGuestLogin}
-              className="w-full text-sm text-gray-400 hover:text-white transition py-2"
+              className="w-full flex items-center justify-center gap-2 text-sm text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 transition py-3 px-4 rounded-xl font-medium"
             >
-              {language === 'zh' ? '以游客身份浏览' : 'Continue as guest to view'}
+              <span>{language === 'zh' ? '👀 以游客身份体验演示' : '👀 Explore demo as guest'}</span>
             </button>
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              {language === 'zh' ? '无需登录，浏览示例数据' : 'No login required, browse sample data'}
+            </p>
           </div>
         </div>
       </div>

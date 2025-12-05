@@ -164,7 +164,16 @@ function App() {
     if (viewState === ViewState.MAP_MANAGEMENT) {
       setViewState(ViewState.MAP);
     }
-  }, [viewState]);
+    // Close compact card
+    setIsCompactCardOpen(false);
+    // Close side menu
+    setIsMenuOpen(false);
+    setIsMenuClosing(false);
+    setIsMenuAnimatingIn(false);
+    // Close filter and search
+    closeFilter();
+    closeSearch();
+  }, [viewState, closeFilter, closeSearch]);
 
   const handleTutorialSkip = useCallback(() => {
     setIsTutorialActive(false);
@@ -172,7 +181,16 @@ function App() {
     if (viewState === ViewState.MAP_MANAGEMENT) {
       setViewState(ViewState.MAP);
     }
-  }, [viewState]);
+    // Close compact card
+    setIsCompactCardOpen(false);
+    // Close side menu
+    setIsMenuOpen(false);
+    setIsMenuClosing(false);
+    setIsMenuAnimatingIn(false);
+    // Close filter and search
+    closeFilter();
+    closeSearch();
+  }, [viewState, closeFilter, closeSearch]);
 
   // Open map management for tutorial
   const handleOpenMapManagementForTutorial = useCallback(() => {
@@ -686,9 +704,9 @@ function App() {
         />
       )}
 
-      {/* Floating Tutorial Button for Guest Users - Always visible */}
+      {/* Floating Tutorial Button for Guest Users - Above map controls, right aligned */}
       {user?.isAnonymous && !isTutorialActive && showMapView && (
-        <div className="fixed bottom-24 left-4 z-30">
+        <div className="fixed bottom-52 right-4 z-30">
           <TutorialButton onClick={handleStartTutorial} isGuestUser={true} />
         </div>
       )}
@@ -698,6 +716,27 @@ function App() {
         isActive={isTutorialActive}
         onClose={handleTutorialComplete}
         onOpenMapManagement={handleOpenMapManagementForTutorial}
+        onCloseMapManagement={() => {
+          if (viewState === ViewState.MAP_MANAGEMENT) {
+            setViewState(ViewState.MAP);
+          }
+          // Close the compact card if open
+          setIsCompactCardOpen(false);
+          // Close side menu if open
+          if (isMenuOpen) {
+            setIsMenuClosing(true);
+            setTimeout(() => {
+              setIsMenuOpen(false);
+              setIsMenuClosing(false);
+              setIsMenuAnimatingIn(false);
+            }, 300);
+          } else {
+            setIsMenuAnimatingIn(false);
+          }
+          // Close filter and search
+          closeFilter();
+          closeSearch();
+        }}
         isGuestUser={user?.isAnonymous || false}
       />
     </div>

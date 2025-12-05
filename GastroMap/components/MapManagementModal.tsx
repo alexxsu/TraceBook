@@ -198,6 +198,15 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
     const getTypeStyles = () => {
       switch (type) {
         case 'default':
+          // Check if it's a public map (like demo map) vs private default map
+          if (map.visibility === 'public') {
+            return {
+              icon: <Globe size={18} className="text-green-400" />,
+              bgColor: 'bg-green-500/20',
+              activeBg: 'bg-green-600/20 border border-green-500/50',
+              label: language === 'zh' ? '公开' : 'Public'
+            };
+          }
           return {
             icon: <Lock size={18} className="text-blue-400" />,
             bgColor: 'bg-blue-500/20',
@@ -483,6 +492,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
       {/* Modal */}
       <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 pointer-events-none">
         <div 
+          data-modal="map-management"
           className={`bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md pointer-events-auto transform transition-all duration-200 ${isClosing ? 'scale-95 opacity-0' : 'animate-scale-in'}`}
           onClick={(e) => e.stopPropagation()}
         >

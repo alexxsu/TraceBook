@@ -195,6 +195,7 @@ export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({
           {/* Manage Maps Button - only for non-anonymous users */}
           {!user?.isAnonymous && (
             <button
+              data-tutorial="manage-maps-button"
               onClick={() => {
                 setIsCompactCardOpen(false);
                 onManageMaps();

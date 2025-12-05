@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gourmetmaps-v5';
+const CACHE_NAME = 'tracebook-v1';
 const urlsToCache = [
   '/',
   '/index.html',
