@@ -578,65 +578,174 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
         )}
       </div>
 
-      {/* Hidden Share Receipt Render */}
-      <div 
+      {/* Hidden Share Card Render - Redesigned for Viral Marketing */}
+      <div
         ref={shareRef}
-        className="fixed top-0 left-[-9999px] w-[400px] bg-gray-900 text-white p-6 border border-gray-800"
+        className="fixed top-0 left-[-9999px] w-[400px] text-white overflow-hidden"
+        style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
       >
-        <div className="text-center mb-6">
-           <h2 className="text-xl font-bold text-white mb-1">TraceBook</h2>
-           <div className="w-48 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mb-4 rounded-full shadow-sm"></div>
-           <h1 className="text-2xl font-black text-blue-400 mb-2 px-4 leading-tight">{restaurant.name}</h1>
-           <p className="text-gray-400 text-xs flex items-center justify-center gap-1">
-             <MapPin size={12} /> {restaurant.address}
-           </p>
-        </div>
+        {/* Gradient Background */}
+        <div className="relative" style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}>
 
-        <div className="flex justify-between border-t border-b border-gray-700 py-3 mb-6">
-           <div className="text-center w-1/2 border-r border-gray-700">
-             <span className="block text-xl font-bold">{restaurant.visits.length}</span>
-             <span className="text-xs text-gray-500 uppercase tracking-widest">{language === 'zh' ? '访问' : 'Visits'}</span>
-           </div>
-           <div className="text-center w-1/2">
-             <span className={`block text-xl font-bold ${getGradeColor(avgGrade)}`}>{avgGrade}</span>
-             <span className="text-xs text-gray-500 uppercase tracking-widest">{language === 'zh' ? '评分' : 'Score'}</span>
-           </div>
-        </div>
+          {/* Hero Section with Featured Photo */}
+          <div className="relative h-[280px] overflow-hidden">
+            {/* Background Photo with Overlay */}
+            {sortedVisits[0]?.photoDataUrl && (
+              <div
+                className="absolute inset-0 bg-cover bg-center"
+                style={{
+                  backgroundImage: `url(${shareBase64Map[sortedVisits[0].photoDataUrl] || sortedVisits[0].photoDataUrl})`,
+                  filter: 'brightness(0.6)'
+                }}
+              />
+            )}
 
-        <div className="space-y-6">
-           {sortedVisits.map((visit, i) => (
-             <div key={i} className="flex gap-4">
-                <div className="relative flex flex-col items-center">
-                   <div className="w-3 h-3 rounded-full bg-gray-600 z-10"></div>
-                   {i !== sortedVisits.length - 1 && <div className="w-0.5 h-full bg-gray-800 absolute top-3"></div>}
+            {/* Gradient Overlay */}
+            <div
+              className="absolute inset-0"
+              style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(26,26,46,0.95) 100%)' }}
+            />
+
+            {/* Content Overlay */}
+            <div className="relative z-10 h-full flex flex-col justify-end p-6 pb-8">
+              {/* App Logo & Branding */}
+              <div className="absolute top-4 left-4 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                  <span className="text-white font-bold text-sm">TB</span>
                 </div>
-                
-                <div className="flex-1 pb-4">
-                   <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <span className="text-xs text-gray-500 font-mono block">{formatDate(visit.date)}</span>
-                        <div className="flex items-center gap-1 mt-0.5">
-                           {visit.creatorPhotoURL && <img src={visit.creatorPhotoURL} className="w-3 h-3 rounded-full" />}
-                           <span className="text-xs text-gray-300 font-bold">{visit.creatorName}</span>
-                        </div>
+                <span className="text-white/90 font-semibold text-sm tracking-wide">TraceBook</span>
+              </div>
+
+              {/* Grade Badge */}
+              <div
+                className="absolute top-4 right-4 w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
+                style={{ background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)' }}
+              >
+                <span className={`text-3xl font-black ${getGradeColor(avgGrade)}`}>{avgGrade}</span>
+              </div>
+
+              {/* Restaurant Name & Location */}
+              <h1 className="text-2xl font-bold text-white leading-tight mb-2" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+                {restaurant.name}
+              </h1>
+              <div className="flex items-center gap-1.5 text-white/70 text-sm">
+                <MapPin size={14} className="flex-shrink-0" />
+                <span className="truncate">{restaurant.address}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="flex mx-6 -mt-4 relative z-20 rounded-xl overflow-hidden shadow-lg" style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.15)' }}>
+            <div className="flex-1 py-4 text-center border-r" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+              <span className="block text-2xl font-bold text-white">{restaurant.visits.length}</span>
+              <span className="text-xs text-white/60 uppercase tracking-wider">{language === 'zh' ? '次访问' : 'Visits'}</span>
+            </div>
+            <div className="flex-1 py-4 text-center">
+              <span className={`block text-2xl font-bold ${getGradeColor(avgGrade)}`}>{avgGrade}</span>
+              <span className="text-xs text-white/60 uppercase tracking-wider">{language === 'zh' ? '评分' : 'Rating'}</span>
+            </div>
+          </div>
+
+          {/* Latest Experiences Preview */}
+          <div className="p-6 pt-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white/80 uppercase tracking-wider">{language === 'zh' ? '最新体验' : 'Latest Experiences'}</h3>
+              <span className="text-xs text-white/50">{sortedVisits.length} {language === 'zh' ? '条记录' : 'memories'}</span>
+            </div>
+
+            {/* Experience Cards - Show max 2 */}
+            <div className="space-y-3">
+              {sortedVisits.slice(0, 2).map((visit, i) => (
+                <div
+                  key={i}
+                  className="flex gap-3 p-3 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  {/* Photo Thumbnail */}
+                  <div
+                    className="w-16 h-16 rounded-lg bg-cover bg-center flex-shrink-0"
+                    style={{
+                      backgroundImage: `url(${shareBase64Map[visit.photoDataUrl] || visit.photoDataUrl})`,
+                      border: '1px solid rgba(255,255,255,0.1)'
+                    }}
+                  />
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between mb-1">
+                      <div className="flex items-center gap-1.5">
+                        {visit.creatorPhotoURL && (
+                          <img
+                            src={visit.creatorPhotoURL}
+                            className="w-4 h-4 rounded-full border border-white/20"
+                          />
+                        )}
+                        <span className="text-xs text-white/80 font-medium truncate">{visit.creatorName || 'Anonymous'}</span>
                       </div>
-                      <span className={`text-lg font-bold ${getGradeColor(visit.rating)}`}>{visit.rating}</span>
-                   </div>
+                      <span className={`text-sm font-bold ${getGradeColor(visit.rating)}`}>{visit.rating}</span>
+                    </div>
 
-                   {/* Use Background Image to prevent stretching and ensure cover fit */}
-                   <div className="rounded-lg overflow-hidden mb-2 border border-gray-700 h-64 bg-gray-800">
-                     <div 
-                        className="w-full h-full bg-cover bg-center"
-                        style={{ 
-                          backgroundImage: `url(${shareBase64Map[visit.photoDataUrl] || visit.photoDataUrl})` 
-                        }}
-                     ></div>
-                   </div>
-                   
-                   {visit.comment && <p className="text-sm text-gray-300 italic mb-1">"{visit.comment}"</p>}
+                    {visit.comment && (
+                      <p className="text-xs text-white/60 line-clamp-2 leading-relaxed">"{visit.comment}"</p>
+                    )}
+
+                    <span className="text-[10px] text-white/40 mt-1 block">{formatDate(visit.date)}</span>
+                  </div>
                 </div>
-             </div>
-           ))}
+              ))}
+            </div>
+
+            {/* More indicator if there are more visits */}
+            {sortedVisits.length > 2 && (
+              <div className="text-center mt-3">
+                <span className="text-xs text-white/50">+{sortedVisits.length - 2} {language === 'zh' ? '更多体验' : 'more experiences'}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Call to Action with QR Code */}
+          <div
+            className="mx-6 mb-4 p-4 rounded-xl"
+            style={{ background: 'linear-gradient(135deg, rgba(102,126,234,0.25) 0%, rgba(118,75,162,0.25) 100%)', border: '1px solid rgba(102,126,234,0.3)' }}
+          >
+            <div className="flex items-center gap-4">
+              {/* QR Code */}
+              <div className="flex-shrink-0">
+                <div className="w-16 h-16 bg-white rounded-lg p-1 flex items-center justify-center">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=56x56&data=https://TraceMap.ca&bgcolor=ffffff&color=000000&margin=0"
+                    alt="QR Code"
+                    className="w-14 h-14"
+                    crossOrigin="anonymous"
+                  />
+                </div>
+              </div>
+              {/* Text Content */}
+              <div className="flex-1 text-left">
+                <p className="text-sm text-white font-semibold mb-1">
+                  {language === 'zh' ? '扫码加入 TraceBook' : 'Scan to join TraceBook'}
+                </p>
+                <p className="text-xs text-white/70 leading-relaxed">
+                  {language === 'zh'
+                    ? '发现美食，分享体验'
+                    : 'Discover great food, share experiences'}
+                </p>
+                <p className="text-[10px] text-white/50 mt-1 font-medium">TraceMap.ca</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Branding */}
+          <div className="px-6 pb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                <span className="text-white font-bold text-[10px]">TB</span>
+              </div>
+              <span className="text-white/60 text-xs font-medium">TraceMap.ca</span>
+            </div>
+            <span className="text-[10px] text-white/40">{language === 'zh' ? '记录美好体验' : 'Map Your Memories'}</span>
+          </div>
         </div>
       </div>
     </>

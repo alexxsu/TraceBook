@@ -86,10 +86,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   };
 
   return (
-    <div className="w-full bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500">
+    <div data-component="header-bar" className="w-full bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500">
       <div className="flex items-center gap-2 relative min-h-[40px]">
         {/* Hamburger Menu Button */}
         <button
+          data-tutorial="menu-button"
           onClick={(e) => { e.stopPropagation(); onMenuToggle(); }}
           className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors duration-200 flex-shrink-0"
         >
@@ -99,6 +100,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         {/* Logo/Title - clickable to trigger search */}
         {!showSearchInput && (
           <div
+            data-tutorial="search-bar"
             onClick={() => setIsSearchFocused(true)}
             className="flex-1 flex items-center gap-2 px-1 text-white cursor-pointer hover:opacity-80 transition-opacity duration-200 animate-scale-in"
           >
@@ -109,12 +111,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         {/* Search Input - appears when search is active */}
         {showSearchInput && (
-          <div className={`flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 h-[36px] ${isSearchClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+          <div data-tutorial="search" className={`flex-1 flex items-center bg-gray-700/50 rounded-lg px-2 h-[36px] ${isSearchClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
             <Search size={14} className="text-gray-400 mr-2 flex-shrink-0" />
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search your experiences..."
+              placeholder={t('searchExperiences')}
               className="bg-transparent border-none focus:outline-none text-sm text-white w-full placeholder-gray-500"
               value={searchQuery}
               onFocus={() => setIsSearchFocused(true)}
@@ -144,6 +146,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             </button>
             {/* Filter Button */}
             <button
+              data-tutorial="filter-button"
               onClick={(e) => { e.stopPropagation(); onFilterToggle(); }}
               className={`p-1.5 hover:bg-gray-700 rounded-lg transition-colors duration-200 relative ${
                 selectedGrades.length < GRADES.length || isFilterOpen ? 'text-blue-400' : 'text-gray-400 hover:text-white'
@@ -229,8 +232,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               ))}
             </div>
             <div className="border-t border-gray-700 mt-2 pt-2 flex justify-between text-xs px-1">
-              <button onClick={(e) => { e.stopPropagation(); onSelectAllGrades(); }} className="text-blue-400 hover:text-blue-300">{language === 'zh' ? '全选' : 'Select All'}</button>
-              <button onClick={(e) => { e.stopPropagation(); onClearAllGrades(); }} className="text-gray-500 hover:text-gray-400">{language === 'zh' ? '清除' : 'Clear All'}</button>
+              <button onClick={(e) => { e.stopPropagation(); onSelectAllGrades(); }} className="text-blue-400 hover:text-blue-300">{t('selectAll')}</button>
+              <button onClick={(e) => { e.stopPropagation(); onClearAllGrades(); }} className="text-gray-500 hover:text-gray-400">{t('clearAll')}</button>
             </div>
           </div>
         </>

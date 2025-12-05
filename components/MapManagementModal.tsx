@@ -492,6 +492,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
       {/* Modal */}
       <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 pointer-events-none">
         <div 
+          data-modal="map-management"
           className={`bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md pointer-events-auto transform transition-all duration-200 ${isClosing ? 'scale-95 opacity-0' : 'animate-scale-in'}`}
           onClick={(e) => e.stopPropagation()}
         >

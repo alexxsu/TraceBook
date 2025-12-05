@@ -86,7 +86,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   };
 
   return (
-    <div className="w-full bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500">
+    <div data-component="header-bar" className="w-full bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500">
       <div className="flex items-center gap-2 relative min-h-[40px]">
         {/* Hamburger Menu Button */}
         <button
