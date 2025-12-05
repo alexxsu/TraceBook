@@ -13,7 +13,7 @@ interface SiteManagementModalProps {
   onClose: () => void;
 }
 
-type ManagementView = 'menu' | 'users';
+type ManagementView = 'menu' | 'users' | 'userDetail';
 
 export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
   onClose
@@ -27,6 +27,7 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserWithId | null>(null);
 
   const handleClose = () => {
     setIsClosing(true);
@@ -46,7 +47,22 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
     setTransitionDirection('back');
     setIsViewTransitioning(true);
     setTimeout(() => {
-      setCurrentView('menu');
+      if (currentView === 'userDetail') {
+        setCurrentView('users');
+        setSelectedUser(null);
+      } else {
+        setCurrentView('menu');
+      }
+      setIsViewTransitioning(false);
+    }, 150);
+  };
+
+  const navigateToUserDetail = (user: UserWithId) => {
+    setSelectedUser(user);
+    setTransitionDirection('forward');
+    setIsViewTransitioning(true);
+    setTimeout(() => {
+      setCurrentView('userDetail');
       setIsViewTransitioning(false);
     }, 150);
   };
@@ -139,7 +155,7 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
     }
   };
 
-  const handleDeleteUser = async (userId: string, email: string) => {
+  const handleDeleteUser = async (userId: string) => {
     if (!window.confirm(t('confirmDeleteUser'))) {
       return;
     }
@@ -148,6 +164,9 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
       const userRef = doc(db, 'users', userId);
       await deleteDoc(userRef);
       setUsers(prev => prev.filter(u => u.id !== userId));
+      // Navigate back to users list after deletion
+      setSelectedUser(null);
+      setCurrentView('users');
     } catch (error) {
       console.error('Error deleting user:', error);
       alert(t('saveFailed'));
@@ -188,6 +207,7 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
               <h2 className="text-lg font-semibold text-white">
                 {currentView === 'menu' && t('siteManagement')}
                 {currentView === 'users' && t('userManagement')}
+                {currentView === 'userDetail' && (selectedUser?.displayName || selectedUser?.email || t('userDetails'))}
               </h2>
             </div>
           </div>
@@ -336,9 +356,10 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
                     ) : (
                       <div className="space-y-2">
                         {approvedUsers.map((user) => (
-                          <div 
+                          <button
                             key={user.id}
-                            className="flex items-center justify-between p-3 bg-gray-700/50 border border-gray-600 rounded-xl"
+                            onClick={() => navigateToUserDetail(user)}
+                            className="w-full flex items-center justify-between p-3 bg-gray-700/50 hover:bg-gray-700 border border-gray-600 rounded-xl transition group text-left"
                           >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
@@ -354,20 +375,8 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
                               <p className="text-xs text-gray-400 truncate">{user.email}</p>
                               <p className="text-xs text-gray-500">{t('joined')} {formatDate(user.createdAt)}</p>
                             </div>
-                            <div className="flex items-center gap-2 ml-3">
-                              {actionLoading === user.id ? (
-                                <Loader2 size={18} className="animate-spin text-gray-400" />
-                              ) : (
-                                <button
-                                  onClick={() => handleDeleteUser(user.id, user.email)}
-                                  className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition"
-                                  title={t('delete')}
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              )}
-                            </div>
-                          </div>
+                            <ChevronRight size={18} className="text-gray-500 group-hover:text-white transition ml-2" />
+                          </button>
                         ))}
                       </div>
                     )}
@@ -381,6 +390,95 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* User Detail View */}
+          {currentView === 'userDetail' && selectedUser && (
+            <div className={`p-4 transition-all duration-150 ${
+              isViewTransitioning
+                ? transitionDirection === 'forward'
+                  ? 'opacity-0 translate-x-4'
+                  : 'opacity-0 -translate-x-4'
+                : 'opacity-100 translate-x-0'
+            }`}>
+              <div className="flex flex-col items-center">
+                {/* Profile Picture */}
+                <div className="mb-6">
+                  {selectedUser.photoURL ? (
+                    <img
+                      src={selectedUser.photoURL}
+                      alt={selectedUser.displayName || 'User'}
+                      className="w-24 h-24 rounded-full object-cover border-4 border-gray-600"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-gray-700 border-4 border-gray-600 flex items-center justify-center">
+                      <Users size={40} className="text-gray-500" />
+                    </div>
+                  )}
+                </div>
+
+                {/* User Info */}
+                <div className="w-full space-y-4">
+                  {/* Display Name */}
+                  <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{t('displayName')}</p>
+                    <p className="text-white font-medium">{selectedUser.displayName || '-'}</p>
+                  </div>
+
+                  {/* Email */}
+                  <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{t('email')}</p>
+                    <div className="flex items-center gap-2">
+                      <Mail size={16} className="text-gray-400" />
+                      <p className="text-white">{selectedUser.email}</p>
+                    </div>
+                  </div>
+
+                  {/* Role */}
+                  <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{t('role')}</p>
+                    <div className="flex items-center gap-2">
+                      {selectedUser.role === 'admin' ? (
+                        <>
+                          <Shield size={16} className="text-purple-400" />
+                          <p className="text-purple-300 font-medium">{t('admin')}</p>
+                        </>
+                      ) : (
+                        <>
+                          <Users size={16} className="text-gray-400" />
+                          <p className="text-white">{t('user')}</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Joined Date */}
+                  <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{t('joined')}</p>
+                    <div className="flex items-center gap-2">
+                      <Clock size={16} className="text-gray-400" />
+                      <p className="text-white">{formatDate(selectedUser.createdAt)}</p>
+                    </div>
+                  </div>
+
+                  {/* Delete Button */}
+                  <div className="pt-4">
+                    <button
+                      onClick={() => handleDeleteUser(selectedUser.id)}
+                      disabled={actionLoading === selectedUser.id}
+                      className="w-full flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 font-medium py-3 px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {actionLoading === selectedUser.id ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={18} />
+                      )}
+                      {t('deleteUser')}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
