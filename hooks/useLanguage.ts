@@ -81,8 +81,8 @@ const translations = {
     // Side Menu
     mapManagement: 'Map Management',
     manageMaps: 'Manage your maps',
-    statistics: 'Statistics',
-    viewStats: 'View your stats',
+    statistics: 'Map Statistics',
+    viewStats: 'View your map stats',
     about: 'About',
     howItWorks: 'How TraceBook works',
     siteManagement: 'Site Management',
@@ -455,8 +455,8 @@ const translations = {
     // Side Menu
     mapManagement: '地图管理',
     manageMaps: '管理你的地图',
-    statistics: '统计数据',
-    viewStats: '查看统计',
+    statistics: '地图统计',
+    viewStats: '查看地图统计',
     about: '关于',
     howItWorks: 'TraceBook 使用指南',
     siteManagement: '站点管理',

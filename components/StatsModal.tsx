@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { X, MapPin, User as UserIcon, Filter } from 'lucide-react';
+import { X, MapPin, User as UserIcon, Filter, ChevronDown } from 'lucide-react';
 import { Place, Visit } from '../types';
 import { GRADES, getGradeColor, getGradeDescription } from '../utils/rating';
 import ImageSlider from './ImageSlider';
@@ -23,6 +23,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ places, onClose }) => {
   const [selectedYear, setSelectedYear] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [isFilterClosing, setIsFilterClosing] = useState(false);
+  const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>({});
   
   // 1. Flatten all visits into a single array with restaurant metadata
   const allVisits: FlattenedVisit[] = useMemo(() => {
@@ -91,7 +92,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ places, onClose }) => {
   const handleClose = () => {
     if (isClosing) return;
     setIsClosing(true);
-    setTimeout(onClose, 200);
+    setTimeout(onClose, 250);
   };
 
   const toggleFilter = () => {
@@ -104,6 +105,13 @@ const StatsModal: React.FC<StatsModalProps> = ({ places, onClose }) => {
     } else {
       setShowFilters(true);
     }
+  };
+
+  const toggleGradeExpand = (grade: string) => {
+    setExpandedGrades(prev => ({
+      ...prev,
+      [grade]: !prev[grade]
+    }));
   };
 
   const toggleRating = (rating: string) => {
@@ -126,22 +134,28 @@ const StatsModal: React.FC<StatsModalProps> = ({ places, onClose }) => {
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 transition-opacity duration-200 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 transition-opacity duration-250 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
       onClick={handleClose}
     >
       <div
-        className={`bg-gray-900 w-full max-w-4xl rounded-3xl border border-gray-700/50 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
-        style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' }}
+        className={`bg-gray-900 w-full max-w-4xl rounded-3xl border border-gray-700/50 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-all duration-250 ease-out ${isClosing ? 'opacity-0 scale-95 translate-y-4' : 'opacity-100 scale-100 translate-y-0'}`}
+        style={{ 
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)',
+          animation: !isClosing ? 'scaleIn 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards' : 'none',
+          WebkitAnimation: !isClosing ? 'scaleIn 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards' : 'none',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         
-        <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            📊 {t('statistics')}
-            <span className="text-gray-500 text-sm font-normal">
-              ({filteredVisits.length} {t('experiences')})
+        <div className="p-4 border-b border-gray-700 flex justify-between items-start bg-gray-900/50">
+          <div className="flex flex-col">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              📊 {t('statistics')}
+            </h2>
+            <span className="text-gray-500 text-sm">
+              {filteredVisits.length} {t('experiences')}
             </span>
-          </h2>
+          </div>
           <div className="flex items-center gap-2">
             <button 
               onClick={toggleFilter}
@@ -230,77 +244,112 @@ const StatsModal: React.FC<StatsModalProps> = ({ places, onClose }) => {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-8 bg-gray-900/50">
+        <div 
+          className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900/50"
+          style={{ scrollbarGutter: 'stable' }}
+        >
           
           {GRADES.map((grade, gradeIndex) => {
             const visits = visitsByRating[grade];
             if (visits.length === 0) return null;
+            
+            const isExpanded = expandedGrades[grade] ?? false;
 
             return (
               <div 
                 key={grade} 
-                className="space-y-4 animate-fade-in-up"
-                style={{ animationDelay: `${gradeIndex * 100}ms` }}
+                className="bg-gray-800/50 rounded-xl border border-gray-700/50 overflow-hidden"
               >
-                <div className="flex items-center gap-4 border-b border-gray-700 pb-2">
-                  <div className={`text-4xl font-black ${getGradeColor(grade)} w-16 text-center`}>
-                    {grade}
+                {/* Collapsible Header */}
+                <button
+                  onClick={() => toggleGradeExpand(grade)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-gray-700/30 transition-colors duration-200"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`text-3xl font-black ${getGradeColor(grade)} w-12 text-center`}>
+                      {grade}
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <span className={`font-bold text-base ${getGradeColor(grade)}`}>
+                        {getTranslatedGradeDesc(grade)}
+                      </span>
+                      <span className="text-gray-400 text-xs font-medium uppercase tracking-widest">
+                        {visits.length} {t('experiences')}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-col justify-center">
-                    <span className={`font-bold text-lg ${getGradeColor(grade)}`}>
-                      {getTranslatedGradeDesc(grade)}
-                    </span>
-                    <span className="text-gray-400 text-xs font-medium uppercase tracking-widest mt-0.5">
-                      {visits.length} {t('experiences')}
-                    </span>
-                  </div>
-                </div>
+                  <ChevronDown 
+                    size={20} 
+                    className="text-gray-400"
+                    style={{
+                      transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                      WebkitTransform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+                      WebkitTransition: '-webkit-transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+                    }}
+                  />
+                </button>
+                
+                {/* Collapsible Content */}
+                <div 
+                  className="overflow-hidden"
+                  style={{
+                    maxHeight: isExpanded ? '2000px' : '0px',
+                    opacity: isExpanded ? 1 : 0,
+                    transition: isExpanded 
+                      ? 'max-height 400ms cubic-bezier(0.4, 0, 0.2, 1), opacity 300ms ease-out'
+                      : 'max-height 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out',
+                    WebkitTransition: isExpanded 
+                      ? 'max-height 400ms cubic-bezier(0.4, 0, 0.2, 1), opacity 300ms ease-out'
+                      : 'max-height 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out',
+                  }}
+                >
+                  <div className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {visits.map(visit => {
+                       const photos = visit.photos && visit.photos.length > 0 ? visit.photos : [visit.photoDataUrl];
+                       
+                       return (
+                         <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm flex flex-col">
+                           {/* Reusable Image Slider */}
+                           <div className="relative">
+                              <ImageSlider photos={photos} />
+                              <div className="absolute bottom-2 left-2 z-10 bg-black/60 backdrop-blur-md pl-1 pr-2 py-0.5 rounded-full flex items-center gap-1.5 max-w-[85%] border border-white/10 pointer-events-none">
+                                {visit.creatorPhotoURL ? (
+                                   <img src={visit.creatorPhotoURL} alt="User" className="w-4 h-4 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-4 h-4 rounded-full bg-gray-600 flex items-center justify-center">
+                                    <UserIcon size={8} className="text-gray-300" />
+                                  </div>
+                                )}
+                                <span className="text-[10px] text-white font-medium truncate">
+                                  {visit.creatorName}
+                                </span>
+                              </div>
+                           </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {visits.map(visit => {
-                     const photos = visit.photos && visit.photos.length > 0 ? visit.photos : [visit.photoDataUrl];
-                     
-                     return (
-                       <div key={visit.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-sm flex flex-col">
-                         {/* Reusable Image Slider */}
-                         <div className="relative">
-                            <ImageSlider photos={photos} />
-                            <div className="absolute bottom-2 left-2 z-10 bg-black/60 backdrop-blur-md pl-1 pr-2 py-0.5 rounded-full flex items-center gap-1.5 max-w-[85%] border border-white/10 pointer-events-none">
-                              {visit.creatorPhotoURL ? (
-                                 <img src={visit.creatorPhotoURL} alt="User" className="w-4 h-4 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-4 h-4 rounded-full bg-gray-600 flex items-center justify-center">
-                                  <UserIcon size={8} className="text-gray-300" />
-                                </div>
+                           <div className="p-3 flex-1 flex flex-col">
+                              <div className="flex justify-between items-start mb-1">
+                                 <h3 className="font-bold text-white truncate text-sm" title={visit.placeName}>
+                                   {visit.placeName}
+                                 </h3>
+                                 <span className="text-[10px] text-gray-500 font-mono mt-0.5 whitespace-nowrap">
+                                   {formatDate(visit.date)}
+                                 </span>
+                              </div>
+                              
+                              <div className="flex items-center gap-1 text-gray-500 text-[10px] mb-2">
+                                <MapPin size={10} />
+                                <span className="truncate">{visit.placeAddress}</span>
+                              </div>
+
+                              {visit.comment && (
+                                 <p className="text-gray-300 text-xs italic line-clamp-2 mt-auto">"{visit.comment}"</p>
                               )}
-                              <span className="text-[10px] text-white font-medium truncate">
-                                {visit.creatorName}
-                              </span>
-                            </div>
+                           </div>
                          </div>
-
-                         <div className="p-3 flex-1 flex flex-col">
-                            <div className="flex justify-between items-start mb-1">
-                               <h3 className="font-bold text-white truncate text-sm" title={visit.placeName}>
-                                 {visit.placeName}
-                               </h3>
-                               <span className="text-[10px] text-gray-500 font-mono mt-0.5 whitespace-nowrap">
-                                 {formatDate(visit.date)}
-                               </span>
-                            </div>
-                            
-                            <div className="flex items-center gap-1 text-gray-500 text-[10px] mb-2">
-                              <MapPin size={10} />
-                              <span className="truncate">{visit.placeAddress}</span>
-                            </div>
-
-                            {visit.comment && (
-                               <p className="text-gray-300 text-xs italic line-clamp-2 mt-auto">"{visit.comment}"</p>
-                            )}
-                         </div>
-                       </div>
-                     );
-                  })}
+                       );
+                    })}
+                  </div>
                 </div>
               </div>
             );

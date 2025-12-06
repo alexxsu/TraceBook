@@ -23,6 +23,9 @@ export default defineConfig(({ mode }) => {
         overlay: true,
         timeout: 5000, // Increase timeout for slower connections
       },
+      headers: {
+        'Cache-Control': 'no-store',
+      },
     },
     build: {
       outDir: 'dist',
