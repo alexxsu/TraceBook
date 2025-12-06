@@ -366,8 +366,11 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   const prevPreview = () => setCurrentPreviewIndex(prev => (prev - 1 + previewUrls.length) % previewUrls.length);
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity duration-200 ${isModalClosing ? 'opacity-0' : 'opacity-100'}`}>
-      <div className={`bg-gray-800 w-full max-w-md rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isModalClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 transition-opacity duration-200 ${isModalClosing ? 'opacity-0' : 'opacity-100'}`}>
+      <div
+        className={`bg-gray-900 w-full max-w-md rounded-3xl border border-gray-700/50 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isModalClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' }}
+      >
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h2 className="text-lg font-semibold text-white">
