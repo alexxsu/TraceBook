@@ -73,12 +73,12 @@ const getCircleStyle = (isDarkMode: boolean, isSatellite: boolean) => {
 };
 
 // Zoom-based scaling configuration
-// Markers are larger when zoomed in, smaller when zoomed out
+// Markers stay at base size until zoomed out past threshold, then grow larger
 const ZOOM_SCALE_CONFIG = {
-  maxZoom: 15,      // ~500m radius - scaling changes start here
-  minZoom: 10,      // At this zoom (far), markers are at minimum size
-  zoomedInScale: 2.0,   // 200% when zoomed in (larger markers when close)
-  zoomedOutScale: 0.75, // 50% of previous max (smaller when zoomed out)
+  baseZoom: 14,       // Markers stay at base size above this zoom (when zoomed in)
+  maxScaleZoom: 6,    // Markers reach max size at this zoom (when fully zoomed out)
+  baseScale: 1.0,     // Base size when zoomed in (no scaling)
+  maxScale: 1.25,     // Maximum size when fully zoomed out (reduced from 1.5)
 };
 
 // Clustering configuration
@@ -86,16 +86,24 @@ const CLUSTER_CONFIG = {
   gridSize: 90,          // Pixel grid size for clustering
   minZoomForClustering: 15, // Start clustering below this zoom
   maxPhotosInCluster: 4, // Max photos to show in cluster stack
+  transitionDuration: 250, // Animation duration in ms
+};
+
+// Smooth easing function for scale interpolation
+const easeOutCubic = (t: number): number => {
+  return 1 - Math.pow(1 - t, 3);
 };
 
 const getScaleForZoom = (zoom: number): number => {
-  const { maxZoom, minZoom, zoomedInScale, zoomedOutScale } = ZOOM_SCALE_CONFIG;
-  // Inverted: bigger when zoomed out, smaller when zoomed in
-  if (zoom >= maxZoom) return zoomedInScale;
-  if (zoom <= minZoom) return zoomedOutScale;
-  // Interpolate: as zoom decreases, scale increases
-  const ratio = (maxZoom - zoom) / (maxZoom - minZoom);
-  return zoomedInScale + ratio * (zoomedOutScale - zoomedInScale);
+  const { baseZoom, maxScaleZoom, baseScale, maxScale } = ZOOM_SCALE_CONFIG;
+  // Stay at base size when zoomed in (above threshold)
+  if (zoom >= baseZoom) return baseScale;
+  // Max size when fully zoomed out
+  if (zoom <= maxScaleZoom) return maxScale;
+  // Smooth interpolation using easing function
+  const linearRatio = (baseZoom - zoom) / (baseZoom - maxScaleZoom);
+  const easedRatio = easeOutCubic(linearRatio);
+  return baseScale + easedRatio * (maxScale - baseScale);
 };
 
 // Create cluster element with stacked photos
@@ -111,9 +119,15 @@ const createClusterElement = (
     transform-origin: bottom center;
     cursor: pointer;
     z-index: 10;
-    transition: transform 0.15s ease-out, z-index 0s;
+    transition: transform 0.2s ease-out, opacity ${CLUSTER_CONFIG.transitionDuration}ms ease-out;
+    opacity: 0;
   `;
   container.dataset.baseScale = String(scale);
+
+  // Animate in after a brief delay
+  requestAnimationFrame(() => {
+    container.style.opacity = '1';
+  });
 
   // Collect photos from all restaurants
   const photos: string[] = [];
@@ -128,59 +142,97 @@ const createClusterElement = (
     if (photos.length >= CLUSTER_CONFIG.maxPhotosInCluster) break;
   }
 
-  // Create stacked photos cluster - number of stacked cards shows cluster size
-  container.innerHTML = `
-    <div style="
-      position: relative;
-      width: 95px;
-      height: 100px;
-      filter: drop-shadow(0 6px 12px rgba(0,0,0,0.5));
-    ">
-      <!-- Stacked cards effect - back cards -->
-      ${photos.length >= 3 ? `
+  // Number of stacked cards based on restaurant count (max 4 visible stacks)
+  const stackCount = Math.min(restaurants.length, 4);
+  const totalCount = restaurants.length;
+
+  // Generate stacked cards dynamically based on count
+  const generateStackedCards = () => {
+    let html = '';
+    
+    // Back cards (show based on stack count)
+    if (stackCount >= 4 && photos[3]) {
+      html += `
         <div style="
           position: absolute;
-          top: 0;
+          top: -2px;
           left: 50%;
-          transform: translateX(-50%) rotate(15deg);
-          width: 62px;
-          height: 62px;
+          transform: translateX(-50%) rotate(18deg);
+          width: 50px;
+          height: 50px;
           background: #fffef8;
-          border: 3px solid #d4c5a9;
-          border-radius: 8px;
+          border: 2px solid #d4c5a9;
+          border-radius: 6px;
           overflow: hidden;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+          box-shadow: 0 2px 6px rgba(0,0,0,0.15);
         ">
-          ${photos[2] ? `<img src="${photos[2]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />` : ''}
+          <img src="${photos[3]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />
         </div>
-      ` : ''}
+      `;
+    }
+    
+    if (stackCount >= 3 && photos[2]) {
+      html += `
+        <div style="
+          position: absolute;
+          top: 2px;
+          left: 50%;
+          transform: translateX(-50%) rotate(12deg);
+          width: 52px;
+          height: 52px;
+          background: #fffef8;
+          border: 2px solid #d4c5a9;
+          border-radius: 7px;
+          overflow: hidden;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        ">
+          <img src="${photos[2]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />
+        </div>
+      `;
+    }
 
-      ${photos.length >= 2 ? `
+    if (stackCount >= 2 && photos[1]) {
+      html += `
         <div style="
           position: absolute;
           top: 6px;
           left: 50%;
-          transform: translateX(-50%) rotate(-8deg);
-          width: 62px;
-          height: 62px;
+          transform: translateX(-50%) rotate(-6deg);
+          width: 56px;
+          height: 56px;
           background: #fffef8;
-          border: 3px solid #d4c5a9;
+          border: 2px solid #d4c5a9;
           border-radius: 8px;
           overflow: hidden;
           box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         ">
-          ${photos[1] ? `<img src="${photos[1]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />` : ''}
+          <img src="${photos[1]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />
         </div>
-      ` : ''}
+      `;
+    }
 
-      <!-- Front card -->
+    return html;
+  };
+
+  // Create stacked photos cluster - sized to match individual markers for smooth transition
+  container.innerHTML = `
+    <div style="
+      position: relative;
+      width: 85px;
+      height: 100px;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+    ">
+      <!-- Dynamic stacked cards -->
+      ${generateStackedCards()}
+
+      <!-- Front card - same size as individual marker (65px) -->
       <div style="
         position: absolute;
         top: 12px;
         left: 50%;
-        transform: translateX(-50%) rotate(2deg);
-        width: 68px;
-        height: 68px;
+        transform: translateX(-50%) rotate(1deg);
+        width: 65px;
+        height: 65px;
         background: #fffef8;
         border: 3px solid #d4c5a9;
         border-radius: 10px;
@@ -189,11 +241,34 @@ const createClusterElement = (
       ">
         ${photos[0] ? `
           <img src="${photos[0]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-          <div style="display:none;width:100%;height:100%;background:#f3f4f6;align-items:center;justify-content:center;font-size:26px;position:absolute;top:0;left:0;">🍽️</div>
+          <div style="display:none;width:100%;height:100%;background:#f3f4f6;align-items:center;justify-content:center;font-size:24px;position:absolute;top:0;left:0;">🍽️</div>
         ` : `
-          <div style="width:100%;height:100%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:26px;">🍽️</div>
+          <div style="width:100%;height:100%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:24px;">🍽️</div>
         `}
       </div>
+
+      <!-- Count badge -->
+      ${totalCount > 1 ? `
+        <div style="
+          position: absolute;
+          top: 8px;
+          right: 2px;
+          background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+          color: white;
+          font-size: 11px;
+          font-weight: bold;
+          min-width: 20px;
+          height: 20px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 5px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+          border: 2px solid rgba(255,255,255,0.9);
+          z-index: 10;
+        ">${totalCount}</div>
+      ` : ''}
 
       <!-- Pointer/tail -->
       <div style="
@@ -205,17 +280,17 @@ const createClusterElement = (
         <div style="
           width: 0;
           height: 0;
-          border-left: 12px solid transparent;
-          border-right: 12px solid transparent;
-          border-top: 14px solid #d4c5a9;
+          border-left: 10px solid transparent;
+          border-right: 10px solid transparent;
+          border-top: 12px solid #d4c5a9;
         "></div>
         <div style="
           width: 0;
           height: 0;
-          border-left: 9px solid transparent;
-          border-right: 9px solid transparent;
-          border-top: 11px solid #fffef8;
-          margin-top: -14px;
+          border-left: 7px solid transparent;
+          border-right: 7px solid transparent;
+          border-top: 9px solid #fffef8;
+          margin-top: -12px;
           margin-left: 3px;
         "></div>
       </div>
@@ -251,7 +326,8 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
     transform-origin: bottom center;
     cursor: pointer;
     z-index: 1;
-    transition: transform 0.15s ease-out, z-index 0s;
+    transition: transform 0.2s ease-out, opacity ${CLUSTER_CONFIG.transitionDuration}ms ease-out;
+    opacity: 1;
   `;
   container.dataset.baseScale = String(scale);
 
@@ -266,12 +342,12 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
   const photoUrl2 = secondVisit?.photoDataUrl || secondVisit?.photos?.[0] || '';
   
   if (hasMultiplePosts) {
-    // Stacked cards design for 2+ posts
+    // Stacked cards design for 2+ posts - front card matches single marker size (65px)
     container.innerHTML = `
       <div style="
         position: relative;
-        width: 60px;
-        height: 72px;
+        width: 85px;
+        height: 95px;
         filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
       ">
         <!-- Back card (rotated) -->
@@ -280,8 +356,8 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
           top: 0;
           left: 50%;
           transform: translateX(-50%) rotate(8deg);
-          width: 48px;
-          height: 48px;
+          width: 55px;
+          height: 55px;
           background: #fffef8;
           border: 2px solid #d4c5a9;
           border-radius: 6px;
@@ -302,14 +378,14 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
           `}
         </div>
         
-        <!-- Front card -->
+        <!-- Front card - same size as single marker (65px) -->
         <div style="
           position: absolute;
-          top: 4px;
+          top: 8px;
           left: 50%;
           transform: translateX(-50%) rotate(-3deg);
-          width: 48px;
-          height: 48px;
+          width: 65px;
+          height: 65px;
           background: #fffef8;
           border: 2px solid #d4c5a9;
           border-radius: 6px;
@@ -329,7 +405,7 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
               background: #f3f4f6;
               align-items: center;
               justify-content: center;
-              font-size: 18px;
+              font-size: 24px;
               position: absolute;
               top: 0;
               left: 0;
@@ -342,7 +418,7 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 18px;
+              font-size: 24px;
             ">🍽️</div>
           `}
         </div>
@@ -357,18 +433,18 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
           <div style="
             width: 0;
             height: 0;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-top: 10px solid #d4c5a9;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 12px solid #d4c5a9;
           "></div>
           <div style="
             width: 0;
             height: 0;
-            border-left: 6px solid transparent;
-            border-right: 6px solid transparent;
-            border-top: 8px solid #fffef8;
-            margin-top: -10px;
-            margin-left: 2px;
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-top: 9px solid #fffef8;
+            margin-top: -12px;
+            margin-left: 3px;
           "></div>
         </div>
       </div>
@@ -378,13 +454,13 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
     container.innerHTML = `
       <div style="
         position: relative;
-        width: 52px;
+        width: 65px;
         filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
       ">
         <!-- Main card -->
         <div style="
-          width: 52px;
-          height: 52px;
+          width: 65px;
+          height: 65px;
           background: #fffef8;
           border: 2px solid #d4c5a9;
           border-radius: 8px;
@@ -405,7 +481,7 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
               background: #f3f4f6;
               align-items: center;
               justify-content: center;
-              font-size: 20px;
+              font-size: 24px;
               position: absolute;
               top: 0;
               left: 0;
@@ -418,7 +494,7 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 20px;
+              font-size: 24px;
             ">🍽️</div>
           `}
         </div>
@@ -427,18 +503,18 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
         <div style="
           width: 0;
           height: 0;
-          border-left: 8px solid transparent;
-          border-right: 8px solid transparent;
-          border-top: 10px solid #d4c5a9;
+          border-left: 10px solid transparent;
+          border-right: 10px solid transparent;
+          border-top: 12px solid #d4c5a9;
           margin: -1px auto 0;
         "></div>
         <div style="
           width: 0;
           height: 0;
-          border-left: 6px solid transparent;
-          border-right: 6px solid transparent;
-          border-top: 8px solid #fffef8;
-          margin: -11px auto 0;
+          border-left: 7px solid transparent;
+          border-right: 7px solid transparent;
+          border-top: 9px solid #fffef8;
+          margin: -12px auto 0;
         "></div>
       </div>
     `;
@@ -517,11 +593,16 @@ const getClusterOverlayClass = () => {
     updateScale(scale: number) {
       this.currentScale = scale;
       this.container.dataset.baseScale = String(scale);
+      // Smooth scaling via CSS transition
       this.container.style.transform = `translate(-50%, -100%) scale(${scale})`;
     }
 
     getRestaurants() {
       return this.restaurants;
+    }
+
+    getContainer() {
+      return this.container;
     }
   };
 
@@ -678,17 +759,11 @@ const MapContainer: React.FC<MapContainerProps> = ({
     return { clusters, singles };
   };
 
-  // Update clusters and marker visibility
+  // Update clusters and marker visibility with smooth transitions
   const updateClustering = (map: google.maps.Map, scale: number) => {
     const zoom = map.getZoom() || 13;
     const restaurants = Array.from(restaurantsMapRef.current.values());
     const { clusters, singles } = computeClusters(map, restaurants, zoom);
-
-    // Clear old clusters
-    for (const cluster of clustersRef.current) {
-      cluster.setMap(null);
-    }
-    clustersRef.current = [];
 
     // Track which restaurants are in clusters
     const clusteredIds = new Set<string>();
@@ -698,19 +773,55 @@ const MapContainer: React.FC<MapContainerProps> = ({
       }
     }
 
-    // Hide/show individual overlays
+    // Animate out old clusters before removing
+    const oldClusters = [...clustersRef.current];
+    for (const cluster of oldClusters) {
+      const container = cluster.getContainer?.();
+      if (container) {
+        container.style.opacity = '0';
+      }
+    }
+
+    // Animate markers that are joining clusters (fade out)
     for (const [id, overlay] of overlaysRef.current) {
       const container = overlay.getContainer();
       if (clusteredIds.has(id)) {
-        container.style.display = 'none';
-        hiddenOverlaysRef.current.add(id);
-      } else {
+        // Fade out marker that's joining a cluster
+        container.style.opacity = '0';
+        container.style.pointerEvents = 'none';
+      } else if (hiddenOverlaysRef.current.has(id)) {
+        // Marker is coming back from cluster - fade in
         container.style.display = '';
+        container.style.opacity = '0';
+        container.style.pointerEvents = 'auto';
+        requestAnimationFrame(() => {
+          container.style.opacity = '1';
+        });
         hiddenOverlaysRef.current.delete(id);
       }
     }
 
-    // Create cluster overlays
+    // After animation delay, actually hide markers and remove old clusters
+    setTimeout(() => {
+      // Remove old clusters
+      for (const cluster of oldClusters) {
+        cluster.setMap(null);
+      }
+      
+      // Hide clustered markers (keep them in DOM for smooth transition back)
+      for (const [id, overlay] of overlaysRef.current) {
+        const container = overlay.getContainer();
+        if (clusteredIds.has(id)) {
+          container.style.display = 'none';
+          hiddenOverlaysRef.current.add(id);
+        }
+      }
+    }, CLUSTER_CONFIG.transitionDuration);
+
+    // Clear cluster ref after scheduling removal
+    clustersRef.current = [];
+
+    // Create new cluster overlays (they will fade in automatically)
     const ClusterClass = getClusterOverlayClass();
     for (const cluster of clusters) {
       // Calculate center of cluster
@@ -805,6 +916,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
         rotateControl: false,
         scaleControl: false,
         gestureHandling: 'greedy',
+        tilt: 0, // Disable 45° imagery to prevent console warning
       });
 
       map.addListener('click', () => {

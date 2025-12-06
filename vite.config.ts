@@ -15,6 +15,15 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.API_KEY': JSON.stringify(apiKey)
     },
+    server: {
+      host: true,
+      port: 5173,
+      strictPort: false, // Allow fallback to another port if 5173 is busy
+      hmr: {
+        overlay: true,
+        timeout: 5000, // Increase timeout for slower connections
+      },
+    },
     build: {
       outDir: 'dist',
       chunkSizeWarningLimit: 1600,
