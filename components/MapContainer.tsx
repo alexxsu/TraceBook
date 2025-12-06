@@ -73,12 +73,12 @@ const getCircleStyle = (isDarkMode: boolean, isSatellite: boolean) => {
 };
 
 // Zoom-based scaling configuration
-// Inverted: markers get BIGGER when zoomed out to compensate visual shrinking
+// Markers stay at base size until zoomed out to ~500m radius, then scale up
 const ZOOM_SCALE_CONFIG = {
-  maxZoom: 18,      // At this zoom (close), markers are at base size
+  maxZoom: 15,      // ~500m radius - scaling starts here when zooming out further
   minZoom: 10,      // At this zoom (far), markers are at maximum size
-  zoomedInScale: 1.2,   // Larger base size when zoomed in close
-  zoomedOutScale: 2.4,  // Cap at 200% of base size (1.2 * 2 = 2.4)
+  zoomedInScale: 1.0,   // Base size when zoomed in (no scaling)
+  zoomedOutScale: 1.5,  // Cap at 150% of base size
 };
 
 // Clustering configuration
