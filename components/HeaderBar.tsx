@@ -276,8 +276,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               value={searchQuery}
               onFocus={() => setIsSearchFocused(true)}
               onBlur={() => {
-                if (isAdmin) return;
-                setTimeout(() => { if (!searchQuery) closeSearch(); }, 150);
+                // Don't close search on blur - let the backdrop handle closing
+                // This prevents closing when clicking on search results
               }}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -374,6 +374,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             style={{ scrollbarGutter: 'stable' }}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
           >
             {categorizedResults.sections.length > 0 ? (
               <>
