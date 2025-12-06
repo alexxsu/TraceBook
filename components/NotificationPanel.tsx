@@ -95,7 +95,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 z-[9990] bg-black/40 transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[9990] bg-black/50 transition-opacity duration-300 ${
           isClosing ? 'opacity-0' : isOpening ? 'opacity-0' : 'opacity-100'
         }`}
         onClick={handleBackdropClick}
@@ -110,14 +110,14 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
           sm:right-auto sm:left-1/2 sm:-translate-x-32"
       >
         <div
-          className={`bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden transition-all ease-out ${
+          className={`bg-gray-900 border border-gray-700/50 rounded-3xl shadow-2xl overflow-hidden transition-all ease-out ${
             isClosing
               ? 'opacity-0 -translate-y-3 scale-95'
               : isOpening
               ? 'opacity-0 -translate-y-3 scale-95'
               : 'opacity-100 translate-y-0 scale-100'
           }`}
-          style={{ transitionDuration: '300ms', transitionProperty: 'opacity, transform' }}
+          style={{ transitionDuration: '300ms', transitionProperty: 'opacity, transform', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' }}
         >
           {/* Header */}
           <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">

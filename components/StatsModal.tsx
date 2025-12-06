@@ -1,22 +1,22 @@
 
 import React, { useState, useMemo } from 'react';
 import { X, MapPin, User as UserIcon, Filter } from 'lucide-react';
-import { Restaurant, Visit } from '../types';
+import { Place, Visit } from '../types';
 import { GRADES, getGradeColor, getGradeDescription } from '../utils/rating';
 import ImageSlider from './ImageSlider';
 import { useLanguage } from '../hooks/useLanguage';
 
 interface StatsModalProps {
-  restaurants: Restaurant[];
+  places: Place[];
   onClose: () => void;
 }
 
 interface FlattenedVisit extends Visit {
-  restaurantName: string;
-  restaurantAddress: string;
+  placeName: string;
+  placeAddress: string;
 }
 
-const StatsModal: React.FC<StatsModalProps> = ({ restaurants, onClose }) => {
+const StatsModal: React.FC<StatsModalProps> = ({ places, onClose }) => {
   const { t, language } = useLanguage();
   const [isClosing, setIsClosing] = useState(false);
   const [selectedRatings, setSelectedRatings] = useState<string[]>(GRADES);
@@ -26,14 +26,14 @@ const StatsModal: React.FC<StatsModalProps> = ({ restaurants, onClose }) => {
   
   // 1. Flatten all visits into a single array with restaurant metadata
   const allVisits: FlattenedVisit[] = useMemo(() => {
-    return restaurants.flatMap(r => 
+    return places.flatMap(r => 
       r.visits.map(v => ({
         ...v,
-        restaurantName: r.name,
-        restaurantAddress: r.address
+        placeName: r.name,
+        placeAddress: r.address
       }))
     );
-  }, [restaurants]);
+  }, [places]);
 
   // Get unique years from visits
   const availableYears = useMemo(() => {
@@ -125,12 +125,13 @@ const StatsModal: React.FC<StatsModalProps> = ({ restaurants, onClose }) => {
   const hasActiveFilters = selectedRatings.length < GRADES.length || selectedYear;
 
   return (
-    <div 
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity duration-200 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 transition-opacity duration-200 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
       onClick={handleClose}
     >
-      <div 
-        className={`bg-gray-800 w-full max-w-4xl rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+      <div
+        className={`bg-gray-900 w-full max-w-4xl rounded-3xl border border-gray-700/50 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' }}
         onClick={(e) => e.stopPropagation()}
       >
         
@@ -280,8 +281,8 @@ const StatsModal: React.FC<StatsModalProps> = ({ restaurants, onClose }) => {
 
                          <div className="p-3 flex-1 flex flex-col">
                             <div className="flex justify-between items-start mb-1">
-                               <h3 className="font-bold text-white truncate text-sm" title={visit.restaurantName}>
-                                 {visit.restaurantName}
+                               <h3 className="font-bold text-white truncate text-sm" title={visit.placeName}>
+                                 {visit.placeName}
                                </h3>
                                <span className="text-[10px] text-gray-500 font-mono mt-0.5 whitespace-nowrap">
                                  {formatDate(visit.date)}
@@ -290,7 +291,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ restaurants, onClose }) => {
                             
                             <div className="flex items-center gap-1 text-gray-500 text-[10px] mb-2">
                               <MapPin size={10} />
-                              <span className="truncate">{visit.restaurantAddress}</span>
+                              <span className="truncate">{visit.placeAddress}</span>
                             </div>
 
                             {visit.comment && (

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Camera, Trash2, Save } from 'lucide-react';
-import { Visit, Restaurant } from '../types';
+import { Visit, Place } from '../types';
 import { GRADES } from '../utils/rating';
 import { compressImage } from '../utils/image';
 import { storage } from '../firebaseConfig';
@@ -11,16 +11,16 @@ import { useLanguage } from '../hooks/useLanguage';
 
 interface EditVisitModalProps {
   visit: Visit;
-  restaurant: Restaurant;
+  place: Place;
   onClose: () => void;
-  onSave: (restaurantId: string, oldVisit: Visit, newVisit: Visit) => void;
+  onSave: (placeId: string, oldVisit: Visit, newVisit: Visit) => void;
 }
 
-const EditVisitModal: React.FC<EditVisitModalProps> = ({ 
-  visit, 
-  restaurant, 
-  onClose, 
-  onSave 
+const EditVisitModal: React.FC<EditVisitModalProps> = ({
+  visit,
+  place,
+  onClose,
+  onSave
 }) => {
   const { t } = useLanguage();
   const [rating, setRating] = useState(visit.rating);
@@ -120,7 +120,7 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
     try {
       // 1. Upload New Photos
       const uploadPromises = newFiles.map(async (file, index) => {
-        const filename = `visits/${restaurant.id}/${Date.now()}_edit_${index}.jpg`;
+        const filename = `visits/${place.id}/${Date.now()}_edit_${index}.jpg`;
         const storageRef = ref(storage, filename);
         const snapshot = await uploadBytes(storageRef, file);
         return await getDownloadURL(snapshot.ref);
@@ -140,7 +140,7 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
         photoDataUrl: finalPhotos[0], // Ensure primary photo is updated
       };
 
-      onSave(restaurant.id, visit, updatedVisit);
+      onSave(place.id, visit, updatedVisit);
 
     } catch (error) {
       console.error("Failed to update visit:", error);
@@ -150,8 +150,11 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
   };
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity duration-200 ${isClosing ? 'opacity-0' : 'opacity-100'}`}>
-      <div className={`bg-gray-800 w-full max-w-lg rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 transition-opacity duration-200 ${isClosing ? 'opacity-0' : 'opacity-100'}`}>
+      <div
+        className={`bg-gray-900 w-full max-w-lg rounded-3xl border border-gray-700/50 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' }}
+      >
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h2 className="text-lg font-semibold text-white">Edit Experience</h2>

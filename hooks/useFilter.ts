@@ -1,12 +1,12 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Restaurant } from '../types';
+import { Place } from '../types';
 import { calculateAverageGrade, GRADES } from '../utils/rating';
 
 interface UseFilterReturn {
   selectedGrades: string[];
   isFilterOpen: boolean;
   isFilterClosing: boolean;
-  filteredRestaurants: Restaurant[];
+  filteredPlaces: Place[];
   toggleGradeFilter: (grade: string) => void;
   selectAllGrades: () => void;
   clearAllGrades: () => void;
@@ -14,17 +14,17 @@ interface UseFilterReturn {
   closeFilter: () => void;
 }
 
-export function useFilter(restaurants: Restaurant[]): UseFilterReturn {
+export function useFilter(places: Place[]): UseFilterReturn {
   const [selectedGrades, setSelectedGrades] = useState<string[]>(GRADES);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isFilterClosing, setIsFilterClosing] = useState(false);
 
-  const filteredRestaurants = useMemo(() => {
-    return restaurants.filter(r => {
-      const avgGrade = calculateAverageGrade(r.visits);
+  const filteredPlaces = useMemo(() => {
+    return places.filter(p => {
+      const avgGrade = calculateAverageGrade(p.visits);
       return selectedGrades.includes(avgGrade);
     });
-  }, [restaurants, selectedGrades]);
+  }, [places, selectedGrades]);
 
   const toggleGradeFilter = useCallback((grade: string) => {
     setSelectedGrades(prev =>
@@ -64,7 +64,7 @@ export function useFilter(restaurants: Restaurant[]): UseFilterReturn {
     selectedGrades,
     isFilterOpen,
     isFilterClosing,
-    filteredRestaurants,
+    filteredPlaces,
     toggleGradeFilter,
     selectAllGrades,
     clearAllGrades,

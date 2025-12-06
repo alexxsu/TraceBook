@@ -90,12 +90,13 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({
   return (
     <>
       <div
-        className={`fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] transition-opacity duration-200 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
+        className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] transition-opacity duration-200 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
         onClick={onClose}
       />
       <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 pointer-events-none">
         <div
-          className={`bg-gray-900 border border-gray-800 rounded-3xl shadow-2xl w-full max-w-xs pointer-events-auto transform transition-all duration-200 overflow-hidden ${isClosing ? 'scale-95 opacity-0' : 'scale-100 opacity-100'}`}
+          className={`bg-gray-900 border border-gray-700/50 rounded-3xl shadow-2xl w-full max-w-xs pointer-events-auto transform transition-all duration-200 overflow-hidden ${isClosing ? 'scale-95 opacity-0' : 'scale-100 opacity-100'}`}
+          style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' }}
         >
           {/* Header with gradient background */}
           <div className="relative bg-gradient-to-b from-gray-800 to-gray-900 pt-8 pb-16">

@@ -1,13 +1,13 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
-import { Restaurant, Visit, ViewState, UserMap, GUEST_ID } from './types';
+import { Place, Visit, ViewState, UserMap, GUEST_ID } from './types';
 import { db, GOOGLE_MAPS_API_KEY } from './firebaseConfig';
 
 // Hooks
 import {
   useAuth,
   useMaps,
-  useRestaurants,
+  usePlaces,
   useSearch,
   useFilter,
   useMapControls,
@@ -17,7 +17,7 @@ import {
 // Components
 import MapContainer from './components/MapContainer';
 import AddVisitModal from './components/AddVisitModal';
-import RestaurantDetail from './components/RestaurantDetail';
+import PlaceDetail from './components/PlaceDetail';
 import InfoModal from './components/InfoModal';
 import UserHistoryModal from './components/UserHistoryModal';
 import EditVisitModal from './components/EditVisitModal';
@@ -81,22 +81,22 @@ function App() {
     notifyMapMembers
   } = useNotifications(user);
 
-  // Restaurants hook
+  // Places hook
   const {
-    restaurants,
-    selectedRestaurant,
-    setSelectedRestaurant,
+    places,
+    selectedPlace,
+    setSelectedPlace,
     saveVisit,
     updateVisit,
     deleteVisit,
     clearDatabase
-  } = useRestaurants(user, userProfile, activeMap, viewState, setViewState);
+  } = usePlaces(user, userProfile, activeMap, viewState, setViewState);
 
   const isGuestUser = user?.uid === GUEST_ID || user?.isAnonymous || userProfile?.role === 'guest';
   const isAdmin = userProfile?.role === 'admin';
 
   // Map-aware search data
-  const [searchablePins, setSearchablePins] = useState<Record<string, Restaurant[]>>({});
+  const [searchablePins, setSearchablePins] = useState<Record<string, Place[]>>({});
 
   const searchableMaps = useMemo(() => {
     if (!user) {
@@ -130,10 +130,10 @@ function App() {
     if (activeMap) {
       setSearchablePins((prev) => ({
         ...prev,
-        [activeMap.id]: restaurants
+        [activeMap.id]: places
       }));
     }
-  }, [activeMap, restaurants]);
+  }, [activeMap, places]);
 
   // Fetch pins for other maps when needed (admin and shared)
   React.useEffect(() => {
@@ -146,10 +146,10 @@ function App() {
 
       for (const map of mapsToFetch) {
         try {
-          const restaurantsRef = collection(db, 'maps', map.id, 'restaurants');
-          const snap = await getDocs(restaurantsRef);
+          const placesRef = collection(db, 'maps', map.id, 'places');
+          const snap = await getDocs(placesRef);
           const pins = snap.docs
-            .map((docSnap) => docSnap.data() as Restaurant)
+            .map((docSnap) => docSnap.data() as Place)
             .filter((r: any) => !Array.isArray(r.visits) || r.visits.length > 0);
 
           if (!cancelled) {
@@ -159,7 +159,7 @@ function App() {
             }));
           }
         } catch (error) {
-          console.error('Failed to load map restaurants for search:', error);
+          console.error('Failed to load map places for search:', error);
         }
       }
     };
@@ -182,7 +182,7 @@ function App() {
   const searchSources = useMemo(() => (
     sortedSearchableMaps.map((map) => ({
       map,
-      restaurants: searchablePins[map.id] || []
+      places: searchablePins[map.id] || []
     }))
   ), [sortedSearchableMaps, searchablePins]);
 
@@ -204,13 +204,13 @@ function App() {
     selectedGrades,
     isFilterOpen,
     isFilterClosing,
-    filteredRestaurants,
+    filteredPlaces,
     toggleGradeFilter,
     selectAllGrades,
     clearAllGrades,
     handleFilterToggle,
     closeFilter
-  } = useFilter(restaurants);
+  } = useFilter(places);
 
   // Map controls hook
   const {
@@ -236,8 +236,8 @@ function App() {
   const [isUserDetailOpen, setIsUserDetailOpen] = useState(false);
   const [isUserDetailClosing, setIsUserDetailClosing] = useState(false);
   const [isCompactCardOpen, setIsCompactCardOpen] = useState(false);
-  const [editingData, setEditingData] = useState<{ restaurant: Restaurant; visit: Visit } | null>(null);
-  const [pendingSearchSelection, setPendingSearchSelection] = useState<{ restaurant: Restaurant; map: UserMap } | null>(null);
+  const [editingData, setEditingData] = useState<{ place: Place; visit: Visit } | null>(null);
+  const [pendingSearchSelection, setPendingSearchSelection] = useState<{ place: Place; map: UserMap } | null>(null);
   const [isTutorialActive, setIsTutorialActive] = useState(false);
   const [mapSwitchToast, setMapSwitchToast] = useState<{ visible: boolean; mapName: string; mapVisibility?: 'public' | 'shared' | 'private' }>({ visible: false, mapName: '' });
 
@@ -463,10 +463,10 @@ function App() {
     }
   }, [refreshStatus]);
 
-  // Restaurant handlers
-  const handleSaveVisit = useCallback(async (restaurantInfo: Restaurant, visit: Visit) => {
+  // Place handlers
+  const handleSaveVisit = useCallback(async (placeInfo: Place, visit: Visit) => {
     try {
-      await saveVisit(restaurantInfo, visit);
+      await saveVisit(placeInfo, visit);
       setViewState(ViewState.MAP);
       setHideAddButton(false);
     } catch (e) {
@@ -475,20 +475,20 @@ function App() {
     }
   }, [saveVisit]);
 
-  const handleUpdateVisit = useCallback(async (restaurantId: string, oldVisit: Visit, newVisit: Visit) => {
+  const handleUpdateVisit = useCallback(async (placeId: string, oldVisit: Visit, newVisit: Visit) => {
     try {
-      await updateVisit(restaurantId, oldVisit, newVisit);
+      await updateVisit(placeId, oldVisit, newVisit);
       setEditingData(null);
-      setViewState(ViewState.RESTAURANT_DETAIL);
+      setViewState(ViewState.PLACE_DETAIL);
     } catch (e) {
       console.error("Error updating visit:", e);
       alert("Failed to update memory.");
     }
   }, [updateVisit]);
 
-  const handleDeleteVisit = useCallback(async (restaurant: Restaurant, visitToDelete: Visit) => {
+  const handleDeleteVisit = useCallback(async (place: Place, visitToDelete: Visit) => {
     try {
-      const wasDeleted = await deleteVisit(restaurant, visitToDelete);
+      const wasDeleted = await deleteVisit(place, visitToDelete);
       if (wasDeleted) {
         setViewState(ViewState.MAP);
       }
@@ -512,15 +512,15 @@ function App() {
     }
   }, [clearDatabase]);
 
-  const handleEditTrigger = useCallback((r: Restaurant, v: Visit) => {
-    setEditingData({ restaurant: r, visit: v });
+  const handleEditTrigger = useCallback((r: Place, v: Visit) => {
+    setEditingData({ place: r, visit: v });
     setViewState(ViewState.EDIT_ENTRY);
   }, []);
 
-  const handleMarkerClick = useCallback((r: Restaurant) => {
-    setSelectedRestaurant(r);
-    setViewState(ViewState.RESTAURANT_DETAIL);
-  }, [setSelectedRestaurant]);
+  const handleMarkerClick = useCallback((r: Place) => {
+    setSelectedPlace(r);
+    setViewState(ViewState.PLACE_DETAIL);
+  }, [setSelectedPlace]);
 
   const handleToggleAdd = useCallback(() => {
     if (viewState === ViewState.ADD_ENTRY) {
@@ -544,11 +544,11 @@ function App() {
   }, []);
 
   // Search select handler (map-aware)
-  const onSearchSelect = useCallback((restaurant: Restaurant, map: UserMap) => {
+  const onSearchSelect = useCallback((place: Place, map: UserMap) => {
     closeSearch();
     // Switch maps if needed, then select once loaded
     if (map.id !== activeMap?.id) {
-      setPendingSearchSelection({ restaurant, map });
+      setPendingSearchSelection({ place, map });
       setActiveMap(map);
       // Show toast notification for map switch with map visibility
       const visibility = map.visibility === 'public' ? 'public' : map.isDefault ? 'private' : 'shared';
@@ -556,26 +556,26 @@ function App() {
       return;
     }
 
-    handleSearchSelect(restaurant, mapInstance, (r) => {
-      setSelectedRestaurant(r);
-      setViewState(ViewState.RESTAURANT_DETAIL);
+    handleSearchSelect(place, mapInstance, (r) => {
+      setSelectedPlace(r);
+      setViewState(ViewState.PLACE_DETAIL);
     });
-  }, [activeMap?.id, closeSearch, handleSearchSelect, mapInstance, setSelectedRestaurant, setActiveMap]);
+  }, [activeMap?.id, closeSearch, handleSearchSelect, mapInstance, setSelectedPlace, setActiveMap]);
 
   // Apply pending selection when map data arrives
   React.useEffect(() => {
     if (!pendingSearchSelection) return;
     if (!activeMap || activeMap.id !== pendingSearchSelection.map.id) return;
 
-    const match = restaurants.find(r => r.id === pendingSearchSelection.restaurant.id);
+    const match = places.find(r => r.id === pendingSearchSelection.place.id);
     if (!match) return;
 
     handleSearchSelect(match, mapInstance, (r) => {
-      setSelectedRestaurant(r);
-      setViewState(ViewState.RESTAURANT_DETAIL);
+      setSelectedPlace(r);
+      setViewState(ViewState.PLACE_DETAIL);
     });
     setPendingSearchSelection(null);
-  }, [activeMap, pendingSearchSelection, restaurants, handleSearchSelect, mapInstance, setSelectedRestaurant]);
+  }, [activeMap, pendingSearchSelection, places, handleSearchSelect, mapInstance, setSelectedPlace]);
 
   // Map click handler
   const handleMapClick = useCallback(() => {
@@ -594,7 +594,7 @@ function App() {
   const showMapView = useMemo(() => {
     return [
       ViewState.MAP,
-      ViewState.RESTAURANT_DETAIL,
+      ViewState.PLACE_DETAIL,
       ViewState.ADD_ENTRY,
       ViewState.EDIT_ENTRY,
       ViewState.INFO,
@@ -693,15 +693,15 @@ function App() {
                 setIsCompactCardOpen={setIsCompactCardOpen}
                 onSelectMap={setActiveMap}
                 onManageMaps={() => setViewState(ViewState.MAP_MANAGEMENT)}
-                restaurantsCount={restaurants.length}
-                filteredCount={filteredRestaurants.length}
+                placesCount={places.length}
+                filteredCount={filteredPlaces.length}
               />
             )}
           </div>
 
           <MapContainer
             apiKey={GOOGLE_MAPS_API_KEY}
-            restaurants={filteredRestaurants}
+            places={filteredPlaces}
             onMapLoad={handleMapLoad}
             onMarkerClick={handleMarkerClick}
             onMapClick={handleMapClick}
@@ -723,7 +723,7 @@ function App() {
           <AddButton
             isAddModalOpen={isAddModalOpen}
             hideAddButton={hideAddButton}
-            isModalActive={viewState === ViewState.RESTAURANT_DETAIL || viewState === ViewState.INFO || viewState === ViewState.STATS || viewState === ViewState.USER_HISTORY || viewState === ViewState.MAP_MANAGEMENT || viewState === ViewState.EDIT_ENTRY || viewState === ViewState.SITE_MANAGEMENT}
+            isModalActive={viewState === ViewState.PLACE_DETAIL || viewState === ViewState.INFO || viewState === ViewState.STATS || viewState === ViewState.USER_HISTORY || viewState === ViewState.MAP_MANAGEMENT || viewState === ViewState.EDIT_ENTRY || viewState === ViewState.SITE_MANAGEMENT}
             onToggle={handleToggleAdd}
           />
         </>
@@ -769,7 +769,7 @@ function App() {
         <AddVisitModal
           mapInstance={mapInstance}
           currentLocation={currentMapCenter}
-          existingRestaurants={restaurants}
+          existingPlaces={places}
           onClose={handleAddModalClose}
           onSave={handleSaveVisit}
           onPhotosUploaded={(hasPhotos) => setHideAddButton(hasPhotos)}
@@ -780,23 +780,22 @@ function App() {
 
       {viewState === ViewState.EDIT_ENTRY && editingData && (
         <EditVisitModal
-          restaurant={editingData.restaurant}
+          place={editingData.place}
           visit={editingData.visit}
           onClose={() => {
             setEditingData(null);
-            setViewState(ViewState.RESTAURANT_DETAIL);
+            setViewState(ViewState.PLACE_DETAIL);
           }}
           onSave={handleUpdateVisit}
         />
       )}
 
-      {viewState === ViewState.RESTAURANT_DETAIL && selectedRestaurant && (
-        <RestaurantDetail
-          restaurant={selectedRestaurant}
+      {viewState === ViewState.PLACE_DETAIL && selectedPlace && (
+        <PlaceDetail
+          place={selectedPlace}
           currentUserUid={user?.uid}
-          isAdmin={userProfile?.role === 'admin'}
           onClose={() => {
-            setSelectedRestaurant(null);
+            setSelectedPlace(null);
             setViewState(ViewState.MAP);
           }}
           onAddAnotherVisit={() => setViewState(ViewState.ADD_ENTRY)}
@@ -813,19 +812,19 @@ function App() {
 
       {viewState === ViewState.USER_HISTORY && user && (
         <UserHistoryModal
-          restaurants={restaurants}
+          places={places}
           currentUserUid={user.uid}
           onClose={() => setViewState(ViewState.MAP)}
           onSelectVisit={(r) => {
-            setSelectedRestaurant(r);
-            setViewState(ViewState.RESTAURANT_DETAIL);
+            setSelectedPlace(r);
+            setViewState(ViewState.PLACE_DETAIL);
           }}
         />
       )}
 
       {viewState === ViewState.STATS && (
         <StatsModal
-          restaurants={restaurants}
+          places={places}
           onClose={() => setViewState(ViewState.MAP)}
         />
       )}

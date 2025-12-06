@@ -1,61 +1,62 @@
 import { useState, useEffect, useCallback } from 'react';
 import { collection, onSnapshot, doc, setDoc, getDoc, updateDoc, deleteDoc, arrayUnion, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import { Restaurant, Visit, UserMap, ViewState, UserProfile } from '../types';
+import { Place, Visit, UserMap, ViewState, UserProfile } from '../types';
 import { AppUser } from './useAuth';
 
-interface UseRestaurantsReturn {
-  restaurants: Restaurant[];
-  selectedRestaurant: Restaurant | null;
-  setSelectedRestaurant: (r: Restaurant | null) => void;
-  saveVisit: (restaurantInfo: Restaurant, visit: Visit) => Promise<void>;
-  updateVisit: (restaurantId: string, oldVisit: Visit, newVisit: Visit) => Promise<void>;
-  deleteVisit: (restaurant: Restaurant, visitToDelete: Visit) => Promise<boolean>;
+interface UsePlacesReturn {
+  places: Place[];
+  selectedPlace: Place | null;
+  setSelectedPlace: (p: Place | null) => void;
+  saveVisit: (placeInfo: Place, visit: Visit) => Promise<void>;
+  updateVisit: (placeId: string, oldVisit: Visit, newVisit: Visit) => Promise<void>;
+  deleteVisit: (place: Place, visitToDelete: Visit) => Promise<boolean>;
   clearDatabase: () => Promise<void>;
 }
 
-export function useRestaurants(
+export function usePlaces(
   user: AppUser | null,
   userProfile: UserProfile | null,
   activeMap: UserMap | null,
   viewState: ViewState,
   onViewStateChange: (state: ViewState) => void
-): UseRestaurantsReturn {
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+): UsePlacesReturn {
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
 
   // Data fetching subscription
   useEffect(() => {
     if (!user || viewState === ViewState.PENDING || viewState === ViewState.LOGIN) return;
     if (!activeMap) return;
 
-    const restaurantsRef = collection(db, 'maps', activeMap.id, 'restaurants');
+    // Note: Firestore collection is named 'restaurants' for backward compatibility
+    const placesRef = collection(db, 'maps', activeMap.id, 'restaurants');
 
-    const unsubscribe = onSnapshot(restaurantsRef, (snapshot) => {
-      const fetchedRestaurants: Restaurant[] = [];
+    const unsubscribe = onSnapshot(placesRef, (snapshot) => {
+      const fetchedPlaces: Place[] = [];
       const docsToDelete: any[] = [];
 
       snapshot.forEach((docSnapshot) => {
-        const data = docSnapshot.data() as Restaurant;
+        const data = docSnapshot.data() as Place;
         if (!data.visits || data.visits.length === 0) {
           docsToDelete.push(docSnapshot.ref);
         } else {
-          fetchedRestaurants.push(data);
+          fetchedPlaces.push(data);
         }
       });
 
-      // Delete empty restaurants after processing snapshot
+      // Delete empty places after processing snapshot
       if (docsToDelete.length > 0) {
         Promise.all(docsToDelete.map(ref => deleteDoc(ref)))
           .catch(e => console.error("Auto-cleanup error:", e));
       }
 
-      setRestaurants(fetchedRestaurants);
+      setPlaces(fetchedPlaces);
 
-      // Update selected restaurant if it exists
-      setSelectedRestaurant(prev => {
+      // Update selected place if it exists
+      setSelectedPlace(prev => {
         if (!prev) return null;
-        const updated = fetchedRestaurants.find(r => r.id === prev.id);
+        const updated = fetchedPlaces.find(p => p.id === prev.id);
         if (updated) {
           return updated;
         } else {
@@ -70,7 +71,7 @@ export function useRestaurants(
     return () => unsubscribe();
   }, [user, viewState, activeMap, onViewStateChange]);
 
-  const saveVisit = useCallback(async (restaurantInfo: Restaurant, visit: Visit) => {
+  const saveVisit = useCallback(async (placeInfo: Place, visit: Visit) => {
     if (!user || !activeMap) throw new Error("No active user or map");
 
     // Build the best display name from all available sources
@@ -84,7 +85,7 @@ export function useRestaurants(
       // Use email username as fallback
       creatorDisplayName = user.email.split('@')[0];
     }
-    
+
     // Build the best photo URL from all available sources
     const creatorPhotoURL = userProfile?.photoURL || user.photoURL || null;
 
@@ -95,21 +96,22 @@ export function useRestaurants(
       creatorPhotoURL: creatorPhotoURL
     };
 
-    const restaurantRef = doc(db, "maps", activeMap.id, "restaurants", restaurantInfo.id);
-    const exists = restaurants.some(r => r.id === restaurantInfo.id);
+    // Note: Firestore collection is named 'restaurants' for backward compatibility
+    const placeRef = doc(db, "maps", activeMap.id, "restaurants", placeInfo.id);
+    const exists = places.some(p => p.id === placeInfo.id);
 
     if (exists) {
-      await updateDoc(restaurantRef, { visits: arrayUnion(fullVisit) });
+      await updateDoc(placeRef, { visits: arrayUnion(fullVisit) });
     } else {
-      const newRestaurant = { ...restaurantInfo, visits: [fullVisit] };
-      await setDoc(restaurantRef, newRestaurant);
+      const newPlace = { ...placeInfo, visits: [fullVisit] };
+      await setDoc(placeRef, newPlace);
     }
 
     // Send notifications to other members if this is a shared map
     if (activeMap.visibility === 'shared' && activeMap.members && activeMap.members.length > 1) {
       const notificationsRef = collection(db, 'notifications');
       const batch = writeBatch(db);
-      
+
       activeMap.members.forEach((memberUid: string) => {
         // Don't notify the person who added the post
         if (memberUid !== user.uid) {
@@ -117,7 +119,7 @@ export function useRestaurants(
           batch.set(newNotifRef, {
             recipientUid: memberUid,
             type: 'post_added',
-            message: `${creatorDisplayName} added a memory at "${restaurantInfo.name}" to "${activeMap.name}"`,
+            message: `${creatorDisplayName} added a memory at "${placeInfo.name}" to "${activeMap.name}"`,
             mapId: activeMap.id,
             mapName: activeMap.name,
             actorUid: user.uid,
@@ -127,25 +129,26 @@ export function useRestaurants(
           });
         }
       });
-      
+
       await batch.commit();
     }
-  }, [user, userProfile, activeMap, restaurants]);
+  }, [user, userProfile, activeMap, places]);
 
-  const updateVisit = useCallback(async (restaurantId: string, oldVisit: Visit, newVisit: Visit) => {
+  const updateVisit = useCallback(async (placeId: string, oldVisit: Visit, newVisit: Visit) => {
     if (!user || !activeMap) return;
 
-    const restaurantRef = doc(db, "maps", activeMap.id, "restaurants", restaurantId);
-    const restaurantDoc = await getDoc(restaurantRef);
+    // Note: Firestore collection is named 'restaurants' for backward compatibility
+    const placeRef = doc(db, "maps", activeMap.id, "restaurants", placeId);
+    const placeDoc = await getDoc(placeRef);
 
-    if (restaurantDoc.exists()) {
-      const currentData = restaurantDoc.data() as Restaurant;
+    if (placeDoc.exists()) {
+      const currentData = placeDoc.data() as Place;
       const updatedVisits = currentData.visits.map(v => v.id === oldVisit.id ? newVisit : v);
-      await updateDoc(restaurantRef, { visits: updatedVisits });
+      await updateDoc(placeRef, { visits: updatedVisits });
     }
   }, [user, activeMap]);
 
-  const deleteVisit = useCallback(async (restaurant: Restaurant, visitToDelete: Visit): Promise<boolean> => {
+  const deleteVisit = useCallback(async (place: Place, visitToDelete: Visit): Promise<boolean> => {
     if (!user || !activeMap) throw new Error("No active user or map");
 
     // Build the best display name from all available sources
@@ -158,22 +161,23 @@ export function useRestaurants(
       creatorDisplayName = user.email.split('@')[0];
     }
 
-    const restaurantRef = doc(db, "maps", activeMap.id, "restaurants", restaurant.id);
-    const restaurantDoc = await getDoc(restaurantRef);
+    // Note: Firestore collection is named 'restaurants' for backward compatibility
+    const placeRef = doc(db, "maps", activeMap.id, "restaurants", place.id);
+    const placeDoc = await getDoc(placeRef);
 
-    if (restaurantDoc.exists()) {
-      const currentData = restaurantDoc.data() as Restaurant;
+    if (placeDoc.exists()) {
+      const currentData = placeDoc.data() as Place;
       const updatedVisits = currentData.visits.filter(v => v.id !== visitToDelete.id);
 
       if (updatedVisits.length === 0) {
-        await deleteDoc(restaurantRef);
-        setSelectedRestaurant(null);
-        
+        await deleteDoc(placeRef);
+        setSelectedPlace(null);
+
         // Send notifications for post deletion on shared map
         if (activeMap.visibility === 'shared' && activeMap.members && activeMap.members.length > 1) {
           const notificationsRef = collection(db, 'notifications');
           const batch = writeBatch(db);
-          
+
           activeMap.members.forEach((memberUid: string) => {
             // Don't notify the person who deleted the post
             if (memberUid !== user.uid) {
@@ -181,7 +185,7 @@ export function useRestaurants(
               batch.set(newNotifRef, {
                 recipientUid: memberUid,
                 type: 'post_deleted',
-                message: `${creatorDisplayName} removed a memory at "${restaurant.name}" from "${activeMap.name}"`,
+                message: `${creatorDisplayName} removed a memory at "${place.name}" from "${activeMap.name}"`,
                 mapId: activeMap.id,
                 mapName: activeMap.name,
                 actorUid: user.uid,
@@ -191,19 +195,19 @@ export function useRestaurants(
               });
             }
           });
-          
+
           await batch.commit();
         }
-        
-        return true; // Restaurant was deleted
+
+        return true; // Place was deleted
       } else {
-        await updateDoc(restaurantRef, { visits: updatedVisits });
-        
+        await updateDoc(placeRef, { visits: updatedVisits });
+
         // Send notifications for post deletion on shared map
         if (activeMap.visibility === 'shared' && activeMap.members && activeMap.members.length > 1) {
           const notificationsRef = collection(db, 'notifications');
           const batch = writeBatch(db);
-          
+
           activeMap.members.forEach((memberUid: string) => {
             // Don't notify the person who deleted the post
             if (memberUid !== user.uid) {
@@ -211,7 +215,7 @@ export function useRestaurants(
               batch.set(newNotifRef, {
                 recipientUid: memberUid,
                 type: 'post_deleted',
-                message: `${creatorDisplayName} removed a memory at "${restaurant.name}" from "${activeMap.name}"`,
+                message: `${creatorDisplayName} removed a memory at "${place.name}" from "${activeMap.name}"`,
                 mapId: activeMap.id,
                 mapName: activeMap.name,
                 actorUid: user.uid,
@@ -221,11 +225,11 @@ export function useRestaurants(
               });
             }
           });
-          
+
           await batch.commit();
         }
-        
-        return false; // Restaurant still exists
+
+        return false; // Place still exists
       }
     }
     return false;
@@ -234,16 +238,17 @@ export function useRestaurants(
   const clearDatabase = useCallback(async () => {
     if (!activeMap) return;
 
-    const deletePromises = restaurants.map(r =>
-      deleteDoc(doc(db, "maps", activeMap.id, "restaurants", r.id))
+    // Note: Firestore collection is named 'restaurants' for backward compatibility
+    const deletePromises = places.map(p =>
+      deleteDoc(doc(db, "maps", activeMap.id, "restaurants", p.id))
     );
     await Promise.all(deletePromises);
-  }, [activeMap, restaurants]);
+  }, [activeMap, places]);
 
   return {
-    restaurants,
-    selectedRestaurant,
-    setSelectedRestaurant,
+    places,
+    selectedPlace,
+    setSelectedPlace,
     saveVisit,
     updateVisit,
     deleteVisit,

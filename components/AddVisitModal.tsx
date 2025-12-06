@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, MapPin, Search, Loader2, X, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Coordinates, PlaceResult, Restaurant, Visit } from '../types';
+import { Coordinates, PlaceResult, Place, Visit } from '../types';
 import { getGPSFromImage } from '../utils/exif';
 import { compressImage, validateImage, withTimeout, IMAGE_LIMITS } from '../utils/image';
 import { GRADES, getGradeDescription, getGradeColor } from '../utils/rating';
@@ -13,9 +13,9 @@ import heic2any from 'heic2any';
 interface AddVisitModalProps {
   mapInstance: google.maps.Map | null;
   currentLocation: Coordinates;
-  existingRestaurants: Restaurant[];
+  existingPlaces: Place[];
   onClose: () => void;
-  onSave: (restaurant: Restaurant, visit: Visit) => void;
+  onSave: (place: Place, visit: Visit) => void;
   onPhotosUploaded?: (hasPhotos: boolean) => void;
   isGuest?: boolean;
   externalIsClosing?: boolean;
@@ -29,11 +29,11 @@ interface SuggestionItem {
   geometry?: { location: any };
 }
 
-const AddVisitModal: React.FC<AddVisitModalProps> = ({ 
-  mapInstance, 
+const AddVisitModal: React.FC<AddVisitModalProps> = ({
+  mapInstance,
   currentLocation,
-  existingRestaurants, 
-  onClose, 
+  existingPlaces,
+  onClose,
   onSave,
   onPhotosUploaded,
   isGuest,
@@ -332,7 +332,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
       console.log('[Upload] All uploads complete. URLs:', downloadURLs);
 
       // 2. Construct Objects
-      const newRestaurant: Restaurant = {
+      const newPlace: Place = {
         id: selectedPlace.place_id || Math.random().toString(),
         name: selectedPlace.name || 'Unknown Spot',
         address: selectedPlace.vicinity || 'Unknown Address',
@@ -352,7 +352,7 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
         comment,
       };
 
-      onSave(newRestaurant, newVisit);
+      onSave(newPlace, newVisit);
       // setIsSaving(false); // No need to set false as modal will close
     } catch (error) {
       console.error("Upload failed:", error);
@@ -366,8 +366,11 @@ const AddVisitModal: React.FC<AddVisitModalProps> = ({
   const prevPreview = () => setCurrentPreviewIndex(prev => (prev - 1 + previewUrls.length) % previewUrls.length);
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity duration-200 ${isModalClosing ? 'opacity-0' : 'opacity-100'}`}>
-      <div className={`bg-gray-800 w-full max-w-md rounded-2xl border border-gray-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isModalClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 transition-opacity duration-200 ${isModalClosing ? 'opacity-0' : 'opacity-100'}`}>
+      <div
+        className={`bg-gray-900 w-full max-w-md rounded-3xl border border-gray-700/50 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${isModalClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+        style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' }}
+      >
         
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-900/50">
           <h2 className="text-lg font-semibold text-white">
