@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Restaurant } from '../types';
+import { Place } from '../types';
 
 interface MapContainerProps {
   apiKey: string;
-  restaurants: Restaurant[];
-  onMarkerClick: (restaurant: Restaurant) => void;
+  places: Place[];
+  onMarkerClick: (place: Place) => void;
   onMapLoad: (map: google.maps.Map) => void;
   onMapClick?: () => void;
   mapType?: 'satellite' | 'roadmap' | 'dark';
@@ -108,7 +108,7 @@ const getScaleForZoom = (zoom: number): number => {
 
 // Create cluster element with stacked photos
 const createClusterElement = (
-  restaurants: Restaurant[],
+  places: Place[],
   onClick: () => void,
   scale: number = 1
 ): HTMLDivElement => {
@@ -129,10 +129,10 @@ const createClusterElement = (
     container.style.opacity = '1';
   });
 
-  // Collect photos from all restaurants
+  // Collect photos from all places
   const photos: string[] = [];
-  for (const restaurant of restaurants) {
-    const visits = restaurant.visits || [];
+  for (const place of places) {
+    const visits = place.visits || [];
     for (const visit of visits) {
       const photoUrl = visit.photoDataUrl || visit.photos?.[0];
       if (photoUrl && photos.length < CLUSTER_CONFIG.maxPhotosInCluster) {
@@ -142,9 +142,9 @@ const createClusterElement = (
     if (photos.length >= CLUSTER_CONFIG.maxPhotosInCluster) break;
   }
 
-  // Number of stacked cards based on restaurant count (max 4 visible stacks)
-  const stackCount = Math.min(restaurants.length, 4);
-  const totalCount = restaurants.length;
+  // Number of stacked cards based on place count (max 4 visible stacks)
+  const stackCount = Math.min(places.length, 4);
+  const totalCount = places.length;
 
   // Generate stacked cards dynamically based on count
   const generateStackedCards = () => {
@@ -318,7 +318,7 @@ const createClusterElement = (
 };
 
 // Create HTML element for custom pin
-const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: number = 1): HTMLDivElement => {
+const createPinElement = (place: Place, onClick: () => void, scale: number = 1): HTMLDivElement => {
   const container = document.createElement('div');
   container.style.cssText = `
     position: absolute;
@@ -331,8 +331,8 @@ const createPinElement = (restaurant: Restaurant, onClick: () => void, scale: nu
   `;
   container.dataset.baseScale = String(scale);
 
-  // Get data from restaurant
-  const visits = restaurant.visits || [];
+  // Get data from place
+  const visits = place.visits || [];
   const hasMultiplePosts = visits.length >= 2;
 
   // Get photos from visits
@@ -551,17 +551,17 @@ const getClusterOverlayClass = () => {
   ClusterOverlayClass = class extends google.maps.OverlayView {
     private position: google.maps.LatLng;
     private container: HTMLDivElement;
-    private restaurants: Restaurant[];
+    private places: Place[];
     private onClick: () => void;
     private currentScale: number;
 
-    constructor(position: google.maps.LatLng, restaurants: Restaurant[], onClick: () => void, scale: number = 1) {
+    constructor(position: google.maps.LatLng, places: Place[], onClick: () => void, scale: number = 1) {
       super();
       this.position = position;
-      this.restaurants = restaurants;
+      this.places = places;
       this.onClick = onClick;
       this.currentScale = scale;
-      this.container = createClusterElement(restaurants, onClick, scale);
+      this.container = createClusterElement(places, onClick, scale);
     }
 
     onAdd() {
@@ -597,8 +597,8 @@ const getClusterOverlayClass = () => {
       this.container.style.transform = `translate(-50%, -100%) scale(${scale})`;
     }
 
-    getRestaurants() {
-      return this.restaurants;
+    getPlaces() {
+      return this.places;
     }
 
     getContainer() {
@@ -615,17 +615,17 @@ const getCustomMarkerOverlayClass = () => {
   CustomMarkerOverlayClass = class extends google.maps.OverlayView {
     private position: google.maps.LatLng;
     private container: HTMLDivElement;
-    private restaurant: Restaurant;
+    private place: Place;
     private onClick: () => void;
     private currentScale: number;
 
-    constructor(position: google.maps.LatLng, restaurant: Restaurant, onClick: () => void, scale: number = 1) {
+    constructor(position: google.maps.LatLng, place: Place, onClick: () => void, scale: number = 1) {
       super();
       this.position = position;
-      this.restaurant = restaurant;
+      this.place = place;
       this.onClick = onClick;
       this.currentScale = scale;
-      this.container = createPinElement(restaurant, onClick, scale);
+      this.container = createPinElement(place, onClick, scale);
     }
 
     onAdd() {
@@ -658,9 +658,9 @@ const getCustomMarkerOverlayClass = () => {
       return this.container;
     }
 
-    updateContent(restaurant: Restaurant) {
-      this.restaurant = restaurant;
-      const newContainer = createPinElement(restaurant, this.onClick, this.currentScale);
+    updateContent(place: Place) {
+      this.place = place;
+      const newContainer = createPinElement(place, this.onClick, this.currentScale);
       this.container.innerHTML = newContainer.innerHTML;
     }
 
@@ -670,8 +670,8 @@ const getCustomMarkerOverlayClass = () => {
       this.container.style.transform = `translate(-50%, -100%) scale(${scale})`;
     }
 
-    getRestaurant() {
-      return this.restaurant;
+    getPlace() {
+      return this.place;
     }
   };
 
@@ -680,7 +680,7 @@ const getCustomMarkerOverlayClass = () => {
 
 const MapContainer: React.FC<MapContainerProps> = ({ 
   apiKey, 
-  restaurants, 
+  places, 
   onMarkerClick, 
   onMapLoad, 
   onMapClick, 
@@ -697,33 +697,33 @@ const MapContainer: React.FC<MapContainerProps> = ({
   const hiddenOverlaysRef = useRef<Set<string>>(new Set());
   const currentMapTypeRef = useRef<string>(mapType);
   const onMapClickRef = useRef(onMapClick);
-  const restaurantsMapRef = useRef<Map<string, Restaurant>>(new Map());
+  const placesMapRef = useRef<Map<string, Place>>(new Map());
   const zoomListenerRef = useRef<google.maps.MapsEventListener | null>(null);
   const currentScaleRef = useRef<number>(1);
 
   // Clustering helper function
   const computeClusters = (
     map: google.maps.Map,
-    restaurants: Restaurant[],
+    places: Place[],
     zoom: number
-  ): { clusters: Restaurant[][]; singles: Restaurant[] } => {
+  ): { clusters: Place[][]; singles: Place[] } => {
     if (zoom >= CLUSTER_CONFIG.minZoomForClustering) {
-      return { clusters: [], singles: restaurants };
+      return { clusters: [], singles: places };
     }
 
     const projection = map.getProjection();
-    if (!projection) return { clusters: [], singles: restaurants };
+    if (!projection) return { clusters: [], singles: places };
 
     // Convert to pixel coordinates
-    const points: { restaurant: Restaurant; pixel: google.maps.Point }[] = [];
-    for (const r of restaurants) {
+    const points: { place: Place; pixel: google.maps.Point }[] = [];
+    for (const r of places) {
       if (r.location) {
         const latLng = new google.maps.LatLng(r.location.lat, r.location.lng);
         const worldPoint = projection.fromLatLngToPoint(latLng);
         if (worldPoint) {
           const scale = Math.pow(2, zoom);
           points.push({
-            restaurant: r,
+            place: r,
             pixel: new google.maps.Point(worldPoint.x * scale, worldPoint.y * scale)
           });
         }
@@ -732,7 +732,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
     // Grid-based clustering
     const gridSize = CLUSTER_CONFIG.gridSize;
-    const grid: Map<string, Restaurant[]> = new Map();
+    const grid: Map<string, Place[]> = new Map();
 
     for (const point of points) {
       const cellX = Math.floor(point.pixel.x / gridSize);
@@ -742,11 +742,11 @@ const MapContainer: React.FC<MapContainerProps> = ({
       if (!grid.has(key)) {
         grid.set(key, []);
       }
-      grid.get(key)!.push(point.restaurant);
+      grid.get(key)!.push(point.place);
     }
 
-    const clusters: Restaurant[][] = [];
-    const singles: Restaurant[] = [];
+    const clusters: Place[][] = [];
+    const singles: Place[] = [];
 
     for (const [, group] of grid) {
       if (group.length >= 2) {
@@ -762,10 +762,10 @@ const MapContainer: React.FC<MapContainerProps> = ({
   // Update clusters and marker visibility with smooth transitions
   const updateClustering = (map: google.maps.Map, scale: number) => {
     const zoom = map.getZoom() || 13;
-    const restaurants = Array.from(restaurantsMapRef.current.values());
-    const { clusters, singles } = computeClusters(map, restaurants, zoom);
+    const places = Array.from(placesMapRef.current.values());
+    const { clusters, singles } = computeClusters(map, places, zoom);
 
-    // Track which restaurants are in clusters
+    // Track which places are in clusters
     const clusteredIds = new Set<string>();
     for (const cluster of clusters) {
       for (const r of cluster) {
@@ -958,7 +958,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
     }
   };
 
-  // Update markers when restaurants change
+  // Update markers when places change
   useEffect(() => {
     if (!mapInstance || !isMapReady) {
       return;
@@ -968,19 +968,19 @@ const MapContainer: React.FC<MapContainerProps> = ({
     const isSatellite = mapType === 'satellite';
     const circleStyle = getCircleStyle(isDarkMode, isSatellite);
 
-    // Filter restaurants with valid coordinates
-    const validRestaurants = restaurants.filter(r => 
+    // Filter places with valid coordinates
+    const validPlaces = places.filter(r => 
       r.location && 
       typeof r.location.lat === 'number' && 
       typeof r.location.lng === 'number'
     );
 
-    console.log(`Processing ${validRestaurants.length} valid restaurants out of ${restaurants.length}`);
+    console.log(`Processing ${validPlaces.length} valid places out of ${places.length}`);
 
-    const currentIds = new Set(validRestaurants.map(r => r.id));
+    const currentIds = new Set(validPlaces.map(r => r.id));
 
-    restaurantsMapRef.current.clear();
-    validRestaurants.forEach(r => restaurantsMapRef.current.set(r.id, r));
+    placesMapRef.current.clear();
+    validPlaces.forEach(r => placesMapRef.current.set(r.id, r));
 
     // Remove old overlays not in current set
     for (const [id, overlay] of overlaysRef.current) {
@@ -1002,19 +1002,19 @@ const MapContainer: React.FC<MapContainerProps> = ({
     currentScaleRef.current = scale;
 
     // Add or update overlays
-    for (const restaurant of validRestaurants) {
-      if (!overlaysRef.current.has(restaurant.id)) {
-        const position = new google.maps.LatLng(restaurant.location.lat, restaurant.location.lng);
+    for (const place of validPlaces) {
+      if (!overlaysRef.current.has(place.id)) {
+        const position = new google.maps.LatLng(place.location.lat, place.location.lng);
 
         const OverlayClass = getCustomMarkerOverlayClass();
         const overlay = new OverlayClass(
           position,
-          restaurant,
-          () => onMarkerClick(restaurant),
+          place,
+          () => onMarkerClick(place),
           scale
         );
         overlay.setMap(mapInstance);
-        overlaysRef.current.set(restaurant.id, overlay);
+        overlaysRef.current.set(place.id, overlay);
 
         // Create exploration circle
         const circle = new google.maps.Circle({
@@ -1024,16 +1024,16 @@ const MapContainer: React.FC<MapContainerProps> = ({
           fillColor: circleStyle.fillColor,
           fillOpacity: circleStyle.fillOpacity,
           map: mapInstance,
-          center: { lat: restaurant.location.lat, lng: restaurant.location.lng },
+          center: { lat: place.location.lat, lng: place.location.lng },
           radius: EXPLORED_RADIUS,
           clickable: false,
         });
 
-        circlesRef.current.set(restaurant.id, circle);
+        circlesRef.current.set(place.id, circle);
       } else {
         // Update existing overlay content
-        const overlay = overlaysRef.current.get(restaurant.id)!;
-        overlay.updateContent(restaurant);
+        const overlay = overlaysRef.current.get(place.id)!;
+        overlay.updateContent(place);
       }
     }
 
@@ -1042,7 +1042,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
     // Update clustering after markers are created
     updateClustering(mapInstance, scale);
 
-  }, [mapInstance, restaurants, onMarkerClick, mapType, isMapReady]);
+  }, [mapInstance, places, onMarkerClick, mapType, isMapReady]);
 
   // Update map type/style
   useEffect(() => {

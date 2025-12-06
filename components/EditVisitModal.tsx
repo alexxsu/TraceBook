@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Camera, Trash2, Save } from 'lucide-react';
-import { Visit, Restaurant } from '../types';
+import { Visit, Place } from '../types';
 import { GRADES } from '../utils/rating';
 import { compressImage } from '../utils/image';
 import { storage } from '../firebaseConfig';
@@ -11,16 +11,16 @@ import { useLanguage } from '../hooks/useLanguage';
 
 interface EditVisitModalProps {
   visit: Visit;
-  restaurant: Restaurant;
+  place: Place;
   onClose: () => void;
-  onSave: (restaurantId: string, oldVisit: Visit, newVisit: Visit) => void;
+  onSave: (placeId: string, oldVisit: Visit, newVisit: Visit) => void;
 }
 
-const EditVisitModal: React.FC<EditVisitModalProps> = ({ 
-  visit, 
-  restaurant, 
-  onClose, 
-  onSave 
+const EditVisitModal: React.FC<EditVisitModalProps> = ({
+  visit,
+  place,
+  onClose,
+  onSave
 }) => {
   const { t } = useLanguage();
   const [rating, setRating] = useState(visit.rating);
@@ -120,7 +120,7 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
     try {
       // 1. Upload New Photos
       const uploadPromises = newFiles.map(async (file, index) => {
-        const filename = `visits/${restaurant.id}/${Date.now()}_edit_${index}.jpg`;
+        const filename = `visits/${place.id}/${Date.now()}_edit_${index}.jpg`;
         const storageRef = ref(storage, filename);
         const snapshot = await uploadBytes(storageRef, file);
         return await getDownloadURL(snapshot.ref);
@@ -140,7 +140,7 @@ const EditVisitModal: React.FC<EditVisitModalProps> = ({
         photoDataUrl: finalPhotos[0], // Ensure primary photo is updated
       };
 
-      onSave(restaurant.id, visit, updatedVisit);
+      onSave(place.id, visit, updatedVisit);
 
     } catch (error) {
       console.error("Failed to update visit:", error);

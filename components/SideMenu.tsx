@@ -108,11 +108,12 @@ export const SideMenu: React.FC<SideMenuProps> = ({
         onClick={onClose}
       />
 
-      {/* Menu Panel */}
+      {/* Menu Panel - Floating card style */}
       <div
-        className={`fixed top-0 left-0 h-full w-72 bg-gray-900 border-r border-gray-700 z-[101] shadow-2xl transform transition-transform duration-300 ease-out flex flex-col ${
+        className={`fixed top-2 left-2 bottom-2 w-72 bg-gray-900 border border-gray-700/50 z-[101] rounded-3xl transform transition-transform duration-300 ease-out flex flex-col overflow-hidden ${
           isMenuAnimatingIn && !isMenuClosing ? 'translate-x-0' : '-translate-x-full'
         }`}
+        style={{ boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' }}
       >
         {/* Menu Header - Fixed */}
         <div className="flex-shrink-0 p-5 border-b border-gray-700">

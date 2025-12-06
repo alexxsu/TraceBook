@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Restaurant, UserMap } from '../types';
+import { Place, UserMap } from '../types';
 
 export interface MapSearchSource {
   map: UserMap;
-  restaurants: Restaurant[];
+  places: Place[];
 }
 
 export interface SearchResultGroup {
   map: UserMap;
-  matches: Restaurant[];
+  matches: Place[];
 }
 
 interface UseSearchReturn {
@@ -20,7 +20,7 @@ interface UseSearchReturn {
   isSearchClosing: boolean;
   searchInputRef: React.RefObject<HTMLInputElement>;
   closeSearch: () => void;
-  handleSearchSelect: (restaurant: Restaurant, mapInstance: google.maps.Map | null, onSelect: (r: Restaurant) => void) => void;
+  handleSearchSelect: (place: Place, mapInstance: google.maps.Map | null, onSelect: (p: Place) => void) => void;
 }
 
 export function useSearch(
@@ -43,7 +43,7 @@ export function useSearch(
         const grouped = sources
           .map(source => ({
             map: source.map,
-            matches: source.restaurants
+            matches: source.places
           }))
           .filter(group => group.matches.length > 0);
         setSearchResults(grouped);
@@ -57,9 +57,9 @@ export function useSearch(
     const grouped = sources
       .map(source => ({
         map: source.map,
-        matches: source.restaurants.filter(r =>
-          r.name.toLowerCase().includes(lowerQuery) ||
-          r.address.toLowerCase().includes(lowerQuery)
+        matches: source.places.filter(p =>
+          p.name.toLowerCase().includes(lowerQuery) ||
+          p.address.toLowerCase().includes(lowerQuery)
         )
       }))
       .filter(group => group.matches.length > 0);
@@ -84,20 +84,20 @@ export function useSearch(
   }, [isSearchFocused, searchQuery]);
 
   const handleSearchSelect = useCallback((
-    restaurant: Restaurant,
+    place: Place,
     mapInstance: google.maps.Map | null,
-    onSelect: (r: Restaurant) => void
+    onSelect: (p: Place) => void
   ) => {
     setSearchQuery('');
     setSearchResults([]);
     setIsSearchFocused(false);
 
     if (mapInstance) {
-      mapInstance.setCenter(restaurant.location);
+      mapInstance.setCenter(place.location);
       mapInstance.setZoom(16);
     }
 
-    onSelect(restaurant);
+    onSelect(place);
   }, []);
 
   return {

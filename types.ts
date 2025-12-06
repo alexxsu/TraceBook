@@ -16,7 +16,7 @@ export interface Visit {
   creatorPhotoURL?: string | null; // User Profile Picture
 }
 
-export interface Restaurant {
+export interface Place {
   id: string; // Google Place ID or internal ID
   name: string;
   address: string;
@@ -249,7 +249,7 @@ export enum ViewState {
   PENDING = 'PENDING',
   MAP = 'MAP',
   ADD_ENTRY = 'ADD_ENTRY',
-  RESTAURANT_DETAIL = 'RESTAURANT_DETAIL',
+  PLACE_DETAIL = 'PLACE_DETAIL',
   INFO = 'INFO',
   USER_HISTORY = 'USER_HISTORY',
   EDIT_ENTRY = 'EDIT_ENTRY',

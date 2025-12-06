@@ -15,7 +15,7 @@ interface MapSelectorPillProps {
   setIsCompactCardOpen: (open: boolean) => void;
   onSelectMap: (map: UserMap) => void;
   onManageMaps: () => void;
-  restaurantsCount: number;
+  placesCount: number;
   filteredCount: number;
 }
 
@@ -49,7 +49,7 @@ export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({
   setIsCompactCardOpen,
   onSelectMap,
   onManageMaps,
-  restaurantsCount,
+  placesCount,
   filteredCount
 }) => {
   const [isAdminListOpen, setIsAdminListOpen] = useState(false);
@@ -326,7 +326,7 @@ export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({
           <div className="flex gap-4 mt-2 pt-2 border-t border-gray-700 text-xs">
             <div className="flex gap-1">
               <span className="text-gray-500">Pins:</span>
-              <span className="text-gray-200">{restaurantsCount}</span>
+              <span className="text-gray-200">{placesCount}</span>
             </div>
             <div className="flex gap-1">
               <span className="text-gray-500">Filtered:</span>

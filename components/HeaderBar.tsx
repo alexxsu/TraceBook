@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Filter, X, Bell, Lock, Users, Globe, Sparkles, ChevronUp, ChevronDown } from 'lucide-react';
-import { Restaurant, AppNotification, UserMap } from '../types';
+import { Place, AppNotification, UserMap } from '../types';
 import { GRADES, getGradeColor } from '../utils/rating';
 import { NotificationPanel } from './NotificationPanel';
 import { useLanguage } from '../hooks/useLanguage';
@@ -39,7 +39,7 @@ interface HeaderBarProps {
   isSearchClosing: boolean;
   searchInputRef: React.RefObject<HTMLInputElement>;
   closeSearch: () => void;
-  onSearchSelect: (restaurant: Restaurant, map: UserMap) => void;
+  onSearchSelect: (place: Place, map: UserMap) => void;
   // Filter props
   selectedGrades: string[];
   isFilterOpen: boolean;
@@ -243,7 +243,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             data-tutorial="search-bar"
             onClick={() => {
               setIsSearchFocused(true);
-              if (isAdmin) setAdminSearchMode('list');
               // Focus input after transition
               setTimeout(() => searchInputRef.current?.focus(), 150);
             }}
