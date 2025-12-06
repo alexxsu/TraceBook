@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Menu, Search, Filter, X, Bell, Lock, Users, Globe, Sparkles, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, Filter, X, Bell, Lock, Users, Globe, Sparkles, ChevronUp, ChevronDown } from 'lucide-react';
 import { Restaurant, AppNotification, UserMap } from '../types';
 import { GRADES, getGradeColor } from '../utils/rating';
 import { NotificationPanel } from './NotificationPanel';
@@ -224,14 +224,16 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <button
           data-tutorial="menu-button"
           onClick={(e) => { e.stopPropagation(); onMenuToggle(); }}
-          className={`px-3 py-2.5 rounded-lg flex-shrink-0 transition-all duration-300 ${
+          className={`w-10 h-10 rounded-lg flex-shrink-0 transition-all duration-300 flex flex-col items-stretch justify-center gap-[5px] px-2 ${
             isMenuOpen
-              ? 'bg-gray-700/80 text-blue-300 rotate-90 scale-110'
-              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              ? 'bg-gray-700/80 rotate-90 scale-110'
+              : 'hover:bg-gray-700'
           }`}
           aria-pressed={isMenuOpen}
         >
-          <Menu size={22} className="transition-transform duration-300" />
+          <span className={`h-[2px] w-full rounded-full transition-colors duration-300 ${isMenuOpen ? 'bg-blue-300' : 'bg-gray-400 group-hover:bg-white'}`}></span>
+          <span className={`h-[2px] w-full rounded-full transition-colors duration-300 ${isMenuOpen ? 'bg-blue-300' : 'bg-gray-400 group-hover:bg-white'}`}></span>
+          <span className={`h-[2px] w-full rounded-full transition-colors duration-300 ${isMenuOpen ? 'bg-blue-300' : 'bg-gray-400 group-hover:bg-white'}`}></span>
         </button>
 
         {/* Logo/Title and Search Input - morphing transition */}

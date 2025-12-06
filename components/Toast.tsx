@@ -107,7 +107,7 @@ export const Toast: React.FC<ToastProps> = ({
 
   // Standard bottom toast for other messages
   const toast = (
-    <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-[200] pointer-events-none">
+    <div className="fixed bottom-24 left-0 right-0 z-[200] pointer-events-none flex justify-center">
       <div
         className={`
           flex items-center gap-3 px-5 py-3.5
