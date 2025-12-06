@@ -158,6 +158,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({
                 onClose();
                 onManageMaps();
               }}
+              data-tutorial="side-menu-manage-maps"
               className="w-full flex items-center gap-4 px-4 py-3.5 text-gray-300 hover:text-white hover:bg-gray-800 rounded-xl transition-all duration-200 group"
             >
               <div className="w-10 h-10 rounded-full bg-gray-800 group-hover:bg-gray-700 flex items-center justify-center transition-colors duration-200">

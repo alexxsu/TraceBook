@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>TraceBook</title>
     
     <script>
@@ -25,12 +25,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      /* Prevent page-level scrolling on mobile */
+      /* Prevent page-level scrolling and zooming on mobile */
       html {
         height: 100%;
         overflow: hidden;
         position: fixed;
         width: 100%;
+        touch-action: pan-x pan-y;
       }
 
       body {
@@ -42,6 +43,9 @@
         position: fixed;
         overscroll-behavior: none;
         font-family: 'Inter', sans-serif;
+        touch-action: pan-x pan-y;
+        -webkit-user-select: none;
+        user-select: none;
       }
 
       #root {
@@ -49,7 +53,15 @@
         width: 100%;
         overflow: hidden;
         position: relative;
+        touch-action: pan-x pan-y;
       }
+      
+      /* Allow text selection in specific areas */
+      .selectable {
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      
       ::-webkit-scrollbar { width: 8px; }
       ::-webkit-scrollbar-track { background: #1f2937; }
       ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
@@ -134,6 +146,40 @@
         animation: bloomIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; 
         transform-origin: bottom center;
       }
+      
+      /* Glass Toast Animations */
+      @keyframes glassBlurIn {
+        from { backdrop-filter: blur(0px); background: rgba(0,0,0,0); }
+        to { backdrop-filter: blur(12px); background: rgba(0,0,0,0.4); }
+      }
+      @keyframes glassBlurOut {
+        from { backdrop-filter: blur(12px); background: rgba(0,0,0,0.4); }
+        to { backdrop-filter: blur(0px); background: rgba(0,0,0,0); }
+      }
+      @keyframes toastFloatIn {
+        0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+        100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      }
+      @keyframes toastFloatOut {
+        0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+      }
+      .animate-glass-blur-in { animation: glassBlurIn 0.3s ease-out forwards; }
+      .animate-glass-blur-out { animation: glassBlurOut 0.3s ease-in forwards; }
+      .animate-toast-float-in { animation: toastFloatIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+      .animate-toast-float-out { animation: toastFloatOut 0.3s ease-in forwards; }
+      
+      /* Floating Card Animation */
+      @keyframes floatCardIn {
+        0% { transform: translateY(100%); opacity: 0; }
+        100% { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes floatCardOut {
+        0% { transform: translateY(0); opacity: 1; }
+        100% { transform: translateY(100%); opacity: 0; }
+      }
+      .animate-float-card-in { animation: floatCardIn 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .animate-float-card-out { animation: floatCardOut 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
       
       /* Stagger delays */
       .delay-75 { animation-delay: 75ms; }

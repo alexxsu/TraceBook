@@ -10,11 +10,11 @@ export type TutorialStep =
   | 'filter_button'
   | 'filter_observe'
   | 'side_menu'
-  | 'side_menu_observe'
+  | 'manage_maps_button'
+  | 'map_management_modal'
+  | 'close_menu_transition'
   | 'map_pill'
   | 'map_pill_observe'
-  | 'map_management'
-  | 'map_types'
   | 'map_controls'
   | 'add_button'
   | 'complete';
@@ -25,6 +25,7 @@ interface TutorialProps {
   onComplete?: () => void;
   onOpenMapManagement?: () => void;
   onCloseMapManagement?: () => void;
+  onCloseSideMenu?: () => void;
   isGuestUser?: boolean;
 }
 
@@ -39,58 +40,6 @@ interface StepConfig {
 }
 
 // Pre-generate firework data outside component to avoid hooks issues
-const generateFireworks = () => {
-  const colors = [
-    'bg-yellow-400', 'bg-pink-400', 'bg-blue-400', 
-    'bg-green-400', 'bg-purple-400', 'bg-orange-400',
-    'bg-red-400', 'bg-cyan-400', 'bg-amber-400'
-  ];
-  
-  const bursts: Array<{
-    id: string;
-    startX: number;
-    startY: number;
-    delay: number;
-    color: string;
-    size: number;
-    endX: number;
-    endY: number;
-  }> = [];
-  
-  const burstPoints = [
-    { x: 25, y: 20, delay: 0 },
-    { x: 75, y: 25, delay: 0.2 },
-    { x: 50, y: 15, delay: 0.4 },
-    { x: 15, y: 40, delay: 0.6 },
-    { x: 85, y: 35, delay: 0.8 },
-    { x: 40, y: 55, delay: 1.0 },
-    { x: 60, y: 50, delay: 1.2 },
-    { x: 30, y: 70, delay: 1.4 },
-    { x: 70, y: 65, delay: 1.6 },
-  ];
-  
-  for (const burst of burstPoints) {
-    const particleCount = 18;
-    for (let i = 0; i < particleCount; i++) {
-      const angle = (Math.PI * 2 * i) / particleCount;
-      const distance = 80 + (i % 3) * 40;
-      bursts.push({
-        id: `${burst.x}-${burst.y}-${i}`,
-        startX: burst.x,
-        startY: burst.y,
-        delay: burst.delay + (i % 4) * 0.05,
-        color: colors[i % colors.length],
-        size: 5 + (i % 3) * 3,
-        endX: Math.cos(angle) * distance,
-        endY: Math.sin(angle) * distance,
-      });
-    }
-  }
-  return bursts;
-};
-
-const FIREWORK_DATA = generateFireworks();
-
 // Full-screen celebration overlay - rendered at root level
 const CelebrationOverlay: React.FC<{ show: boolean; onFadeComplete: () => void }> = ({ show, onFadeComplete }) => {
   const [visible, setVisible] = useState(false);
@@ -100,15 +49,15 @@ const CelebrationOverlay: React.FC<{ show: boolean; onFadeComplete: () => void }
     if (show) {
       setVisible(true);
       setFading(false);
-      // Start fading after 2.5 seconds
+      // Start fading after 3 seconds
       const fadeTimer = setTimeout(() => {
         setFading(true);
-      }, 2500);
+      }, 3000);
       // Complete hide after fade
       const hideTimer = setTimeout(() => {
         setVisible(false);
         onFadeComplete();
-      }, 3500);
+      }, 4000);
       return () => {
         clearTimeout(fadeTimer);
         clearTimeout(hideTimer);
@@ -118,85 +67,123 @@ const CelebrationOverlay: React.FC<{ show: boolean; onFadeComplete: () => void }
 
   if (!visible) return null;
 
+  // Generate many stars that burst from center upward
+  const stars: Array<{
+    id: number;
+    angle: number;
+    distance: number;
+    size: number;
+    delay: number;
+    duration: number;
+    color: string;
+  }> = [];
+  
+  const colors = [
+    'text-yellow-400', 'text-amber-400', 'text-orange-400',
+    'text-pink-400', 'text-rose-400', 'text-red-400',
+    'text-purple-400', 'text-violet-400', 'text-indigo-400',
+    'text-blue-400', 'text-cyan-400', 'text-teal-400',
+    'text-green-400', 'text-emerald-400', 'text-lime-400',
+  ];
+
+  // Create 60 stars bursting outward, mostly upward
+  for (let i = 0; i < 60; i++) {
+    // Bias angle upward (-120° to -60° is straight up area, with some spread to sides)
+    const baseAngle = -90; // straight up
+    const angleVariation = (Math.random() - 0.5) * 180; // -90 to +90 variation
+    const angle = baseAngle + angleVariation;
+    
+    stars.push({
+      id: i,
+      angle: angle,
+      distance: 150 + Math.random() * 300, // 150-450px
+      size: 10 + Math.random() * 16, // 10-26px
+      delay: Math.random() * 0.5, // 0-0.5s stagger
+      duration: 1.5 + Math.random() * 1, // 1.5-2.5s
+      color: colors[i % colors.length],
+    });
+  }
+
   return (
     <div 
       className={`fixed inset-0 z-[250] pointer-events-none transition-opacity duration-1000 ${fading ? 'opacity-0' : 'opacity-100'}`}
     >
       <style>{`
-        @keyframes firework-particle {
+        @keyframes star-burst {
           0% {
-            transform: translate(0, 0) scale(1);
+            transform: translate(-50%, -50%) scale(0) rotate(0deg);
+            opacity: 0;
+          }
+          10% {
+            transform: translate(-50%, -50%) scale(1) rotate(20deg);
             opacity: 1;
           }
           70% {
-            opacity: 1;
+            opacity: 0.9;
           }
           100% {
-            transform: translate(var(--end-x), var(--end-y)) scale(0);
+            transform: translate(
+              calc(-50% + var(--end-x)), 
+              calc(-50% + var(--end-y))
+            ) scale(0.3) rotate(180deg);
             opacity: 0;
           }
         }
-        @keyframes firework-burst {
-          0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
-          50% { transform: translate(-50%, -50%) scale(1.5); opacity: 0.8; }
-          100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+        @keyframes sparkle-twinkle {
+          0%, 100% { opacity: 0.3; transform: scale(0.8); }
+          50% { opacity: 1; transform: scale(1.2); }
         }
-        @keyframes sparkle-float {
-          0%, 100% { transform: translateY(0) rotate(0deg); opacity: 0.9; }
-          50% { transform: translateY(-10px) rotate(180deg); opacity: 1; }
+        @keyframes center-glow {
+          0% { transform: translate(-50%, -50%) scale(0); opacity: 0.8; }
+          30% { transform: translate(-50%, -50%) scale(2); opacity: 0.6; }
+          100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
         }
       `}</style>
       
-      {/* Firework particles */}
-      {FIREWORK_DATA.map((particle) => (
-        <div
-          key={particle.id}
-          className={`absolute rounded-full ${particle.color}`}
-          style={{
-            width: particle.size,
-            height: particle.size,
-            left: `${particle.startX}%`,
-            top: `${particle.startY}%`,
-            animation: `firework-particle 1.5s ease-out ${particle.delay}s forwards`,
-            ['--end-x' as any]: `${particle.endX}px`,
-            ['--end-y' as any]: `${particle.endY}px`,
-          }}
-        />
-      ))}
+      {/* Central glow burst */}
+      <div
+        className="absolute w-32 h-32 rounded-full bg-gradient-to-r from-yellow-400/60 via-orange-400/60 to-pink-400/60"
+        style={{
+          left: '50%',
+          top: '45%',
+          animation: 'center-glow 1s ease-out forwards',
+          filter: 'blur(20px)',
+        }}
+      />
       
-      {/* Center burst effects */}
-      {[
-        { x: 25, y: 20, delay: 0, color: 'bg-yellow-300/40' },
-        { x: 75, y: 25, delay: 0.2, color: 'bg-pink-300/40' },
-        { x: 50, y: 15, delay: 0.4, color: 'bg-blue-300/40' },
-        { x: 15, y: 40, delay: 0.6, color: 'bg-green-300/40' },
-        { x: 85, y: 35, delay: 0.8, color: 'bg-purple-300/40' },
-        { x: 40, y: 55, delay: 1.0, color: 'bg-orange-300/40' },
-        { x: 60, y: 50, delay: 1.2, color: 'bg-cyan-300/40' },
-      ].map((burst, i) => (
-        <div
-          key={`burst-${i}`}
-          className={`absolute w-12 h-12 rounded-full ${burst.color}`}
-          style={{
-            left: `${burst.x}%`,
-            top: `${burst.y}%`,
-            animation: `firework-burst 0.8s ease-out ${burst.delay}s forwards`,
-          }}
-        />
-      ))}
+      {/* Bursting stars */}
+      {stars.map((star) => {
+        const endX = Math.cos((star.angle * Math.PI) / 180) * star.distance;
+        const endY = Math.sin((star.angle * Math.PI) / 180) * star.distance;
+        
+        return (
+          <div
+            key={star.id}
+            className={`absolute ${star.color}`}
+            style={{
+              left: '50%',
+              top: '45%',
+              animation: `star-burst ${star.duration}s ease-out ${star.delay}s forwards`,
+              ['--end-x' as any]: `${endX}px`,
+              ['--end-y' as any]: `${endY}px`,
+            }}
+          >
+            <Sparkles size={star.size} style={{ filter: 'drop-shadow(0 0 4px currentColor)' }} />
+          </div>
+        );
+      })}
       
-      {/* Floating sparkles */}
-      {[...Array(30)].map((_, i) => (
+      {/* Additional twinkling stars scattered around */}
+      {[...Array(25)].map((_, i) => (
         <Sparkles
-          key={`sparkle-${i}`}
-          size={12 + (i % 4) * 5}
-          className={`absolute ${
-            ['text-yellow-400', 'text-pink-400', 'text-blue-400', 'text-green-400', 'text-purple-400', 'text-orange-400'][i % 6]
-          }`}
+          key={`twinkle-${i}`}
+          size={8 + (i % 4) * 4}
+          className={`absolute ${colors[i % colors.length]}`}
           style={{
-            left: `${5 + (i * 3.2)}%`,
-            top: `${10 + (i % 8) * 10}%`,
-            animation: `sparkle-float 1.5s ease-in-out ${i * 0.08}s infinite`,
+            left: `${10 + (i * 3.5)}%`,
+            top: `${5 + (i % 6) * 15}%`,
+            animation: `sparkle-twinkle ${0.8 + (i % 3) * 0.3}s ease-in-out ${i * 0.1}s infinite`,
+            filter: 'drop-shadow(0 0 3px currentColor)',
           }}
         />
       ))}
@@ -204,30 +191,98 @@ const CelebrationOverlay: React.FC<{ show: boolean; onFadeComplete: () => void }
   );
 };
 
-// Checkmark animation overlay - rendered at root level
+// Checkmark animation overlay - centered on screen where card appears
 const CheckmarkOverlay: React.FC<{ show: boolean }> = ({ show }) => {
-  if (!show) return null;
-
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  
+  useEffect(() => {
+    if (!show) {
+      setPosition(null);
+      return;
+    }
+    
+    // Find the checkmark element by looking for the green gradient circle in complete step
+    const findCheckmark = () => {
+      const checkmarkContainer = document.querySelector('[data-tutorial-checkmark]');
+      if (checkmarkContainer) {
+        const rect = checkmarkContainer.getBoundingClientRect();
+        setPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2
+        });
+      }
+    };
+    
+    // Try immediately and also after a short delay for animation
+    findCheckmark();
+    const timer = setTimeout(findCheckmark, 100);
+    const timer2 = setTimeout(findCheckmark, 300);
+    
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(timer2);
+    };
+  }, [show]);
+  
+  if (!show || !position) return null;
+  
   return (
-    <div className="fixed inset-0 z-[240] pointer-events-none flex items-center justify-center">
+    <div className="fixed inset-0 z-[240] pointer-events-none">
       <style>{`
-        @keyframes checkmark-ring-ping {
-          0% { transform: scale(1); opacity: 0.6; }
-          100% { transform: scale(2.5); opacity: 0; }
+        @keyframes checkmark-ring-expand-1 {
+          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+          100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
         }
-        @keyframes checkmark-ring-ping-delayed {
-          0% { transform: scale(1); opacity: 0.4; }
-          100% { transform: scale(3); opacity: 0; }
+        @keyframes checkmark-ring-expand-2 {
+          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
+          100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; }
+        }
+        @keyframes checkmark-ring-expand-3 {
+          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.6; }
+          100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+        }
+        @keyframes checkmark-glow-pulse {
+          0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+          50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.7; }
         }
       `}</style>
-      {/* Pulsing rings that expand outward */}
+      
+      {/* Glowing center */}
       <div 
-        className="absolute w-28 h-28 rounded-full border-4 border-green-400/60"
-        style={{ animation: 'checkmark-ring-ping 1.5s ease-out infinite' }}
+        className="absolute w-24 h-24 rounded-full bg-green-500/40"
+        style={{ 
+          left: position.x,
+          top: position.y,
+          transform: 'translate(-50%, -50%)',
+          animation: 'checkmark-glow-pulse 1s ease-in-out infinite',
+          boxShadow: '0 0 40px rgba(34, 197, 94, 0.6), 0 0 80px rgba(34, 197, 94, 0.3)',
+        }}
+      />
+      
+      {/* Expanding rings */}
+      <div 
+        className="absolute w-20 h-20 rounded-full border-4 border-green-400"
+        style={{ 
+          left: position.x,
+          top: position.y,
+          animation: 'checkmark-ring-expand-1 1.5s ease-out infinite' 
+        }}
       />
       <div 
-        className="absolute w-28 h-28 rounded-full border-4 border-emerald-400/40"
-        style={{ animation: 'checkmark-ring-ping-delayed 1.5s ease-out 0.3s infinite' }}
+        className="absolute w-20 h-20 rounded-full border-4 border-emerald-400"
+        style={{ 
+          left: position.x,
+          top: position.y,
+          animation: 'checkmark-ring-expand-2 1.5s ease-out 0.25s infinite' 
+        }}
+      />
+      <div 
+        className="absolute w-20 h-20 rounded-full border-4 border-green-300"
+        style={{ 
+          left: position.x,
+          top: position.y,
+          animation: 'checkmark-ring-expand-3 1.5s ease-out 0.5s infinite' 
+        }}
       />
     </div>
   );
@@ -239,13 +294,13 @@ export const Tutorial: React.FC<TutorialProps> = ({
   onComplete,
   onOpenMapManagement,
   onCloseMapManagement,
+  onCloseSideMenu,
   isGuestUser = false
 }) => {
   const { t, language } = useLanguage();
   const [currentStep, setCurrentStep] = useState<TutorialStep>('welcome');
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [mapManagementReady, setMapManagementReady] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showCheckmarkAnimation, setShowCheckmarkAnimation] = useState(false);
   const [contentVisible, setContentVisible] = useState(true);
@@ -255,6 +310,7 @@ export const Tutorial: React.FC<TutorialProps> = ({
   const onCompleteRef = useRef(onComplete);
   const onOpenMapManagementRef = useRef(onOpenMapManagement);
   const onCloseMapManagementRef = useRef(onCloseMapManagement);
+  const onCloseSideMenuRef = useRef(onCloseSideMenu);
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
   const transitionTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -296,11 +352,11 @@ export const Tutorial: React.FC<TutorialProps> = ({
     { id: 'filter_button', targetSelector: '[data-tutorial="filter-button"]', requiresClick: true, showOverlay: true },
     { id: 'filter_observe', showOverlay: false, revealHeader: true, autoAdvanceDelay: 3000 },
     { id: 'side_menu', targetSelector: '[data-tutorial="menu-button"]', requiresClick: true, showOverlay: true },
-    { id: 'side_menu_observe', showOverlay: false, autoAdvanceDelay: 3000 },
+    { id: 'manage_maps_button', targetSelector: '[data-tutorial="side-menu-manage-maps"]', requiresClick: true, showOverlay: true },
+    { id: 'map_management_modal', showOverlay: true },
+    { id: 'close_menu_transition', showOverlay: false, autoAdvanceDelay: 800 },
     { id: 'map_pill', targetSelector: '[data-tutorial="map-pill"]', requiresClick: true, showOverlay: true },
     { id: 'map_pill_observe', showOverlay: false, autoAdvanceDelay: 2500 },
-    { id: 'map_management', showOverlay: false }, // Opens modal, then auto-advances to map_types
-    { id: 'map_types', showOverlay: false },
     { id: 'map_controls', targetSelector: '[data-tutorial="map-controls"]', showOverlay: true },
     { id: 'add_button', targetSelector: '[data-tutorial="add-button"]', showOverlay: true, isRoundHighlight: true },
     { id: 'complete', showOverlay: true }
@@ -321,10 +377,18 @@ export const Tutorial: React.FC<TutorialProps> = ({
       setContentVisible(false);
       setIsStepReady(false);
       
-      // If leaving map_types, close the map management modal FIRST
       const currentStepId = steps[currentStepIndex].id;
-      if (currentStepId === 'map_types') {
+      const nextStepId = steps[currentStepIndex + 1].id;
+      
+      // Open map management modal when moving to map_management_modal step
+      if (nextStepId === 'map_management_modal') {
+        onOpenMapManagementRef.current?.();
+      }
+      
+      // Close map management modal and side menu when leaving map_management_modal
+      if (currentStepId === 'map_management_modal') {
         onCloseMapManagementRef.current?.();
+        onCloseSideMenuRef.current?.();
       }
       
       if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
@@ -333,11 +397,6 @@ export const Tutorial: React.FC<TutorialProps> = ({
         setHighlightRect(null);
         const nextStep = steps[currentStepIndex + 1].id;
         setCurrentStep(nextStep);
-        
-        // If moving to map_management, open the map management modal NOW
-        if (nextStep === 'map_management') {
-          onOpenMapManagementRef.current?.();
-        }
         
         setTimeout(() => {
           setContentVisible(true);
@@ -349,7 +408,6 @@ export const Tutorial: React.FC<TutorialProps> = ({
 
   const handleSkip = useCallback(() => {
     setContentVisible(false);
-    onCloseMapManagementRef.current?.();
     setTimeout(() => {
       setIsVisible(false);
       setTimeout(() => onClose(), 200);
@@ -359,7 +417,6 @@ export const Tutorial: React.FC<TutorialProps> = ({
   const handleComplete = useCallback(() => {
     setContentVisible(false);
     localStorage.setItem('tutorial_completed', 'true');
-    onCloseMapManagementRef.current?.();
     setTimeout(() => {
       setIsVisible(false);
       setTimeout(() => {
@@ -372,11 +429,37 @@ export const Tutorial: React.FC<TutorialProps> = ({
   const handleHighlightClick = useCallback(() => {
     if (!currentConfig?.requiresClick) return;
 
+    const currentStepId = currentConfig.id;
     const targetSelector = currentConfig.targetSelector;
+    
+    // For manage_maps_button, just advance (modal opens via goToNextStep)
+    if (currentStepId === 'manage_maps_button') {
+      setTimeout(goToNextStep, 300);
+      return;
+    }
+    
     if (targetSelector) {
       const element = document.querySelector(targetSelector) as HTMLElement;
       if (element) {
-        element.click();
+        const mouseDownEvent = new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        });
+        const mouseUpEvent = new MouseEvent('mouseup', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        });
+        const clickEvent = new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        });
+        
+        element.dispatchEvent(mouseDownEvent);
+        element.dispatchEvent(mouseUpEvent);
+        element.dispatchEvent(clickEvent);
       }
     }
 
@@ -386,7 +469,7 @@ export const Tutorial: React.FC<TutorialProps> = ({
   const getCardPosition = useCallback((): React.CSSProperties => {
     const viewportHeight = window.innerHeight;
     const viewportWidth = window.innerWidth;
-    const cardHeight = currentStep === 'map_types' ? 420 : 320;
+    const cardHeight = currentStep === 'map_management' ? 380 : 320;
     const cardWidth = Math.min(320, viewportWidth - 32);
     const padding = 24;
 
@@ -468,7 +551,8 @@ export const Tutorial: React.FC<TutorialProps> = ({
     onCompleteRef.current = onComplete;
     onOpenMapManagementRef.current = onOpenMapManagement;
     onCloseMapManagementRef.current = onCloseMapManagement;
-  }, [onComplete, onOpenMapManagement, onCloseMapManagement]);
+    onCloseSideMenuRef.current = onCloseSideMenu;
+  }, [onComplete, onOpenMapManagement, onCloseMapManagement, onCloseSideMenu]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -479,7 +563,6 @@ export const Tutorial: React.FC<TutorialProps> = ({
   useEffect(() => {
     if (isActive) {
       setCurrentStep('welcome');
-      setMapManagementReady(false);
       setShowCelebration(false);
       setShowCheckmarkAnimation(false);
       setCelebrationFaded(false);
@@ -491,7 +574,6 @@ export const Tutorial: React.FC<TutorialProps> = ({
       clearAllTimers();
       setIsVisible(false);
       setCurrentStep('welcome');
-      setMapManagementReady(false);
       setShowCelebration(false);
       setShowCheckmarkAnimation(false);
       setCelebrationFaded(false);
@@ -510,47 +592,6 @@ export const Tutorial: React.FC<TutorialProps> = ({
         currentStep === 'add_button') {
       onCloseMapManagementRef.current?.();
     }
-  }, [isActive, currentStep]);
-
-  // Handle map_management step - wait for modal to be ready, then auto-advance to map_types
-  useEffect(() => {
-    if (!isActive || currentStep !== 'map_management') return;
-    
-    // Wait for modal to appear, then auto-advance to map_types
-    let attempts = 0;
-    const checkModal = setInterval(() => {
-      attempts++;
-      const modal = document.querySelector('[data-modal="map-management"]');
-      if (modal || attempts > 40) {
-        clearInterval(checkModal);
-        // After modal is ready, auto-advance to map_types step
-        setTimeout(() => {
-          goToNextStep();
-        }, 500);
-      }
-    }, 100);
-    
-    return () => clearInterval(checkModal);
-  }, [isActive, currentStep, goToNextStep]);
-
-  // Handle map_types step - wait for modal to be ready
-  useEffect(() => {
-    if (!isActive || currentStep !== 'map_types') return;
-    
-    setMapManagementReady(false);
-    
-    // Wait for modal to appear
-    let attempts = 0;
-    const checkModal = setInterval(() => {
-      attempts++;
-      const modal = document.querySelector('[data-modal="map-management"]');
-      if (modal || attempts > 40) {
-        clearInterval(checkModal);
-        setTimeout(() => setMapManagementReady(true), 400);
-      }
-    }, 100);
-    
-    return () => clearInterval(checkModal);
   }, [isActive, currentStep]);
 
   // Show celebration on complete
@@ -599,13 +640,47 @@ export const Tutorial: React.FC<TutorialProps> = ({
       return;
     }
 
+    // Clear highlight immediately when step changes
     setHighlightRect(null);
 
+    let lastRect: DOMRect | null = null;
+    let stableCount = 0;
+    let hasShownHighlight = false;
+    
     const updateHighlight = () => {
       const element = document.querySelector(targetSelector);
       if (element) {
         const rect = element.getBoundingClientRect();
-        setHighlightRect(rect);
+        
+        // Check if element is visible (has dimensions and is on screen)
+        if (rect.width > 0 && rect.height > 0 && rect.top >= -10 && rect.left >= -10) {
+          // Check if position is stable (same as last check)
+          if (lastRect && 
+              Math.abs(rect.top - lastRect.top) < 3 && 
+              Math.abs(rect.left - lastRect.left) < 3 &&
+              Math.abs(rect.width - lastRect.width) < 3 &&
+              Math.abs(rect.height - lastRect.height) < 3) {
+            stableCount++;
+            // Only show highlight after position is stable for 3 consecutive checks
+            if (stableCount >= 3 && !hasShownHighlight) {
+              hasShownHighlight = true;
+              setHighlightRect(rect);
+            } else if (hasShownHighlight) {
+              // Update position if already shown
+              setHighlightRect(rect);
+            }
+          } else {
+            stableCount = 0;
+            // Reset if position changed significantly after showing
+            if (hasShownHighlight && lastRect && (
+              Math.abs(rect.top - lastRect.top) > 20 ||
+              Math.abs(rect.left - lastRect.left) > 20)) {
+              hasShownHighlight = false;
+              setHighlightRect(null);
+            }
+          }
+          lastRect = rect;
+        }
       }
     };
 
@@ -613,9 +688,14 @@ export const Tutorial: React.FC<TutorialProps> = ({
       clearTimeout(highlightTimerRef.current);
     }
     
-    highlightTimerRef.current = setTimeout(updateHighlight, 400);
+    // Wait longer before starting to check - let animations complete
+    highlightTimerRef.current = setTimeout(() => {
+      updateHighlight();
+    }, 500);
 
-    const interval = setInterval(updateHighlight, 500);
+    // Check at regular intervals
+    const interval = setInterval(updateHighlight, 150);
+    
     window.addEventListener('resize', updateHighlight);
     window.addEventListener('scroll', updateHighlight, true);
 
@@ -630,7 +710,6 @@ export const Tutorial: React.FC<TutorialProps> = ({
   // Early return AFTER all hooks
   if (!isActive) return null;
 
-  const isLoadingMapManagement = currentStep === 'map_types' && !mapManagementReady;
   const highlightStyle = getHighlightStyle();
   const cardPosition = getCardPosition();
   const showOverlay = currentConfig?.showOverlay !== false;
@@ -638,15 +717,6 @@ export const Tutorial: React.FC<TutorialProps> = ({
   const isRoundHighlight = currentConfig?.isRoundHighlight;
 
   const renderStepContent = () => {
-    if (isLoadingMapManagement) {
-      return (
-        <div className="text-center py-6">
-          <div className="w-10 h-10 mx-auto mb-3 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-gray-400 text-sm">{language === 'zh' ? '加载中...' : 'Loading...'}</p>
-        </div>
-      );
-    }
-
     switch (currentStep) {
       case 'welcome':
         return (
@@ -740,17 +810,55 @@ export const Tutorial: React.FC<TutorialProps> = ({
           </div>
         );
 
-      case 'side_menu_observe':
+      case 'manage_maps_button':
         return (
           <div className="text-center">
-            <div className="w-14 h-14 mx-auto mb-4 bg-orange-500/20 rounded-full flex items-center justify-center">
-              <Menu size={26} className="text-orange-400" />
+            <div className="w-14 h-14 mx-auto mb-4 bg-indigo-500/20 rounded-full flex items-center justify-center">
+              <Layers size={26} className="text-indigo-400" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">{t('tutorialSideMenu')}</h3>
-            <p className="text-gray-300 text-sm mb-3">{language === 'zh' ? '这里可以访问所有功能！' : 'Access all features from here!'}</p>
-            <p className="text-green-400 text-sm">✓ {language === 'zh' ? '很好！' : 'Nice!'}</p>
+            <h3 className="text-lg font-semibold text-white mb-2">{t('tutorialMapManagement')}</h3>
+            <p className="text-gray-300 text-sm mb-4">{language === 'zh' ? '点击这里管理您的地图' : 'Tap here to manage your maps'}</p>
+            <p className="text-indigo-400 text-sm animate-pulse">👆 {language === 'zh' ? '点击高亮区域' : 'Tap highlighted area'}</p>
           </div>
         );
+
+      case 'map_management_modal':
+        return (
+          <div className="text-center">
+            <div className="w-14 h-14 mx-auto mb-4 bg-indigo-500/20 rounded-full flex items-center justify-center">
+              <Layers size={26} className="text-indigo-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-3">{t('tutorialMapManagement')}</h3>
+            <p className="text-gray-300 text-sm mb-3">
+              {language === 'zh' 
+                ? '在地图管理中您可以：' 
+                : 'In Map Management you can:'}
+            </p>
+            <div className="text-left space-y-2 mb-4 text-sm">
+              <p className="text-gray-300 flex items-center gap-2">
+                <span className="text-indigo-400">•</span> 
+                {language === 'zh' ? '切换不同地图' : 'Switch between maps'}
+              </p>
+              <p className="text-gray-300 flex items-center gap-2">
+                <span className="text-indigo-400">•</span> 
+                {language === 'zh' ? '创建新地图' : 'Create new maps'}
+              </p>
+              <p className="text-gray-300 flex items-center gap-2">
+                <span className="text-indigo-400">•</span> 
+                {language === 'zh' ? '加入他人的地图' : 'Join other people\'s maps'}
+              </p>
+            </div>
+            <button
+              onClick={goToNextStep}
+              className="mt-2 px-6 py-2.5 bg-indigo-500 hover:bg-indigo-400 text-white font-medium rounded-xl transition-colors duration-200"
+            >
+              {language === 'zh' ? '下一步' : 'Next'}
+            </button>
+          </div>
+        );
+
+      case 'close_menu_transition':
+        return null;
 
       case 'map_pill':
         return (
@@ -773,53 +881,6 @@ export const Tutorial: React.FC<TutorialProps> = ({
             <h3 className="text-lg font-semibold text-white mb-2">{t('tutorialMapPill')}</h3>
             <p className="text-gray-300 text-sm mb-3">{language === 'zh' ? '查看和切换地图！' : 'View and switch maps!'}</p>
             <p className="text-green-400 text-sm">✓ {language === 'zh' ? '很好！' : 'Nice!'}</p>
-          </div>
-        );
-
-      case 'map_management':
-        return (
-          <div className="text-center py-4">
-            <div className="w-10 h-10 mx-auto mb-3 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-300 text-sm">{language === 'zh' ? '正在打开地图管理...' : 'Opening map management...'}</p>
-          </div>
-        );
-
-      case 'map_types':
-        return (
-          <div className="text-center">
-            <h3 className="text-lg font-semibold text-white mb-4">{t('tutorialMapTypes')}</h3>
-            <div className="space-y-2.5 mb-5 text-left">
-              <div className="flex items-start gap-3 bg-gray-700/50 rounded-lg p-2.5">
-                <div className="w-9 h-9 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
-                  <Lock size={16} className="text-gray-300" />
-                </div>
-                <div>
-                  <p className="text-white font-medium text-sm">{t('tutorialMapTypePrivate')}</p>
-                  <p className="text-gray-400 text-xs">{t('tutorialMapTypePrivateDesc')}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 bg-gray-700/50 rounded-lg p-2.5">
-                <div className="w-9 h-9 rounded-full bg-blue-600/30 flex items-center justify-center flex-shrink-0">
-                  <Globe size={16} className="text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-white font-medium text-sm">{t('tutorialMapTypeShared')}</p>
-                  <p className="text-gray-400 text-xs">{t('tutorialMapTypeSharedDesc')}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 bg-gray-700/50 rounded-lg p-2.5">
-                <div className="w-9 h-9 rounded-full bg-green-600/30 flex items-center justify-center flex-shrink-0">
-                  <UserPlus size={16} className="text-green-400" />
-                </div>
-                <div>
-                  <p className="text-white font-medium text-sm">{t('tutorialMapTypeJoined')}</p>
-                  <p className="text-gray-400 text-xs">{t('tutorialMapTypeJoinedDesc')}</p>
-                </div>
-              </div>
-            </div>
-            <button onClick={goToNextStep} className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-all">
-              {t('tutorialNext')}
-            </button>
           </div>
         );
 
@@ -854,7 +915,10 @@ export const Tutorial: React.FC<TutorialProps> = ({
       case 'complete':
         return (
           <div className="text-center">
-            <div className="w-20 h-20 mx-auto mb-5 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg">
+            <div 
+              data-tutorial-checkmark
+              className="w-20 h-20 mx-auto mb-5 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg"
+            >
               <Check size={40} className="text-white" />
             </div>
             <h2 className="text-2xl font-bold text-white mb-3">{t('tutorialComplete')}</h2>
@@ -986,7 +1050,7 @@ export const Tutorial: React.FC<TutorialProps> = ({
 
     return (
       <div 
-        className="absolute inset-0 bg-black/80 transition-opacity duration-300" 
+        className={`absolute inset-0 transition-opacity duration-300 ${currentStep === 'map_management' ? 'bg-black/50' : 'bg-black/80'}`}
         style={{ pointerEvents: 'auto', opacity: contentVisible ? 1 : 0 }} 
         onClick={(e) => e.stopPropagation()} 
       />
@@ -1059,6 +1123,7 @@ export const Tutorial: React.FC<TutorialProps> = ({
           </div>
         )}
 
+        {/* Tutorial card */}
         <div
           className="absolute z-[201] w-80 max-w-[calc(100vw-24px)] bg-gray-800/95 backdrop-blur-md rounded-2xl border border-gray-700 shadow-2xl p-5 transition-opacity duration-300"
           style={{ 

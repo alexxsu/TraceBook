@@ -220,18 +220,18 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   return (
     <div data-component="header-bar" className={`w-full bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 ${adminAura} ${adminGlow}`}>
           <div className="flex items-center gap-2 relative min-h-[40px]">
-            {/* Hamburger Menu Button */}
+            {/* Hamburger Menu Button - Wider touch target */}
         <button
           data-tutorial="menu-button"
           onClick={(e) => { e.stopPropagation(); onMenuToggle(); }}
-          className={`p-1.5 rounded-lg flex-shrink-0 transition-all duration-300 ${
+          className={`px-3 py-2.5 rounded-lg flex-shrink-0 transition-all duration-300 ${
             isMenuOpen
               ? 'bg-gray-700/80 text-blue-300 rotate-90 scale-110'
               : 'text-gray-400 hover:text-white hover:bg-gray-700'
           }`}
           aria-pressed={isMenuOpen}
         >
-          <Menu size={20} className="transition-transform duration-300" />
+          <Menu size={22} className="transition-transform duration-300" />
         </button>
 
         {/* Logo/Title and Search Input - morphing transition */}

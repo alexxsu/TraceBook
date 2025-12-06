@@ -670,10 +670,18 @@ function App() {
             currentUserUid={user?.uid}
           />
 
-            {/* Map Selector Pill */}
-            {activeMap && user && (
+            {/* Map Selector Pill - Always render for guests with fallback */}
+            {user && (activeMap || user.isAnonymous) && (
               <MapSelectorPill
-                activeMap={activeMap}
+                activeMap={activeMap || {
+                  id: 'guest-demo-map',
+                  ownerUid: 'demo-owner',
+                  ownerDisplayName: 'Demo',
+                  name: 'Demo Map',
+                  visibility: 'public',
+                  isDefault: true,
+                  createdAt: new Date().toISOString()
+                }}
                 user={user}
                 userProfile={userProfile}
                 userOwnMaps={userOwnMaps}
@@ -886,13 +894,14 @@ function App() {
         isGuestUser={user?.isAnonymous || false}
       />
 
-      {/* Map Switch Toast */}
+      {/* Map Switch Toast with Glass Blur Effect */}
       <Toast
         message="Switching to map"
         mapName={mapSwitchToast.mapName}
         isVisible={mapSwitchToast.visible}
         onHide={() => setMapSwitchToast({ visible: false, mapName: '' })}
-        duration={2500}
+        duration={1800}
+        isMapSwitch={true}
       />
     </div>
   );

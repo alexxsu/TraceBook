@@ -302,90 +302,127 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   };
 
   // Determine animation class
-  let animationClass = 'animate-slide-in-up sm:animate-slide-in-right'; // Mobile slide up, Desktop slide right
+  let animationClass = 'animate-float-card-in sm:animate-slide-in-right';
   if (isClosing) {
-    animationClass = isClosingDown ? 'animate-slide-out-down' : 'animate-slide-out-down sm:animate-slide-out-right';
+    animationClass = isClosingDown ? 'animate-float-card-out' : 'animate-float-card-out sm:animate-slide-out-right';
   }
+
+  // Calculate card height based on state
+  const getCardHeight = () => {
+    if (window.innerWidth >= MOBILE_BREAKPOINT) return '100%';
+    if (isExpanding || isExpanded) return 'calc(100% - 20px)';
+    return '80%';
+  };
+
+  // Calculate visual offset for drag
+  const getDragTransform = () => {
+    if (!isDragging) return 'translateY(0)';
+    return `translateY(${dragY}px)`;
+  };
 
   return (
     <>
       {/* Backdrop - click to close */}
       <div
-        className={`fixed inset-0 bg-black/40 z-10 transition-opacity duration-300 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
+        className={`fixed inset-0 bg-black/50 z-10 transition-opacity duration-300 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
         onClick={() => handleClose('down')}
       />
 
+      {/* Floating Card Container */}
       <div
-        className={`absolute left-0 right-0 sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] bg-gray-900 border-t sm:border-t-0 sm:border-l border-gray-800 shadow-2xl z-20 flex flex-col ${isExpanded ? 'rounded-none' : 'rounded-t-2xl'} sm:rounded-none ${animationClass}`}
+        className={`
+          fixed z-20
+          sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] sm:rounded-none
+          ${animationClass}
+        `}
         style={{
-          // Use bottom positioning with height for smooth animation
-          bottom: window.innerWidth < MOBILE_BREAKPOINT ? 0 : 'auto',
+          // Mobile: floating card with margin
+          left: window.innerWidth < MOBILE_BREAKPOINT ? '8px' : 'auto',
+          right: window.innerWidth < MOBILE_BREAKPOINT ? '8px' : 0,
+          bottom: window.innerWidth < MOBILE_BREAKPOINT ? '8px' : 'auto',
           top: window.innerWidth < MOBILE_BREAKPOINT ? 'auto' : 0,
-          height: window.innerWidth < MOBILE_BREAKPOINT ? ((isExpanding || isExpanded) ? '100%' : '80%') : '100%',
-          transform: isDragging ? `translateY(${dragY}px)` : 'translateY(0)',
+          height: getCardHeight(),
+          transform: getDragTransform(),
           transition: isDragging
             ? 'none'
-            : `height ${MODAL_TRANSITION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1), border-radius ${MODAL_TRANSITION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1), transform ${CLOSE_ANIMATION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+            : `height ${MODAL_TRANSITION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1), transform ${CLOSE_ANIMATION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1)`,
           willChange: 'height, transform'
         }}
       >
-        
-        {/* Draggable Area - Header + Stats */}
-        <div
-          className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none"
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
+        {/* Card Body */}
+        <div 
+          className={`
+            h-full bg-gray-900 shadow-2xl flex flex-col overflow-hidden
+            ${isExpanded ? 'rounded-2xl' : 'rounded-3xl'} 
+            sm:rounded-none sm:border-l sm:border-gray-800
+            border border-gray-700/50 sm:border-t-0 sm:border-r-0 sm:border-b-0
+          `}
+          style={{
+            boxShadow: window.innerWidth < MOBILE_BREAKPOINT 
+              ? '0 -4px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' 
+              : undefined
+          }}
         >
-          {/* Header - Banner Image */}
+        
+          {/* Draggable Area - Header + Stats */}
           <div
-            className={`relative h-32 sm:h-48 bg-gray-800 ${isExpanded ? 'rounded-none' : 'rounded-t-2xl'} sm:rounded-none overflow-hidden`}
+            className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
           >
-            {/* Drag Handle for Mobile - changes based on expand state */}
-            <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1.5 bg-gray-400/50 rounded-full z-30 sm:hidden transition-all duration-300"></div>
-            {!isExpanded && (
-              <div className="absolute top-5 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 z-30 sm:hidden pointer-events-none">
-                {language === 'zh' ? '上滑展开' : 'Swipe up to expand'}
-              </div>
-            )}
-
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent z-10 pointer-events-none" />
-            {restaurant.visits.length > 0 && (
-              <img 
-                src={restaurant.visits[0].photoDataUrl} 
-                className="w-full h-full object-cover opacity-60" 
-                alt="Venue" 
-              />
-            )}
-            <button 
-              onClick={() => handleClose('right')}
-              className="absolute top-4 right-4 z-20 bg-black/50 hover:bg-black/70 p-2 rounded-full text-white transition"
+            {/* Header - Banner Image */}
+            <div
+              className={`relative h-36 sm:h-48 bg-gray-800 ${isExpanded ? 'rounded-t-2xl' : 'rounded-t-3xl'} sm:rounded-none overflow-hidden`}
             >
-              <X size={20} />
-            </button>
-            <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none">
-              <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight">{restaurant.name}</h1>
-              <div className="flex items-center gap-1 text-gray-300 text-xs mt-1">
-                <MapPin size={12} />
-                <span className="truncate">{restaurant.address}</span>
+              {/* Drag Handle for Mobile */}
+              <div className="absolute top-3 left-1/2 transform -translate-x-1/2 z-30 sm:hidden flex flex-col items-center gap-1">
+                <div className="w-10 h-1 bg-white/40 rounded-full"></div>
+                {!isExpanded && (
+                  <span className="text-[9px] text-white/50 font-medium tracking-wide mt-1">
+                    {language === 'zh' ? '上滑展开' : 'Swipe to expand'}
+                  </span>
+                )}
+              </div>
+
+              <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/20 to-transparent z-10 pointer-events-none" />
+              {restaurant.visits.length > 0 && (
+                <img 
+                  src={restaurant.visits[0].photoDataUrl} 
+                  className="w-full h-full object-cover opacity-70" 
+                  alt="Venue" 
+                  draggable={false}
+                />
+              )}
+              <button 
+                onClick={() => handleClose('right')}
+                className="absolute top-4 right-4 z-20 bg-black/40 hover:bg-black/60 backdrop-blur-sm p-2.5 rounded-full text-white transition border border-white/10"
+              >
+                <X size={18} />
+              </button>
+              <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none">
+                <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight drop-shadow-lg">{restaurant.name}</h1>
+                <div className="flex items-center gap-1.5 text-gray-200 text-xs mt-1.5">
+                  <MapPin size={12} className="flex-shrink-0" />
+                  <span className="truncate drop-shadow">{restaurant.address}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Bar - Also part of draggable area */}
+            <div className="flex border-b border-gray-800/80 bg-gray-900/80 backdrop-blur-sm">
+              <div className="flex-1 p-3 text-center border-r border-gray-800/80">
+                <span className="block text-lg font-bold text-white">{restaurant.visits.length}</span>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">{language === 'zh' ? '访问' : 'Visits'}</span>
+              </div>
+              <div className="flex-1 p-3 text-center">
+                <span className={`block text-lg font-bold ${getGradeColor(avgGrade)}`}>
+                  {avgGrade}
+                </span>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">{language === 'zh' ? '平均评分' : 'Avg Grade'}</span>
               </div>
             </div>
           </div>
-
-          {/* Stats Bar - Also part of draggable area */}
-          <div className="flex border-b border-gray-800 bg-gray-900/50 backdrop-blur">
-            <div className="flex-1 p-3 text-center border-r border-gray-800">
-              <span className="block text-lg font-bold text-white">{restaurant.visits.length}</span>
-              <span className="text-xs text-gray-500 uppercase">{language === 'zh' ? '访问' : 'Visits'}</span>
-            </div>
-            <div className="flex-1 p-3 text-center">
-              <span className={`block text-lg font-bold ${getGradeColor(avgGrade)}`}>
-                {avgGrade}
-              </span>
-              <span className="text-xs text-gray-500 uppercase">{language === 'zh' ? '平均评分' : 'Avg Grade'}</span>
-            </div>
-          </div>
-        </div>
 
         {/* Tabs Navigation */}
         <div className="flex border-b border-gray-800 bg-gray-900">
@@ -565,17 +602,18 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
 
         {/* Footer Actions */}
         {activeTab === 'timeline' && (
-          <div className="p-4 border-t border-gray-800 bg-gray-900 flex-shrink-0">
+          <div className="p-4 border-t border-gray-800/80 bg-gray-900 flex-shrink-0 rounded-b-3xl sm:rounded-none">
             {currentUserUid !== GUEST_ID && (
               <button 
                 onClick={onAddAnotherVisit}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg transition"
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3.5 rounded-xl transition shadow-lg"
               >
                 {language === 'zh' ? '在此添加另一个记忆' : 'Add Another Visit Here'}
               </button>
             )}
           </div>
         )}
+        </div>
       </div>
 
       {/* Hidden Share Card Render - Redesigned for Viral Marketing */}
