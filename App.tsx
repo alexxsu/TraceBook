@@ -239,7 +239,7 @@ function App() {
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant; visit: Visit } | null>(null);
   const [pendingSearchSelection, setPendingSearchSelection] = useState<{ restaurant: Restaurant; map: UserMap } | null>(null);
   const [isTutorialActive, setIsTutorialActive] = useState(false);
-  const [mapSwitchToast, setMapSwitchToast] = useState<{ visible: boolean; mapName: string }>({ visible: false, mapName: '' });
+  const [mapSwitchToast, setMapSwitchToast] = useState<{ visible: boolean; mapName: string; mapVisibility?: 'public' | 'shared' | 'private' }>({ visible: false, mapName: '' });
 
   // Tutorial handlers
   const handleStartTutorial = useCallback(() => {
@@ -550,8 +550,9 @@ function App() {
     if (map.id !== activeMap?.id) {
       setPendingSearchSelection({ restaurant, map });
       setActiveMap(map);
-      // Show toast notification for map switch
-      setMapSwitchToast({ visible: true, mapName: map.name });
+      // Show toast notification for map switch with map visibility
+      const visibility = map.visibility === 'public' ? 'public' : map.isDefault ? 'private' : 'shared';
+      setMapSwitchToast({ visible: true, mapName: map.name, mapVisibility: visibility });
       return;
     }
 
@@ -896,8 +897,9 @@ function App() {
 
       {/* Map Switch Toast with Glass Blur Effect */}
       <Toast
-        message="Switching to map"
+        message="Switching to"
         mapName={mapSwitchToast.mapName}
+        mapVisibility={mapSwitchToast.mapVisibility}
         isVisible={mapSwitchToast.visible}
         onHide={() => setMapSwitchToast({ visible: false, mapName: '' })}
         duration={1800}

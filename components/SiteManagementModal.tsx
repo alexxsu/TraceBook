@@ -211,7 +211,7 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
               <h2 className="text-lg font-semibold text-white">
                 {currentView === 'menu' && t('siteManagement')}
                 {currentView === 'users' && t('userManagement')}
-                {currentView === 'userDetail' && (selectedUser?.displayName || selectedUser?.email || t('userDetails'))}
+                {currentView === 'userDetail' && t('userManagement')}
               </h2>
             </div>
           </div>

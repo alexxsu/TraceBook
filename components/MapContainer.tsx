@@ -73,11 +73,12 @@ const getCircleStyle = (isDarkMode: boolean, isSatellite: boolean) => {
 };
 
 // Zoom-based scaling configuration
+// Inverted: markers get BIGGER when zoomed out to compensate visual shrinking
 const ZOOM_SCALE_CONFIG = {
-  maxZoom: 18,      // At this zoom, markers are at full size
-  minZoom: 10,      // At this zoom, markers are at minimum size
-  maxScale: 1.35,   // Much larger full size scale
-  minScale: 0.85,   // Much larger minimum scale
+  maxZoom: 18,      // At this zoom (close), markers are at base size
+  minZoom: 10,      // At this zoom (far), markers are at maximum size
+  zoomedInScale: 1.0,   // Base size when zoomed in close
+  zoomedOutScale: 1.6,  // Larger size when zoomed out to compensate
 };
 
 // Clustering configuration
@@ -88,11 +89,13 @@ const CLUSTER_CONFIG = {
 };
 
 const getScaleForZoom = (zoom: number): number => {
-  const { maxZoom, minZoom, maxScale, minScale } = ZOOM_SCALE_CONFIG;
-  if (zoom >= maxZoom) return maxScale;
-  if (zoom <= minZoom) return minScale;
-  const ratio = (zoom - minZoom) / (maxZoom - minZoom);
-  return minScale + ratio * (maxScale - minScale);
+  const { maxZoom, minZoom, zoomedInScale, zoomedOutScale } = ZOOM_SCALE_CONFIG;
+  // Inverted: bigger when zoomed out, smaller when zoomed in
+  if (zoom >= maxZoom) return zoomedInScale;
+  if (zoom <= minZoom) return zoomedOutScale;
+  // Interpolate: as zoom decreases, scale increases
+  const ratio = (maxZoom - zoom) / (maxZoom - minZoom);
+  return zoomedInScale + ratio * (zoomedOutScale - zoomedInScale);
 };
 
 // Create cluster element with stacked photos

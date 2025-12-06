@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Map, ArrowRight, MapPin } from 'lucide-react';
+import { Map, ArrowRight, MapPin, Lock, Users, Globe } from 'lucide-react';
+
+type MapVisibility = 'public' | 'shared' | 'private';
 
 interface ToastProps {
   message: string;
   mapName?: string;
+  mapVisibility?: MapVisibility; // For showing appropriate map icon
   isVisible: boolean;
   onHide: () => void;
   duration?: number;
@@ -14,11 +17,24 @@ interface ToastProps {
 export const Toast: React.FC<ToastProps> = ({
   message,
   mapName,
+  mapVisibility,
   isVisible,
   onHide,
   duration = 2000,
   isMapSwitch = false
 }) => {
+  // Get icon based on map visibility
+  const getMapIcon = () => {
+    switch (mapVisibility) {
+      case 'public':
+        return <Globe size={32} className="text-green-400" />;
+      case 'shared':
+        return <Users size={32} className="text-purple-400" />;
+      case 'private':
+      default:
+        return <Lock size={32} className="text-blue-400" />;
+    }
+  };
   const [shouldRender, setShouldRender] = useState(false);
   const [isAnimatingIn, setIsAnimatingIn] = useState(false);
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
@@ -76,16 +92,26 @@ export const Toast: React.FC<ToastProps> = ({
             ${isAnimatingOut ? 'animate-toast-float-out' : isAnimatingIn ? 'animate-toast-float-in' : 'opacity-0 scale-90'}
           `}
         >
-          {/* Icon */}
-          <div className="p-4 bg-gradient-to-br from-blue-500/30 to-indigo-500/30 rounded-2xl border border-blue-400/20">
-            <MapPin size={32} className="text-blue-400" />
+          {/* Icon - based on map visibility */}
+          <div className={`p-4 rounded-2xl border ${
+            mapVisibility === 'public'
+              ? 'bg-gradient-to-br from-green-500/30 to-emerald-500/30 border-green-400/20'
+              : mapVisibility === 'shared'
+              ? 'bg-gradient-to-br from-purple-500/30 to-violet-500/30 border-purple-400/20'
+              : 'bg-gradient-to-br from-blue-500/30 to-indigo-500/30 border-blue-400/20'
+          }`}>
+            {getMapIcon()}
           </div>
-          
+
           {/* Message */}
           <div className="text-center">
             <p className="text-white text-lg font-medium mb-1">{message}</p>
             {mapName && (
-              <div className="flex items-center justify-center gap-2 text-blue-400 text-sm">
+              <div className={`flex items-center justify-center gap-2 text-sm ${
+                mapVisibility === 'public' ? 'text-green-400'
+                : mapVisibility === 'shared' ? 'text-purple-400'
+                : 'text-blue-400'
+              }`}>
                 <ArrowRight size={14} />
                 <span className="font-medium">{mapName}</span>
               </div>
@@ -94,9 +120,21 @@ export const Toast: React.FC<ToastProps> = ({
           
           {/* Subtle loading indicator */}
           <div className="flex gap-1">
-            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></div>
-            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }}></div>
-            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }}></div>
+            <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+              mapVisibility === 'public' ? 'bg-green-400'
+              : mapVisibility === 'shared' ? 'bg-purple-400'
+              : 'bg-blue-400'
+            }`} style={{ animationDelay: '0ms' }}></div>
+            <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+              mapVisibility === 'public' ? 'bg-green-400'
+              : mapVisibility === 'shared' ? 'bg-purple-400'
+              : 'bg-blue-400'
+            }`} style={{ animationDelay: '150ms' }}></div>
+            <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+              mapVisibility === 'public' ? 'bg-green-400'
+              : mapVisibility === 'shared' ? 'bg-purple-400'
+              : 'bg-blue-400'
+            }`} style={{ animationDelay: '300ms' }}></div>
           </div>
         </div>
       </div>
