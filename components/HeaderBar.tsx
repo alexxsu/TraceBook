@@ -97,6 +97,28 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const [isNotifClosing, setIsNotifClosing] = useState(false);
   const showSearchInput = isSearchFocused || searchQuery || isSearchClosing;
   const [openMaps, setOpenMaps] = useState<Record<string, boolean>>({});
+  const [searchOpenKey, setSearchOpenKey] = useState(0);
+  const [searchAnimating, setSearchAnimating] = useState(false);
+
+  // Trigger animation when search opens
+  useEffect(() => {
+    if (isSearchFocused && !isSearchClosing && searchResults.length > 0) {
+      setSearchOpenKey(prev => prev + 1);
+      // Reset animation state, then trigger it
+      setSearchAnimating(false);
+      // Use requestAnimationFrame for reliable mobile animation
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setSearchAnimating(true);
+        });
+      });
+    }
+    
+    // Reset animation state after search is fully closed
+    if (!isSearchFocused && !isSearchClosing) {
+      setSearchAnimating(false);
+    }
+  }, [isSearchFocused, isSearchClosing, searchResults.length]);
 
   // Auto-expand maps that have search matches when there's a search query
   useEffect(() => {
@@ -251,6 +273,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 ? 'opacity-0 scale-95 pointer-events-none'
                 : 'opacity-100 scale-100'
             }`}
+            style={{ 
+              willChange: 'opacity, transform',
+              WebkitTransform: showSearchInput ? 'scale(0.95)' : 'scale(1)',
+            }}
           >
             <img src="/logo.svg" className="w-7 h-7 object-contain" alt="Logo" />
             <span className="font-bold truncate">TraceBook</span>
@@ -259,11 +285,19 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           {/* Search Input Container - always in DOM, animated visibility */}
           <div
             data-tutorial="search"
-            className={`absolute inset-0 flex items-center rounded-lg px-2 border transition-all duration-150 ease-out ${
+            className={`absolute inset-0 flex items-center rounded-lg px-2 border ${
               showSearchInput
                 ? `opacity-100 scale-100 ${isAdmin ? 'border-indigo-500/50 bg-gray-800/70' : 'border-gray-600 bg-gray-700/50'}`
                 : 'opacity-0 scale-95 pointer-events-none border-transparent bg-transparent'
             }`}
+            style={{ 
+              willChange: 'opacity, transform',
+              transition: 'opacity 200ms ease-out, transform 200ms ease-out, background-color 200ms ease-out, border-color 200ms ease-out',
+              WebkitTransition: 'opacity 200ms ease-out, -webkit-transform 200ms ease-out, background-color 200ms ease-out, border-color 200ms ease-out',
+              WebkitTransform: showSearchInput ? 'scale(1)' : 'scale(0.95)',
+              transformOrigin: 'center center',
+              WebkitTransformOrigin: 'center center',
+            }}
           >
             {/* Search input - same for both admin and regular users */}
             <Search size={16} className="text-gray-400 mr-2 flex-shrink-0" />
@@ -357,20 +391,35 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
       {/* Search Results */}
       {(isSearchFocused || isSearchClosing) && searchResults.length > 0 && (
-        <>
+        <React.Fragment key={`search-results-${searchOpenKey}`}>
           <div
-            className={`fixed inset-0 z-10 bg-black/30 transition-opacity duration-150 ${
-              isSearchClosing ? 'opacity-0' : 'opacity-100'
-            }`}
+            className="fixed inset-0 z-10 bg-black/30"
+            style={{
+              opacity: (searchAnimating && !isSearchClosing) ? 1 : 0,
+              transition: 'opacity 180ms ease-out',
+              WebkitTransition: 'opacity 180ms ease-out',
+            }}
             onClick={() => {
               closeSearch();
             }}
           ></div>
           <div
-            className={`mt-2 border-t border-gray-700 pt-2 max-h-72 overflow-y-scroll rounded-lg bg-gray-800/80 backdrop-blur-md relative z-20 transition-all duration-150 ease-out ${
-              isSearchClosing ? 'opacity-0 -translate-y-2 scale-95' : 'opacity-100 translate-y-0 scale-100 animate-scale-in'
-            }`}
-            style={{ scrollbarGutter: 'stable' }}
+            className="mt-2 border-t border-gray-700 pt-2 max-h-72 overflow-y-scroll rounded-lg bg-gray-800/80 backdrop-blur-md relative z-20"
+            style={{ 
+              scrollbarGutter: 'stable',
+              willChange: 'opacity, transform',
+              opacity: (searchAnimating && !isSearchClosing) ? 1 : 0,
+              transform: (searchAnimating && !isSearchClosing)
+                ? 'translateY(0) scale(1)' 
+                : 'translateY(-10px) scale(0.96)',
+              WebkitTransform: (searchAnimating && !isSearchClosing)
+                ? 'translateY(0) scale(1)' 
+                : 'translateY(-10px) scale(0.96)',
+              transition: 'opacity 180ms ease-out, transform 180ms cubic-bezier(0.4, 0, 0.2, 1)',
+              WebkitTransition: 'opacity 180ms ease-out, -webkit-transform 180ms cubic-bezier(0.4, 0, 0.2, 1)',
+              transformOrigin: 'top center',
+              WebkitTransformOrigin: 'top center',
+            }}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
@@ -500,7 +549,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               <p className="text-gray-500 text-sm px-3 py-2">{t('noResults')}</p>
             )}
           </div>
-        </>
+        </React.Fragment>
       )}
 
       {/* Filter Dropdown */}

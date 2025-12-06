@@ -80,7 +80,7 @@ export function useSearch(
       setSearchQuery('');
       setIsSearchFocused(false);
       setIsSearchClosing(false);
-    }, 150);
+    }, 200); // Match animation duration
   }, [isSearchFocused, searchQuery]);
 
   const handleSearchSelect = useCallback((

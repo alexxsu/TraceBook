@@ -197,7 +197,7 @@ function App() {
     searchInputRef,
     closeSearch,
     handleSearchSelect
-  } = useSearch(searchSources, { showAllWhenEmpty: !isGuestUser });
+  } = useSearch(searchSources, { showAllWhenEmpty: true });
 
   // Filter hook
   const {

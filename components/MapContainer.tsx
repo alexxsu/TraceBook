@@ -86,7 +86,7 @@ const CLUSTER_CONFIG = {
   gridSize: 90,          // Pixel grid size for clustering
   minZoomForClustering: 15, // Start clustering below this zoom
   maxPhotosInCluster: 4, // Max photos to show in cluster stack
-  transitionDuration: 250, // Animation duration in ms
+  transitionDuration: 450, // Animation duration in ms (slower transition)
 };
 
 // Smooth easing function for scale interpolation

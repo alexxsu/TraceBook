@@ -84,33 +84,65 @@
         from { transform: scale(0.95); opacity: 0; }
         to { transform: scale(1); opacity: 1; }
       }
+      @-webkit-keyframes scaleIn {
+        from { -webkit-transform: scale(0.95); opacity: 0; }
+        to { -webkit-transform: scale(1); opacity: 1; }
+      }
       @keyframes scaleOut {
         from { transform: scale(1); opacity: 1; }
         to { transform: scale(0.95); opacity: 0; }
+      }
+      @-webkit-keyframes scaleOut {
+        from { -webkit-transform: scale(1); opacity: 1; }
+        to { -webkit-transform: scale(0.95); opacity: 0; }
       }
       @keyframes slideInRight {
         from { transform: translateX(100%); }
         to { transform: translateX(0); }
       }
+      @-webkit-keyframes slideInRight {
+        from { -webkit-transform: translateX(100%); }
+        to { -webkit-transform: translateX(0); }
+      }
       @keyframes slideOutRight {
         from { transform: translateX(0); }
         to { transform: translateX(100%); }
+      }
+      @-webkit-keyframes slideOutRight {
+        from { -webkit-transform: translateX(0); }
+        to { -webkit-transform: translateX(100%); }
       }
       @keyframes slideInUp {
         from { transform: translateY(100%); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
       }
+      @-webkit-keyframes slideInUp {
+        from { -webkit-transform: translateY(100%); opacity: 0; }
+        to { -webkit-transform: translateY(0); opacity: 1; }
+      }
       @keyframes slideOutDown {
         from { transform: translateY(0); opacity: 1; }
         to { transform: translateY(100%); opacity: 0.8; }
+      }
+      @-webkit-keyframes slideOutDown {
+        from { -webkit-transform: translateY(0); opacity: 1; }
+        to { -webkit-transform: translateY(100%); opacity: 0.8; }
       }
       @keyframes fadeInUp {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
+      @-webkit-keyframes fadeInUp {
+        from { opacity: 0; -webkit-transform: translateY(10px); }
+        to { opacity: 1; -webkit-transform: translateY(0); }
+      }
       @keyframes fadeOutDown {
         from { opacity: 1; transform: translateY(0); }
         to { opacity: 0; transform: translateY(10px); }
+      }
+      @-webkit-keyframes fadeOutDown {
+        from { opacity: 1; -webkit-transform: translateY(0); }
+        to { opacity: 0; -webkit-transform: translateY(10px); }
       }
       /* Elegant Bloom Effect */
       @keyframes bloomIn {
@@ -125,26 +157,71 @@
           filter: blur(0);
         }
       }
+      @-webkit-keyframes bloomIn {
+        0% { 
+          opacity: 0; 
+          -webkit-transform: translateY(40px) scale(0.9); 
+          -webkit-filter: blur(8px);
+        }
+        100% { 
+          opacity: 1; 
+          -webkit-transform: translateY(0) scale(1); 
+          -webkit-filter: blur(0);
+        }
+      }
       
       /* Fade In Effect */
       @keyframes fadeIn {
         0% { opacity: 0; }
         100% { opacity: 1; }
       }
+      @-webkit-keyframes fadeIn {
+        0% { opacity: 0; }
+        100% { opacity: 1; }
+      }
       
-      .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
-      .animate-scale-in { animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-      .animate-scale-out { animation: scaleOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-      .animate-slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-      .animate-slide-out-right { animation: slideOutRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-      .animate-slide-in-up { animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-      .animate-slide-out-down { animation: slideOutDown 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
-      .animate-fade-in-up { animation: fadeInUp 0.3s ease-out forwards; }
-      .animate-fade-out-down { animation: fadeOutDown 0.2s ease-in forwards; }
+      .animate-fade-in { 
+        animation: fadeIn 0.2s ease-out forwards; 
+        -webkit-animation: fadeIn 0.2s ease-out forwards; 
+      }
+      .animate-scale-in { 
+        animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+        -webkit-animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+      }
+      .animate-scale-out { 
+        animation: scaleOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+        -webkit-animation: scaleOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+      }
+      .animate-slide-in-right { 
+        animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+        -webkit-animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+      }
+      .animate-slide-out-right { 
+        animation: slideOutRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+        -webkit-animation: slideOutRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+      }
+      .animate-slide-in-up { 
+        animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+        -webkit-animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+      }
+      .animate-slide-out-down { 
+        animation: slideOutDown 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; 
+        -webkit-animation: slideOutDown 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) forwards; 
+      }
+      .animate-fade-in-up { 
+        animation: fadeInUp 0.3s ease-out forwards; 
+        -webkit-animation: fadeInUp 0.3s ease-out forwards; 
+      }
+      .animate-fade-out-down { 
+        animation: fadeOutDown 0.2s ease-in forwards; 
+        -webkit-animation: fadeOutDown 0.2s ease-in forwards; 
+      }
       
       .animate-bloom-in { 
         animation: bloomIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; 
+        -webkit-animation: bloomIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; 
         transform-origin: bottom center;
+        -webkit-transform-origin: bottom center;
       }
       
       /* Glass Toast Animations */
@@ -152,34 +229,76 @@
         from { backdrop-filter: blur(0px); background: rgba(0,0,0,0); }
         to { backdrop-filter: blur(12px); background: rgba(0,0,0,0.4); }
       }
+      @-webkit-keyframes glassBlurIn {
+        from { -webkit-backdrop-filter: blur(0px); background: rgba(0,0,0,0); }
+        to { -webkit-backdrop-filter: blur(12px); background: rgba(0,0,0,0.4); }
+      }
       @keyframes glassBlurOut {
         from { backdrop-filter: blur(12px); background: rgba(0,0,0,0.4); }
         to { backdrop-filter: blur(0px); background: rgba(0,0,0,0); }
+      }
+      @-webkit-keyframes glassBlurOut {
+        from { -webkit-backdrop-filter: blur(12px); background: rgba(0,0,0,0.4); }
+        to { -webkit-backdrop-filter: blur(0px); background: rgba(0,0,0,0); }
       }
       @keyframes toastFloatIn {
         0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
         100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
       }
+      @-webkit-keyframes toastFloatIn {
+        0% { opacity: 0; -webkit-transform: translate(-50%, -50%) scale(0.8); }
+        100% { opacity: 1; -webkit-transform: translate(-50%, -50%) scale(1); }
+      }
       @keyframes toastFloatOut {
         0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
       }
-      .animate-glass-blur-in { animation: glassBlurIn 0.3s ease-out forwards; }
-      .animate-glass-blur-out { animation: glassBlurOut 0.3s ease-in forwards; }
-      .animate-toast-float-in { animation: toastFloatIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-      .animate-toast-float-out { animation: toastFloatOut 0.3s ease-in forwards; }
+      @-webkit-keyframes toastFloatOut {
+        0% { opacity: 1; -webkit-transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; -webkit-transform: translate(-50%, -50%) scale(0.8); }
+      }
+      .animate-glass-blur-in { 
+        animation: glassBlurIn 0.3s ease-out forwards; 
+        -webkit-animation: glassBlurIn 0.3s ease-out forwards; 
+      }
+      .animate-glass-blur-out { 
+        animation: glassBlurOut 0.3s ease-in forwards; 
+        -webkit-animation: glassBlurOut 0.3s ease-in forwards; 
+      }
+      .animate-toast-float-in { 
+        animation: toastFloatIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; 
+        -webkit-animation: toastFloatIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; 
+      }
+      .animate-toast-float-out { 
+        animation: toastFloatOut 0.3s ease-in forwards; 
+        -webkit-animation: toastFloatOut 0.3s ease-in forwards; 
+      }
       
       /* Floating Card Animation */
       @keyframes floatCardIn {
         0% { transform: translateY(100%); opacity: 0; }
         100% { transform: translateY(0); opacity: 1; }
       }
+      @-webkit-keyframes floatCardIn {
+        0% { -webkit-transform: translateY(100%); opacity: 0; }
+        100% { -webkit-transform: translateY(0); opacity: 1; }
+      }
       @keyframes floatCardOut {
         0% { transform: translateY(0); opacity: 1; }
         100% { transform: translateY(100%); opacity: 0; }
       }
-      .animate-float-card-in { animation: floatCardIn 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
-      .animate-float-card-out { animation: floatCardOut 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      @-webkit-keyframes floatCardOut {
+        0% { -webkit-transform: translateY(0); opacity: 1; }
+        100% { -webkit-transform: translateY(100%); opacity: 0; }
+      }
+      .animate-float-card-in { 
+        animation: floatCardIn 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; 
+        -webkit-animation: floatCardIn 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; 
+      }
+      .animate-float-card-out { 
+        animation: floatCardOut 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards; 
+        -webkit-animation: floatCardOut 0.35s cubic-bezier(0.32, 0.72, 0, 1) forwards; 
+      }
       
       /* Stagger delays */
       .delay-75 { animation-delay: 75ms; }
