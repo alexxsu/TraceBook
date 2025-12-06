@@ -313,6 +313,36 @@
         100% { transform: translateX(100%); }
       }
       .animate-shimmer { animation: shimmer 2s infinite; }
+      
+      /* Safe area padding for notched devices */
+      .pt-safe {
+        padding-top: max(16px, env(safe-area-inset-top));
+      }
+      .pb-safe {
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+      }
+      
+      /* Page transition animations */
+      @keyframes pageSlideInLeft {
+        from { transform: translateX(-100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes pageSlideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes pageSlideOutLeft {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(-100%); opacity: 0; }
+      }
+      @keyframes pageSlideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+      }
+      .animate-page-in-left { animation: pageSlideInLeft 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .animate-page-in-right { animation: pageSlideInRight 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .animate-page-out-left { animation: pageSlideOutLeft 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .animate-page-out-right { animation: pageSlideOutRight 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
     </style>
   <script type="importmap">
 {

@@ -34,9 +34,12 @@ import { MapSelectorPill } from './components/MapSelectorPill';
 import { SideMenu } from './components/SideMenu';
 import { UserDetailModal } from './components/UserDetailModal';
 import { MemberAvatars } from './components/MemberAvatars';
-import { AddButton } from './components/AddButton';
+import { NavigationIsland, NavigationPage } from './components/NavigationIsland';
 import { MapControls, MapControlsRef } from './components/MapControls';
 import { Toast } from './components/Toast';
+import { UserLocationMarker } from './components/UserLocationMarker';
+import { FriendsPage } from './components/FriendsPage';
+import { FeedsPage } from './components/FeedsPage';
 
 function App() {
   // Auth hook
@@ -95,37 +98,66 @@ function App() {
   const isGuestUser = user?.uid === GUEST_ID || user?.isAnonymous || userProfile?.role === 'guest';
   const isAdmin = userProfile?.role === 'admin';
 
+  // Debug: Log the map arrays when they change
+  React.useEffect(() => {
+    console.log('[Maps Debug] allMaps:', allMaps.length, allMaps.map(m => ({ id: m.id, name: m.name, owner: m.ownerDisplayName })));
+    console.log('[Maps Debug] userOwnMaps:', userOwnMaps.length, userOwnMaps.map(m => ({ id: m.id, name: m.name })));
+    console.log('[Maps Debug] userJoinedMaps:', userJoinedMaps.length, userJoinedMaps.map(m => ({ id: m.id, name: m.name })));
+    console.log('[Maps Debug] isAdmin:', isAdmin, 'isGuestUser:', isGuestUser);
+  }, [allMaps, userOwnMaps, userJoinedMaps, isAdmin, isGuestUser]);
+
   // Map-aware search data
   const [searchablePins, setSearchablePins] = useState<Record<string, Place[]>>({});
 
+  // Maps that should appear in the search module
+  // - Admin: ALL maps in the system (including demo map)
+  // - Normal user: Their own maps (userOwnMaps) + maps they joined (userJoinedMaps), NOT demo map
+  // - Guest: Only demo map
   const searchableMaps = useMemo(() => {
     if (!user) {
-      return activeMap ? [activeMap] : [];
+      console.log('[SearchableMaps] No user, returning empty');
+      return [];
     }
 
     let candidates: UserMap[] = [];
 
-    if (isAdmin) {
-      candidates = allMaps;
-    } else if (isGuestUser) {
+    if (isGuestUser) {
+      // Guest users: only demo map in search
+      console.log('[SearchableMaps] Guest user, using activeMap (demo)');
       if (activeMap) {
         candidates = [activeMap];
       }
+    } else if (isAdmin) {
+      // Admin can see ALL maps in the system (including demo map)
+      console.log('[SearchableMaps] Admin user, using allMaps:', allMaps.length);
+      candidates = [...allMaps];
+      // Also include demo map if it exists and not already in allMaps
+      if (activeMap && activeMap.id === 'guest-demo-map' && !allMaps.find(m => m.id === 'guest-demo-map')) {
+        candidates.push(activeMap);
+      }
     } else {
-      // Include all user's own maps + shared maps they created + maps they joined
-      candidates = [...userOwnMaps, ...userSharedMaps, ...userJoinedMaps];
+      // Normal users: their own maps + maps they joined (NO demo map)
+      // userOwnMaps includes: default map + any shared maps they created
+      // userJoinedMaps includes: shared maps they joined (created by others)
+      console.log('[SearchableMaps] Normal user - userOwnMaps:', userOwnMaps.length, 'userJoinedMaps:', userJoinedMaps.length);
+      candidates = [...userOwnMaps, ...userJoinedMaps];
+      // Filter out demo/guest maps from search for normal users
+      candidates = candidates.filter(map => map.id !== 'guest-demo-map');
     }
 
     // Deduplicate by map ID
     const seen = new Set<string>();
-    return candidates.filter((map) => {
+    const result = candidates.filter((map) => {
       if (seen.has(map.id)) return false;
       seen.add(map.id);
       return true;
     });
-  }, [activeMap, allMaps, isAdmin, isGuestUser, user, userOwnMaps, userJoinedMaps, userSharedMaps]);
+    
+    console.log('[SearchableMaps] Final result:', result.map(m => ({ id: m.id, name: m.name })));
+    return result;
+  }, [activeMap, allMaps, isAdmin, isGuestUser, user, userOwnMaps, userJoinedMaps]);
 
-  // Keep active map pins in the search cache
+  // Keep active map pins in the search cache (always add current map's places)
   React.useEffect(() => {
     if (activeMap) {
       setSearchablePins((prev) => ({
@@ -135,40 +167,8 @@ function App() {
     }
   }, [activeMap, places]);
 
-  // Fetch pins for other maps when needed (admin and shared)
-  React.useEffect(() => {
-    let cancelled = false;
-
-    const fetchPins = async () => {
-      const mapsToFetch = searchableMaps.filter(
-        (map) => map.id !== activeMap?.id && !searchablePins[map.id]
-      );
-
-      for (const map of mapsToFetch) {
-        try {
-          const placesRef = collection(db, 'maps', map.id, 'places');
-          const snap = await getDocs(placesRef);
-          const pins = snap.docs
-            .map((docSnap) => docSnap.data() as Place)
-            .filter((r: any) => !Array.isArray(r.visits) || r.visits.length > 0);
-
-          if (!cancelled) {
-            setSearchablePins((prev) => ({
-              ...prev,
-              [map.id]: pins
-            }));
-          }
-        } catch (error) {
-          console.error('Failed to load map places for search:', error);
-        }
-      }
-    };
-
-    fetchPins();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeMap?.id, searchableMaps, searchablePins]);
+  // Track which maps have been fetched (use ref to avoid triggering re-renders)
+  const fetchedMapIdsRef = React.useRef<Set<string>>(new Set());
 
   const sortedSearchableMaps = useMemo(() => {
     const weight = (m: UserMap) => {
@@ -198,6 +198,71 @@ function App() {
     closeSearch,
     handleSearchSelect
   } = useSearch(searchSources, { showAllWhenEmpty: true });
+
+  // Fetch pins for other maps - runs on initial load and when search is opened
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const fetchPins = async () => {
+      // Filter maps that haven't been fetched yet (not the active map, and not already fetched)
+      const mapsToFetch = searchableMaps.filter(
+        (map) => map.id !== activeMap?.id && !fetchedMapIdsRef.current.has(map.id)
+      );
+
+      if (mapsToFetch.length === 0) {
+        return;
+      }
+      
+      console.log('[FetchPins] Maps to fetch:', mapsToFetch.length, mapsToFetch.map(m => ({ id: m.id, name: m.name, visibility: m.visibility })));
+
+      for (const map of mapsToFetch) {
+        if (cancelled) break;
+        
+        // Mark as being fetched immediately to prevent duplicate fetches
+        fetchedMapIdsRef.current.add(map.id);
+        
+        try {
+          console.log(`[FetchPins] Fetching places for map: ${map.name} (${map.id})`);
+          const placesRef = collection(db, 'maps', map.id, 'places');
+          const snap = await getDocs(placesRef);
+          const pins = snap.docs
+            .map((docSnap) => docSnap.data() as Place)
+            .filter((r: any) => !Array.isArray(r.visits) || r.visits.length > 0);
+
+          console.log(`[FetchPins] ✓ Loaded ${pins.length} places from map: ${map.name}`);
+
+          if (!cancelled) {
+            setSearchablePins((prev) => ({
+              ...prev,
+              [map.id]: pins
+            }));
+          }
+        } catch (error: any) {
+          // Log the error for debugging
+          console.error(`[FetchPins] ✗ Error fetching map ${map.name} (${map.id}):`, error?.code || error);
+          
+          // Still set empty array so map appears in search (just with 0 places)
+          if (!cancelled) {
+            setSearchablePins((prev) => ({
+              ...prev,
+              [map.id]: []
+            }));
+          }
+        }
+      }
+    };
+
+    // Fetch when:
+    // 1. searchableMaps changes and we have maps to fetch (initial load or new maps added)
+    // 2. Search is focused (user opened search module)
+    if (searchableMaps.length > 0) {
+      fetchPins();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMap?.id, searchableMaps, isSearchFocused]);
 
   // Filter hook
   const {
@@ -239,7 +304,34 @@ function App() {
   const [editingData, setEditingData] = useState<{ place: Place; visit: Visit } | null>(null);
   const [pendingSearchSelection, setPendingSearchSelection] = useState<{ place: Place; map: UserMap } | null>(null);
   const [isTutorialActive, setIsTutorialActive] = useState(false);
-  const [mapSwitchToast, setMapSwitchToast] = useState<{ visible: boolean; mapName: string; mapVisibility?: 'public' | 'shared' | 'private' }>({ visible: false, mapName: '' });
+  const [mapSwitchToast, setMapSwitchToast] = useState<{ visible: boolean; mapName: string; mapOwner?: string; mapVisibility?: 'public' | 'shared' | 'private' }>({ visible: false, mapName: '' });
+  
+  // Navigation state
+  const [currentNavPage, setCurrentNavPage] = useState<NavigationPage>('map');
+  const [friendsPageAnimating, setFriendsPageAnimating] = useState(false);
+  const [feedsPageAnimating, setFeedsPageAnimating] = useState(false);
+
+  // Navigation handlers
+  const handleNavigation = useCallback((page: NavigationPage) => {
+    if (page === currentNavPage) return;
+    
+    // Animate out current page, then animate in new page
+    if (page === 'friends') {
+      setFriendsPageAnimating(true);
+      setTimeout(() => setCurrentNavPage(page), 50);
+    } else if (page === 'feeds') {
+      setFeedsPageAnimating(true);
+      setTimeout(() => setCurrentNavPage(page), 50);
+    } else {
+      // Going back to map
+      if (currentNavPage === 'friends') {
+        setFriendsPageAnimating(false);
+      } else if (currentNavPage === 'feeds') {
+        setFeedsPageAnimating(false);
+      }
+      setTimeout(() => setCurrentNavPage(page), 300);
+    }
+  }, [currentNavPage]);
 
   // Tutorial handlers
   const handleStartTutorial = useCallback(() => {
@@ -550,9 +642,20 @@ function App() {
     if (map.id !== activeMap?.id) {
       setPendingSearchSelection({ place, map });
       setActiveMap(map);
-      // Show toast notification for map switch with map visibility
+      // Show toast notification for map switch with map visibility and owner
       const visibility = map.visibility === 'public' ? 'public' : map.isDefault ? 'private' : 'shared';
-      setMapSwitchToast({ visible: true, mapName: map.name, mapVisibility: visibility });
+      // Get owner display name
+      let ownerName: string | undefined;
+      if (map.visibility !== 'public' && !map.isDefault) {
+        // For shared maps, show owner name
+        ownerName = map.ownerDisplayName || map.ownerEmail?.split('@')[0];
+      }
+      setMapSwitchToast({ 
+        visible: true, 
+        mapName: map.name, 
+        mapOwner: ownerName,
+        mapVisibility: visibility 
+      });
       return;
     }
 
@@ -592,6 +695,9 @@ function App() {
 
   // Check if we should show the map view
   const showMapView = useMemo(() => {
+    // Only show map when on map navigation page
+    if (currentNavPage !== 'map') return false;
+    
     return [
       ViewState.MAP,
       ViewState.PLACE_DETAIL,
@@ -600,9 +706,10 @@ function App() {
       ViewState.INFO,
       ViewState.STATS,
       ViewState.USER_HISTORY,
-      ViewState.SITE_MANAGEMENT
+      ViewState.SITE_MANAGEMENT,
+      ViewState.MAP_MANAGEMENT
     ].includes(viewState);
-  }, [viewState]);
+  }, [viewState, currentNavPage]);
 
   const isAddModalOpen = viewState === ViewState.ADD_ENTRY;
 
@@ -708,26 +815,50 @@ function App() {
             mapType={mapType}
           />
 
+          {/* User Location Marker */}
+          <UserLocationMarker
+            map={mapInstance}
+            user={user}
+            userPhotoURL={userProfile?.photoURL}
+          />
+
           {/* Bottom Right Map Controls */}
           <MapControls
             ref={mapControlsRef}
             mapType={mapType}
-            onZoomToMunicipality={handleZoomToMunicipality}
+            onLocateUser={handleLocateMe}
+            onZoomToCity={handleZoomToMunicipality}
             onToggleMapType={handleToggleMapType}
           />
 
           {/* Member Avatars */}
           {activeMap && <MemberAvatars activeMap={activeMap} />}
-
-          {/* Add Button */}
-          <AddButton
-            isAddModalOpen={isAddModalOpen}
-            hideAddButton={hideAddButton}
-            isModalActive={viewState === ViewState.PLACE_DETAIL || viewState === ViewState.INFO || viewState === ViewState.STATS || viewState === ViewState.USER_HISTORY || viewState === ViewState.MAP_MANAGEMENT || viewState === ViewState.EDIT_ENTRY || viewState === ViewState.SITE_MANAGEMENT}
-            onToggle={handleToggleAdd}
-          />
         </>
       )}
+
+      {/* Navigation Island - replaces AddButton */}
+      {user && (
+        <NavigationIsland
+          currentPage={currentNavPage}
+          onNavigate={handleNavigation}
+          onAddPress={handleToggleAdd}
+          isAddModalOpen={isAddModalOpen}
+          hideNavigation={hideAddButton}
+          isModalActive={viewState === ViewState.PLACE_DETAIL || viewState === ViewState.INFO || viewState === ViewState.STATS || viewState === ViewState.USER_HISTORY || viewState === ViewState.MAP_MANAGEMENT || viewState === ViewState.EDIT_ENTRY || viewState === ViewState.SITE_MANAGEMENT}
+        />
+      )}
+
+      {/* Friends Page */}
+      <FriendsPage
+        isVisible={currentNavPage === 'friends'}
+        isAnimatingIn={friendsPageAnimating}
+      />
+
+      {/* Feeds Page */}
+      <FeedsPage
+        isVisible={currentNavPage === 'feeds'}
+        isAnimatingIn={feedsPageAnimating}
+      />
 
       {/* Side Menu */}
       {user && (
@@ -856,7 +987,7 @@ function App() {
 
       {/* Floating Tutorial Button for Guest Users - Above map controls, right aligned */}
       {user?.isAnonymous && !isTutorialActive && showMapView && (
-        <div className="fixed bottom-64 right-4 z-30">
+        <div className="fixed bottom-72 right-4 z-30">
           <TutorialButton onClick={handleStartTutorial} isGuestUser={true} />
         </div>
       )}
@@ -898,6 +1029,7 @@ function App() {
       <Toast
         message="Switching to"
         mapName={mapSwitchToast.mapName}
+        mapOwner={mapSwitchToast.mapOwner}
         mapVisibility={mapSwitchToast.mapVisibility}
         isVisible={mapSwitchToast.visible}
         onHide={() => setMapSwitchToast({ visible: false, mapName: '' })}

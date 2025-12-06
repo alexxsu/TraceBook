@@ -173,16 +173,20 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const mapIcon = (map: UserMap) => {
     // Demo/public maps get Globe (green)
     if (map.visibility === 'public') return <Globe size={14} className="text-green-400 flex-shrink-0" />;
-    // User's own shared maps get Users (purple) - indicates sharing
-    if (map.ownerUid === currentUserUid && !map.isDefault) return <Users size={14} className="text-purple-400 flex-shrink-0" />;
-    // Default maps and other users' maps get Lock (blue) - indicates personal/private
+    // All shared maps (owned by user OR joined) get Users (purple) - indicates sharing
+    if (map.visibility === 'shared') return <Users size={14} className="text-purple-400 flex-shrink-0" />;
+    // Default/private maps get Lock (blue) - indicates personal/private
     return <Lock size={14} className="text-blue-400 flex-shrink-0" />;
   };
 
   const mapSubtext = (map: UserMap) => {
     if (map.visibility === 'public') return 'Public demo map';
     if (map.isDefault) return 'Private default map';
-    return 'Shared map';
+    if (map.visibility === 'shared') {
+      if (map.ownerUid === currentUserUid) return 'My shared map';
+      return 'Joined shared map';
+    }
+    return 'Private map';
   };
 
   const categorizedResults = useMemo(() => {

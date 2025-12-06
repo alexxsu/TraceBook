@@ -358,7 +358,7 @@ export const Tutorial: React.FC<TutorialProps> = ({
     { id: 'map_pill', targetSelector: '[data-tutorial="map-pill"]', requiresClick: true, showOverlay: true },
     { id: 'map_pill_observe', showOverlay: false, autoAdvanceDelay: 2500 },
     { id: 'map_controls', targetSelector: '[data-tutorial="map-controls"]', showOverlay: true },
-    { id: 'add_button', targetSelector: '[data-tutorial="add-button"]', showOverlay: true, isRoundHighlight: true },
+    { id: 'add_button', targetSelector: '[data-tutorial="add-button"]', showOverlay: true, isRoundHighlight: false },
     { id: 'complete', showOverlay: true }
   ], []);
 
@@ -473,7 +473,9 @@ export const Tutorial: React.FC<TutorialProps> = ({
     const cardWidth = Math.min(320, viewportWidth - 32);
     const padding = 24;
 
-    if (!highlightRect || !isStepReady) {
+    // For steps without targets, center the card
+    const targetSelector = currentConfig?.targetSelector;
+    if (!targetSelector) {
       return { 
         top: '50%', 
         left: '50%', 
@@ -481,9 +483,23 @@ export const Tutorial: React.FC<TutorialProps> = ({
       };
     }
 
-    const highlightCenterY = highlightRect.top + highlightRect.height / 2;
-    const highlightCenterX = highlightRect.left + highlightRect.width / 2;
-    const highlightBottom = highlightRect.top + highlightRect.height;
+    // Calculate position directly from target element to avoid jumping
+    const targetElement = document.querySelector(targetSelector);
+    if (!targetElement) {
+      return { 
+        top: '50%', 
+        left: '50%', 
+        transform: 'translate(-50%, -50%)'
+      };
+    }
+
+    const rect = targetElement.getBoundingClientRect();
+    const isRound = currentConfig?.isRoundHighlight;
+    const highlightPadding = isRound ? 4 : 10;
+    
+    const highlightCenterY = rect.top + rect.height / 2;
+    const highlightCenterX = rect.left + rect.width / 2;
+    const highlightBottom = rect.top + rect.height + highlightPadding;
 
     let top: number;
     let left: number;
@@ -491,7 +507,7 @@ export const Tutorial: React.FC<TutorialProps> = ({
     if (highlightCenterY < viewportHeight / 2) {
       top = Math.min(highlightBottom + padding, viewportHeight - cardHeight - padding);
     } else {
-      top = Math.max(highlightRect.top - cardHeight - padding, padding);
+      top = Math.max(rect.top - highlightPadding - cardHeight - padding, padding);
     }
 
     left = Math.max(padding, Math.min(highlightCenterX - cardWidth / 2, viewportWidth - cardWidth - padding));
@@ -501,7 +517,7 @@ export const Tutorial: React.FC<TutorialProps> = ({
       left: `${left}px`, 
       transform: 'none'
     };
-  }, [highlightRect, currentStep, isStepReady]);
+  }, [currentStep, currentConfig]);
 
   const getHighlightStyle = useCallback((): React.CSSProperties | null => {
     if (!highlightRect || !isStepReady) return null;
@@ -901,11 +917,16 @@ export const Tutorial: React.FC<TutorialProps> = ({
       case 'add_button':
         return (
           <div className="text-center">
-            <div className="w-14 h-14 mx-auto mb-4 bg-red-500/20 rounded-full flex items-center justify-center">
-              <span className="text-2xl text-red-400">+</span>
+            <div className="w-14 h-14 mx-auto mb-4 bg-gradient-to-br from-purple-500/20 via-red-500/20 to-orange-500/20 rounded-full flex items-center justify-center">
+              <span className="text-2xl text-white">+</span>
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">{t('tutorialAddButton')}</h3>
-            <p className="text-gray-300 text-sm mb-5">{t('tutorialAddButtonDesc')}</p>
+            <p className="text-gray-300 text-sm mb-3">{t('tutorialAddButtonDesc')}</p>
+            <p className="text-gray-400 text-xs mb-5">
+              {language === 'zh' 
+                ? '导航栏还可以让您访问好友和动态功能'
+                : 'The navigation bar also gives you access to Friends and Feeds'}
+            </p>
             <button onClick={goToNextStep} className="px-6 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl transition-all">
               {t('tutorialNext')}
             </button>
@@ -1123,18 +1144,20 @@ export const Tutorial: React.FC<TutorialProps> = ({
           </div>
         )}
 
-        {/* Tutorial card */}
-        <div
-          className="absolute z-[201] w-80 max-w-[calc(100vw-24px)] bg-gray-800/95 backdrop-blur-md rounded-2xl border border-gray-700 shadow-2xl p-5 transition-opacity duration-300"
-          style={{ 
-            ...cardPosition, 
-            pointerEvents: 'auto',
-            opacity: contentVisible ? 1 : 0
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {renderStepContent()}
-        </div>
+        {/* Tutorial card - only render when there's content */}
+        {renderStepContent() !== null && (
+          <div
+            className="absolute z-[201] w-80 max-w-[calc(100vw-24px)] bg-gray-800/95 backdrop-blur-md rounded-2xl border border-gray-700 shadow-2xl p-5 transition-opacity duration-300"
+            style={{ 
+              ...cardPosition, 
+              pointerEvents: 'auto',
+              opacity: contentVisible ? 1 : 0
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {renderStepContent()}
+          </div>
+        )}
       </div>
     </>
   );

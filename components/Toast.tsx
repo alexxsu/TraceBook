@@ -7,6 +7,7 @@ type MapVisibility = 'public' | 'shared' | 'private';
 interface ToastProps {
   message: string;
   mapName?: string;
+  mapOwner?: string; // Owner's display name
   mapVisibility?: MapVisibility; // For showing appropriate map icon
   isVisible: boolean;
   onHide: () => void;
@@ -17,6 +18,7 @@ interface ToastProps {
 export const Toast: React.FC<ToastProps> = ({
   message,
   mapName,
+  mapOwner,
   mapVisibility,
   isVisible,
   onHide,
@@ -107,13 +109,18 @@ export const Toast: React.FC<ToastProps> = ({
           <div className="text-center">
             <p className="text-white text-lg font-medium mb-1">{message}</p>
             {mapName && (
-              <div className={`flex items-center justify-center gap-2 text-sm ${
-                mapVisibility === 'public' ? 'text-green-400'
-                : mapVisibility === 'shared' ? 'text-purple-400'
-                : 'text-blue-400'
-              }`}>
-                <ArrowRight size={14} />
-                <span className="font-medium">{mapName}</span>
+              <div className="flex flex-col items-center gap-1">
+                <div className={`flex items-center justify-center gap-2 text-sm ${
+                  mapVisibility === 'public' ? 'text-green-400'
+                  : mapVisibility === 'shared' ? 'text-purple-400'
+                  : 'text-blue-400'
+                }`}>
+                  <ArrowRight size={14} />
+                  <span className="font-medium">{mapName}</span>
+                </div>
+                {mapOwner && (
+                  <p className="text-xs text-gray-400">by {mapOwner}</p>
+                )}
               </div>
             )}
           </div>

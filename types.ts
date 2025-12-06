@@ -51,11 +51,67 @@ declare global {
         panTo(latLng: LatLng | LatLngLiteral): void;
         fitBounds(bounds: LatLngBounds | LatLngBoundsLiteral, padding?: number | Padding): void;
         addListener(eventName: string, handler: Function): MapsEventListener;
+        setMapTypeId(mapTypeId: string): void;
+        setOptions(options: MapOptions): void;
+      }
+
+      class LatLng {
+        constructor(lat: number, lng: number);
+        lat(): number;
+        lng(): number;
       }
 
       class LatLngBounds {
         constructor(sw?: LatLng | LatLngLiteral, ne?: LatLng | LatLngLiteral);
         extend(point: LatLng | LatLngLiteral): LatLngBounds;
+      }
+
+      // OverlayView for custom overlays
+      class OverlayView {
+        setMap(map: Map | null): void;
+        getMap(): Map | null;
+        getPanes(): MapPanes | null;
+        getProjection(): MapCanvasProjection | null;
+        onAdd(): void;
+        draw(): void;
+        onRemove(): void;
+      }
+
+      interface MapPanes {
+        floatPane: Element;
+        mapPane: Element;
+        markerLayer: Element;
+        overlayLayer: Element;
+        overlayMouseTarget: Element;
+      }
+
+      interface MapCanvasProjection {
+        fromLatLngToDivPixel(latLng: LatLng | LatLngLiteral): Point | null;
+        fromDivPixelToLatLng(pixel: Point): LatLng | null;
+      }
+
+      interface Point {
+        x: number;
+        y: number;
+      }
+
+      // Circle class
+      class Circle {
+        constructor(options?: CircleOptions);
+        setMap(map: Map | null): void;
+        setOptions(options: CircleOptions): void;
+      }
+
+      interface CircleOptions {
+        center?: LatLng | LatLngLiteral;
+        radius?: number;
+        strokeColor?: string;
+        strokeOpacity?: number;
+        strokeWeight?: number;
+        fillColor?: string;
+        fillOpacity?: number;
+        map?: Map;
+        clickable?: boolean;
       }
 
       // Modern Library Import
@@ -76,16 +132,13 @@ declare global {
         scaleControl?: boolean;
         styles?: any[];
         gestureHandling?: string;
+        tilt?: number;
       }
 
       // Coordinates
       interface LatLngLiteral {
         lat: number;
         lng: number;
-      }
-      interface LatLng {
-        lat(): number;
-        lng(): number;
       }
       interface LatLngBoundsLiteral {
           east: number;
@@ -142,6 +195,41 @@ declare global {
         const DROP: any;
         const BOUNCE: any;
       }
+
+      // Geocoder
+      class Geocoder {
+        constructor();
+        geocode(
+          request: GeocoderRequest,
+          callback: (results: GeocoderResult[] | null, status: GeocoderStatus) => void
+        ): void;
+      }
+
+      interface GeocoderRequest {
+        address?: string;
+        location?: LatLng | LatLngLiteral;
+        placeId?: string;
+        bounds?: LatLngBounds | LatLngBoundsLiteral;
+        componentRestrictions?: any;
+        region?: string;
+      }
+
+      interface GeocoderResult {
+        address_components: any[];
+        formatted_address: string;
+        geometry: GeocoderGeometry;
+        place_id: string;
+        types: string[];
+      }
+
+      interface GeocoderGeometry {
+        location: LatLng;
+        location_type: string;
+        viewport: LatLngBounds;
+        bounds?: LatLngBounds;
+      }
+
+      type GeocoderStatus = 'OK' | 'ZERO_RESULTS' | 'OVER_QUERY_LIMIT' | 'REQUEST_DENIED' | 'INVALID_REQUEST' | 'UNKNOWN_ERROR' | 'ERROR';
 
       // Places Library
       namespace places {

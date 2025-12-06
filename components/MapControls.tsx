@@ -1,10 +1,11 @@
 import React, { useState, useImperativeHandle, forwardRef, useEffect, useRef } from 'react';
-import { Crosshair, Map } from 'lucide-react';
+import { Navigation, Building2, Map } from 'lucide-react';
 import { useLanguage } from '../hooks/useLanguage';
 
 interface MapControlsProps {
   mapType: 'satellite' | 'roadmap' | 'dark';
-  onZoomToMunicipality: () => void;
+  onLocateUser: () => void;
+  onZoomToCity: () => void;
   onToggleMapType: () => void;
 }
 
@@ -14,11 +15,12 @@ export interface MapControlsRef {
 
 export const MapControls = forwardRef<MapControlsRef, MapControlsProps>(({
   mapType,
-  onZoomToMunicipality,
+  onLocateUser,
+  onZoomToCity,
   onToggleMapType
 }, ref) => {
   const { t } = useLanguage();
-  const [clickedButton, setClickedButton] = useState<'zoom' | 'mapType' | null>(null);
+  const [clickedButton, setClickedButton] = useState<'locate' | 'city' | 'mapType' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const getMapTypeTitle = () => {
@@ -51,9 +53,15 @@ export const MapControls = forwardRef<MapControlsRef, MapControlsProps>(({
     };
   }, []);
 
-  const handleZoomClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    setClickedButton('zoom');
-    onZoomToMunicipality();
+  const handleLocateClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    setClickedButton('locate');
+    onLocateUser();
+    e.currentTarget.blur();
+  };
+
+  const handleCityClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    setClickedButton('city');
+    onZoomToCity();
     e.currentTarget.blur();
   };
 
@@ -65,15 +73,36 @@ export const MapControls = forwardRef<MapControlsRef, MapControlsProps>(({
 
   return (
     <div ref={containerRef} data-tutorial="map-controls" className="absolute bottom-24 right-4 z-10 flex flex-col gap-3 pointer-events-auto">
+      {/* Locate Me Button */}
       <button
-        onClick={handleZoomClick}
+        onClick={handleLocateClick}
         className={`bg-gray-800/90 backdrop-blur border p-3 rounded-full shadow-lg text-white hover:bg-gray-700 active:bg-gray-600 transition group focus:outline-none focus:ring-0
-          ${clickedButton === 'zoom' ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-700'}
+          ${clickedButton === 'locate' ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-700'}
         `}
-        title={t('zoomToCity')}
+        title={t('locateMe') || 'Find my location'}
       >
-        <Crosshair size={24} className={`transition ${clickedButton === 'zoom' ? 'text-blue-400' : 'group-hover:text-blue-400 group-active:text-blue-300'}`} />
+        <Navigation 
+          size={24} 
+          className={`transition ${clickedButton === 'locate' ? 'text-blue-400' : 'group-hover:text-blue-400 group-active:text-blue-300'}`}
+          style={{ transform: 'rotate(45deg)' }}
+        />
       </button>
+
+      {/* City View Button */}
+      <button
+        onClick={handleCityClick}
+        className={`bg-gray-800/90 backdrop-blur border p-3 rounded-full shadow-lg text-white hover:bg-gray-700 active:bg-gray-600 transition group focus:outline-none focus:ring-0
+          ${clickedButton === 'city' ? 'border-purple-500 ring-2 ring-purple-500/50' : 'border-gray-700'}
+        `}
+        title={t('zoomToCity') || 'View city'}
+      >
+        <Building2 
+          size={24} 
+          className={`transition ${clickedButton === 'city' ? 'text-purple-400' : 'group-hover:text-purple-400 group-active:text-purple-300'}`}
+        />
+      </button>
+
+      {/* Map Type Button */}
       <button
         onClick={handleMapTypeClick}
         className={`bg-gray-800/90 backdrop-blur border p-3 rounded-full shadow-lg text-white transition group focus:outline-none focus:ring-0 active:bg-gray-600
