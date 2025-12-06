@@ -1,15 +1,15 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Calendar, MapPin, Share2, User, Trash2, Pencil, Loader2, ExternalLink } from 'lucide-react';
+import { X, Calendar, MapPin, Share2, User, Trash2, Pencil, Loader2, ExternalLink, Languages } from 'lucide-react';
 import { Restaurant, Visit, GUEST_ID } from '../types';
 import { getGradeColor, calculateAverageGrade } from '../utils/rating';
 import html2canvas from 'html2canvas';
 import ImageSlider from './ImageSlider';
+import { useLanguage, translateText } from '../hooks/useLanguage';
 import {
   SWIPE_UP_THRESHOLD,
   SWIPE_DOWN_THRESHOLD,
   MODAL_TRANSITION_DURATION,
-  DRAG_RESET_DELAY,
   CLOSE_ANIMATION_DURATION,
   MOBILE_BREAKPOINT
 } from '../constants';
@@ -31,10 +31,16 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   onDeleteVisit,
   onEditVisit
 }) => {
+  const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'timeline' | 'info'>('timeline');
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [shareBase64Map, setShareBase64Map] = useState<Record<string, string>>({});
   const shareRef = useRef<HTMLDivElement>(null);
+  
+  // Translation state for comments
+  const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({});
+  const [translatingComments, setTranslatingComments] = useState<Record<string, boolean>>({});
+  const [showTranslated, setShowTranslated] = useState<Record<string, boolean>>({});
   
   // Animation & Drag State
   const [isClosing, setIsClosing] = useState(false);
@@ -46,6 +52,27 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   const startYRef = useRef<number>(0);
   
   const sortedVisits = [...restaurant.visits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Handle comment translation
+  const handleTranslateComment = async (visitId: string, comment: string) => {
+    if (translatedComments[visitId]) {
+      // Toggle between original and translated
+      setShowTranslated(prev => ({ ...prev, [visitId]: !prev[visitId] }));
+      return;
+    }
+    
+    setTranslatingComments(prev => ({ ...prev, [visitId]: true }));
+    try {
+      const targetLang = language === 'en' ? 'zh' : 'en';
+      const translated = await translateText(comment, targetLang);
+      setTranslatedComments(prev => ({ ...prev, [visitId]: translated }));
+      setShowTranslated(prev => ({ ...prev, [visitId]: true }));
+    } catch (error) {
+      console.error('Translation failed:', error);
+    } finally {
+      setTranslatingComments(prev => ({ ...prev, [visitId]: false }));
+    }
+  };
 
   const handleClose = (direction: 'right' | 'down' = 'right') => {
     if (direction === 'down') setIsClosingDown(true);
@@ -66,14 +93,14 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   }, []);
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return new Date(dateStr).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     });
   };
 
-  // Drag Handlers
+  // Simplified Touch Handlers - no preventDefault to avoid passive listener errors
   const onTouchStart = (e: React.TouchEvent) => {
     startYRef.current = e.touches[0].clientY;
     setIsDragging(true);
@@ -83,60 +110,43 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     if (!isDragging) return;
     const currentY = e.touches[0].clientY;
     const diff = currentY - startYRef.current;
-
-    // Allow both up and down dragging
+    
+    // Track movement without preventing default (allows smooth scrolling)
     if (!isExpanded && diff < 0) {
-      // Dragging up when not expanded - allow expansion
-      setDragY(diff);
+      setDragY(Math.max(diff, -80)); // Limit upward drag visual
     } else if (diff > 0) {
-      // Dragging down - allow closing
-      setDragY(diff);
+      setDragY(Math.min(diff, 120)); // Limit downward drag visual
     }
   };
 
   const onTouchEnd = () => {
+    if (!isDragging) return;
     setIsDragging(false);
 
-    // Haptic feedback helper
+    const dragAmount = dragY;
+    setDragY(0); // Reset immediately
+
+    // Haptic feedback
     const vibrate = (duration: number = 10) => {
-      if (navigator.vibrate) {
-        navigator.vibrate(duration);
-      }
+      if (navigator.vibrate) navigator.vibrate(duration);
     };
 
-    // Swipe up to expand (when not already expanded)
-    if (!isExpanded && dragY < SWIPE_UP_THRESHOLD) {
-      vibrate(15); // Subtle haptic feedback
-      setDragY(0);
-      setTimeout(() => {
-        setIsExpanding(true);
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setIsExpanded(true);
-            setTimeout(() => {
-              setIsExpanding(false);
-            }, MODAL_TRANSITION_DURATION);
-          });
-        });
-      }, DRAG_RESET_DELAY);
+    // Swipe up to expand
+    if (!isExpanded && dragAmount < SWIPE_UP_THRESHOLD) {
+      vibrate(15);
+      setIsExpanding(true);
+      setIsExpanded(true);
+      setTimeout(() => setIsExpanding(false), MODAL_TRANSITION_DURATION);
     }
-    // Swipe down from expanded (100%) - collapse to 80% first
-    else if (isExpanded && dragY > SWIPE_DOWN_THRESHOLD) {
-      vibrate(15); // Subtle haptic feedback
-      setDragY(0);
+    // Swipe down from expanded - collapse to 80%
+    else if (isExpanded && dragAmount > SWIPE_DOWN_THRESHOLD) {
+      vibrate(15);
       setIsExpanded(false);
-      setTimeout(() => {
-        setIsExpanding(false);
-      }, MODAL_TRANSITION_DURATION);
     }
-    // Swipe down from partial (80%) - close completely
-    else if (!isExpanded && dragY > SWIPE_DOWN_THRESHOLD) {
-      vibrate(20); // Slightly stronger feedback for close
-      setTimeout(() => handleClose('down'), 100);
-    }
-    // Snap back if threshold not met
-    else {
-      setDragY(0);
+    // Swipe down from 80% - close
+    else if (!isExpanded && dragAmount > SWIPE_DOWN_THRESHOLD) {
+      vibrate(20);
+      handleClose('down');
     }
   };
 
@@ -244,7 +254,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   };
 
   const handleDelete = (visit: Visit) => {
-    if (window.confirm("Are you sure you want to delete this memory? This cannot be undone.")) {
+    if (window.confirm(t('confirmDeleteExperience'))) {
       onDeleteVisit(restaurant, visit);
     }
   };
@@ -274,90 +284,159 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
   };
 
   // Determine animation class
-  let animationClass = 'animate-slide-in-up sm:animate-slide-in-right'; // Mobile slide up, Desktop slide right
+  let animationClass = 'animate-float-card-in sm:animate-slide-in-right';
   if (isClosing) {
-    animationClass = isClosingDown ? 'animate-slide-out-down' : 'animate-slide-out-down sm:animate-slide-out-right';
+    animationClass = isClosingDown ? 'animate-float-card-out' : 'animate-float-card-out sm:animate-slide-out-right';
   }
+
+  // Calculate card height based on state
+  const getCardHeight = () => {
+    if (window.innerWidth >= MOBILE_BREAKPOINT) return '100%';
+    if (isExpanding || isExpanded) return 'calc(100% - 20px)';
+    return '80%';
+  };
+
+  // Calculate visual offset for drag
+  const getDragTransform = () => {
+    if (!isDragging) return 'translateY(0)';
+    return `translateY(${dragY}px)`;
+  };
 
   return (
     <>
       {/* Backdrop - click to close */}
       <div
-        className={`fixed inset-0 bg-black/40 z-10 transition-opacity duration-300 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
+        className={`fixed inset-0 bg-black/50 z-10 transition-opacity duration-300 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
         onClick={() => handleClose('down')}
       />
 
+      {/* Floating Card Container */}
       <div
-        className={`absolute left-0 right-0 sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] bg-gray-900 border-t sm:border-t-0 sm:border-l border-gray-800 shadow-2xl z-20 flex flex-col ${isExpanded ? 'rounded-none' : 'rounded-t-2xl'} sm:rounded-none ${animationClass}`}
+        className={`
+          fixed z-20
+          sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] sm:rounded-none
+          ${animationClass}
+        `}
         style={{
-          // Use bottom positioning with height for smooth animation
-          bottom: window.innerWidth < MOBILE_BREAKPOINT ? 0 : 'auto',
+          // Mobile: floating card with margin
+          left: window.innerWidth < MOBILE_BREAKPOINT ? '8px' : 'auto',
+          right: window.innerWidth < MOBILE_BREAKPOINT ? '8px' : 0,
+          bottom: window.innerWidth < MOBILE_BREAKPOINT ? '8px' : 'auto',
           top: window.innerWidth < MOBILE_BREAKPOINT ? 'auto' : 0,
-          height: window.innerWidth < MOBILE_BREAKPOINT ? ((isExpanding || isExpanded) ? '100%' : '80%') : '100%',
-          transform: isDragging ? `translateY(${dragY}px)` : 'translateY(0)',
+          height: getCardHeight(),
+          transform: getDragTransform(),
           transition: isDragging
             ? 'none'
-            : `height ${MODAL_TRANSITION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1), border-radius ${MODAL_TRANSITION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1), transform ${CLOSE_ANIMATION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1)`,
+            : `height ${MODAL_TRANSITION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1), transform ${CLOSE_ANIMATION_DURATION}ms cubic-bezier(0.32, 0.72, 0, 1)`,
           willChange: 'height, transform'
         }}
       >
-        
-        {/* Draggable Area - Header + Stats */}
-        <div
-          className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none"
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
+        {/* Card Body */}
+        <div 
+          className={`
+            h-full bg-gray-900 shadow-2xl flex flex-col overflow-hidden
+            ${isExpanded ? 'rounded-2xl' : 'rounded-3xl'} 
+            sm:rounded-none sm:border-l sm:border-gray-800
+            border border-gray-700/50 sm:border-t-0 sm:border-r-0 sm:border-b-0
+          `}
+          style={{
+            boxShadow: window.innerWidth < MOBILE_BREAKPOINT 
+              ? '0 -4px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05)' 
+              : undefined
+          }}
         >
-          {/* Header - Banner Image */}
+        
+          {/* Draggable Area - Header + Stats */}
           <div
-            className={`relative h-32 sm:h-48 bg-gray-800 ${isExpanded ? 'rounded-none' : 'rounded-t-2xl'} sm:rounded-none overflow-hidden`}
+            className="flex-shrink-0 cursor-grab active:cursor-grabbing select-none"
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
           >
-            {/* Drag Handle for Mobile - changes based on expand state */}
-            <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1.5 bg-gray-400/50 rounded-full z-30 sm:hidden transition-all duration-300"></div>
-            {!isExpanded && (
-              <div className="absolute top-5 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 z-30 sm:hidden pointer-events-none">
-                Swipe up to expand
-              </div>
-            )}
-
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent z-10 pointer-events-none" />
-            {restaurant.visits.length > 0 && (
-              <img 
-                src={restaurant.visits[0].photoDataUrl} 
-                className="w-full h-full object-cover opacity-60" 
-                alt="Venue" 
-              />
-            )}
-            <button 
-              onClick={() => handleClose('right')}
-              className="absolute top-4 right-4 z-20 bg-black/50 hover:bg-black/70 p-2 rounded-full text-white transition"
+            {/* Header - Banner Image */}
+            <div
+              className={`relative h-36 sm:h-48 bg-gray-800 ${isExpanded ? 'rounded-t-2xl' : 'rounded-t-3xl'} sm:rounded-none overflow-hidden`}
             >
-              <X size={20} />
-            </button>
-            <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none">
-              <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight">{restaurant.name}</h1>
-              <div className="flex items-center gap-1 text-gray-300 text-xs mt-1">
-                <MapPin size={12} />
-                <span className="truncate">{restaurant.address}</span>
+              {/* Prominent Swipe Indicator for Mobile */}
+              <div className="absolute top-0 left-0 right-0 z-30 sm:hidden">
+                <div className="flex flex-col items-center pt-3 pb-2">
+                  {/* Drag Handle Bar */}
+                  <div className="w-12 h-1.5 bg-white/60 rounded-full shadow-sm"></div>
+                  
+                  {/* Swipe Hint - More Prominent */}
+                  {!isExpanded && (
+                    <div className="mt-2 flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/20">
+                      <svg 
+                        className="w-3.5 h-3.5 text-white/90 animate-bounce" 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                      </svg>
+                      <span className="text-xs text-white/90 font-medium">
+                        {language === 'zh' ? '上滑展开' : 'Swipe up'}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Collapse hint when expanded */}
+                  {isExpanded && (
+                    <div className="mt-2 flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/20">
+                      <svg 
+                        className="w-3.5 h-3.5 text-white/70" 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <span className="text-xs text-white/70 font-medium">
+                        {language === 'zh' ? '下滑收起' : 'Swipe down'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/20 to-transparent z-10 pointer-events-none" />
+              {restaurant.visits.length > 0 && (
+                <img 
+                  src={restaurant.visits[0].photoDataUrl} 
+                  className="w-full h-full object-cover opacity-70" 
+                  alt="Venue" 
+                  draggable={false}
+                />
+              )}
+              <button 
+                onClick={() => handleClose('right')}
+                className="absolute top-4 right-4 z-20 bg-black/40 hover:bg-black/60 backdrop-blur-sm p-2.5 rounded-full text-white transition border border-white/10"
+              >
+                <X size={18} />
+              </button>
+              <div className="absolute bottom-4 left-4 right-4 z-20 pointer-events-none">
+                <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight drop-shadow-lg">{restaurant.name}</h1>
+                <div className="flex items-center gap-1.5 text-gray-200 text-xs mt-1.5">
+                  <MapPin size={12} className="flex-shrink-0" />
+                  <span className="truncate drop-shadow">{restaurant.address}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Bar - Also part of draggable area */}
+            <div className="flex border-b border-gray-800/80 bg-gray-900/80 backdrop-blur-sm">
+              <div className="flex-1 p-3 text-center border-r border-gray-800/80">
+                <span className="block text-lg font-bold text-white">{restaurant.visits.length}</span>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">{language === 'zh' ? '访问' : 'Visits'}</span>
+              </div>
+              <div className="flex-1 p-3 text-center">
+                <span className={`block text-lg font-bold ${getGradeColor(avgGrade)}`}>
+                  {avgGrade}
+                </span>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider">{language === 'zh' ? '平均评分' : 'Avg Grade'}</span>
               </div>
             </div>
           </div>
-
-          {/* Stats Bar - Also part of draggable area */}
-          <div className="flex border-b border-gray-800 bg-gray-900/50 backdrop-blur">
-            <div className="flex-1 p-3 text-center border-r border-gray-800">
-              <span className="block text-lg font-bold text-white">{restaurant.visits.length}</span>
-              <span className="text-xs text-gray-500 uppercase">Visits</span>
-            </div>
-            <div className="flex-1 p-3 text-center">
-              <span className={`block text-lg font-bold ${getGradeColor(avgGrade)}`}>
-                {avgGrade}
-              </span>
-              <span className="text-xs text-gray-500 uppercase">Avg Grade</span>
-            </div>
-          </div>
-        </div>
 
         {/* Tabs Navigation */}
         <div className="flex border-b border-gray-800 bg-gray-900">
@@ -365,37 +444,40 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
             onClick={() => setActiveTab('timeline')}
             className={`flex-1 py-3 text-sm font-medium transition ${activeTab === 'timeline' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
           >
-            Timeline
+            {language === 'zh' ? '时间线' : 'Timeline'}
           </button>
           <button 
             onClick={() => setActiveTab('info')}
             className={`flex-1 py-3 text-sm font-medium transition ${activeTab === 'info' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-gray-500 hover:text-gray-300'}`}
           >
-            Info
+            {language === 'zh' ? '详情' : 'Info'}
           </button>
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div
+          className="flex-1 overflow-y-auto p-4 space-y-6"
+          style={{ scrollbarGutter: 'stable' }}
+        >
           
           {/* TIMELINE TAB */}
           {activeTab === 'timeline' && (
             <>
               <div className="flex justify-between items-center">
-                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Memories</h3>
+                  <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">{t('memories')}</h3>
                   <button 
                     onClick={handleShareAsImage} 
                     disabled={isGeneratingShare}
                     className="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-xs bg-blue-900/20 px-2 py-1 rounded transition disabled:opacity-50"
                   >
                     {isGeneratingShare ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />}
-                    Share Card
+                    {language === 'zh' ? '分享卡片' : 'Share Card'}
                   </button>
               </div>
 
               {restaurant.visits.length === 0 ? (
                  <div className="text-center text-gray-500 py-10">
-                   <p>No visits recorded.</p>
+                   <p>{t('noExperiences')}</p>
                  </div>
               ) : (
                 sortedVisits.map((visit, index) => {
@@ -454,7 +536,32 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
                       
                       <div className="p-4">
                         {visit.comment && (
-                          <p className="text-gray-300 text-sm mb-2">"{visit.comment}"</p>
+                          <div className="mb-2">
+                            <p className="text-gray-300 text-sm">
+                              "{showTranslated[visit.id] && translatedComments[visit.id] 
+                                ? translatedComments[visit.id] 
+                                : visit.comment}"
+                            </p>
+                            <button
+                              onClick={() => handleTranslateComment(visit.id, visit.comment!)}
+                              disabled={translatingComments[visit.id]}
+                              className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-500 hover:text-blue-400 transition-colors"
+                            >
+                              {translatingComments[visit.id] ? (
+                                <>
+                                  <Loader2 size={10} className="animate-spin" />
+                                  {t('translating')}
+                                </>
+                              ) : (
+                                <>
+                                  <Languages size={10} />
+                                  {showTranslated[visit.id] && translatedComments[visit.id] 
+                                    ? t('showOriginal')
+                                    : t('translate')}
+                                </>
+                              )}
+                            </button>
+                          </div>
                         )}
                         
                         <div className="flex items-center gap-1 text-gray-500 text-xs">
@@ -473,21 +580,23 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
           {activeTab === 'info' && (
             <div className="space-y-6 animate-fade-in-up">
                <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Location Details</h3>
+                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">
+                   {language === 'zh' ? '位置详情' : 'Location Details'}
+                 </h3>
                  
                  <div className="space-y-4">
                    <div>
-                     <label className="text-xs text-gray-500">Name</label>
+                     <label className="text-xs text-gray-500">{language === 'zh' ? '名称' : 'Name'}</label>
                      <p className="text-white font-medium">{restaurant.name}</p>
                    </div>
                    
                    <div>
-                     <label className="text-xs text-gray-500">Address</label>
+                     <label className="text-xs text-gray-500">{language === 'zh' ? '地址' : 'Address'}</label>
                      <p className="text-white font-medium">{restaurant.address}</p>
                    </div>
 
                    <div>
-                      <label className="text-xs text-gray-500">Coordinates</label>
+                      <label className="text-xs text-gray-500">{language === 'zh' ? '坐标' : 'Coordinates'}</label>
                       <p className="text-gray-400 font-mono text-xs">
                         {restaurant.location.lat.toFixed(5)}, {restaurant.location.lng.toFixed(5)}
                       </p>
@@ -498,7 +607,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
                      className="w-full flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-lg transition border border-gray-600"
                    >
                      <MapPin size={18} />
-                     Open in Google Maps
+                     {language === 'zh' ? '在 Google 地图中打开' : 'Open in Google Maps'}
                      <ExternalLink size={14} className="opacity-70" />
                    </button>
                  </div>
@@ -510,78 +619,188 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
 
         {/* Footer Actions */}
         {activeTab === 'timeline' && (
-          <div className="p-4 border-t border-gray-800 bg-gray-900 flex-shrink-0">
+          <div className="p-4 border-t border-gray-800/80 bg-gray-900 flex-shrink-0 rounded-b-3xl sm:rounded-none">
             {currentUserUid !== GUEST_ID && (
               <button 
                 onClick={onAddAnotherVisit}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg transition"
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3.5 rounded-xl transition shadow-lg"
               >
-                Add Another Visit Here
+                {language === 'zh' ? '在此添加另一个记忆' : 'Add Another Visit Here'}
               </button>
             )}
           </div>
         )}
+        </div>
       </div>
 
-      {/* Hidden Share Receipt Render */}
-      <div 
+      {/* Hidden Share Card Render - Redesigned for Viral Marketing */}
+      <div
         ref={shareRef}
-        className="fixed top-0 left-[-9999px] w-[400px] bg-gray-900 text-white p-6 border border-gray-800"
+        className="fixed top-0 left-[-9999px] w-[400px] text-white overflow-hidden"
+        style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
       >
-        <div className="text-center mb-6">
-           <h2 className="text-xl font-bold text-white mb-1">TraceBook</h2>
-           <div className="w-48 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mb-4 rounded-full shadow-sm"></div>
-           <h1 className="text-2xl font-black text-blue-400 mb-2 px-4 leading-tight">{restaurant.name}</h1>
-           <p className="text-gray-400 text-xs flex items-center justify-center gap-1">
-             <MapPin size={12} /> {restaurant.address}
-           </p>
-        </div>
+        {/* Gradient Background */}
+        <div className="relative" style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}>
 
-        <div className="flex justify-between border-t border-b border-gray-700 py-3 mb-6">
-           <div className="text-center w-1/2 border-r border-gray-700">
-             <span className="block text-xl font-bold">{restaurant.visits.length}</span>
-             <span className="text-xs text-gray-500 uppercase tracking-widest">Visits</span>
-           </div>
-           <div className="text-center w-1/2">
-             <span className={`block text-xl font-bold ${getGradeColor(avgGrade)}`}>{avgGrade}</span>
-             <span className="text-xs text-gray-500 uppercase tracking-widest">Score</span>
-           </div>
-        </div>
+          {/* Hero Section with Featured Photo */}
+          <div className="relative h-[280px] overflow-hidden">
+            {/* Background Photo with Overlay */}
+            {sortedVisits[0]?.photoDataUrl && (
+              <div
+                className="absolute inset-0 bg-cover bg-center"
+                style={{
+                  backgroundImage: `url(${shareBase64Map[sortedVisits[0].photoDataUrl] || sortedVisits[0].photoDataUrl})`,
+                  filter: 'brightness(0.6)'
+                }}
+              />
+            )}
 
-        <div className="space-y-6">
-           {sortedVisits.map((visit, i) => (
-             <div key={i} className="flex gap-4">
-                <div className="relative flex flex-col items-center">
-                   <div className="w-3 h-3 rounded-full bg-gray-600 z-10"></div>
-                   {i !== sortedVisits.length - 1 && <div className="w-0.5 h-full bg-gray-800 absolute top-3"></div>}
+            {/* Gradient Overlay */}
+            <div
+              className="absolute inset-0"
+              style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(26,26,46,0.95) 100%)' }}
+            />
+
+            {/* Content Overlay */}
+            <div className="relative z-10 h-full flex flex-col justify-end p-6 pb-8">
+              {/* App Logo & Branding */}
+              <div className="absolute top-4 left-4 flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                  <span className="text-white font-bold text-sm">TB</span>
                 </div>
-                
-                <div className="flex-1 pb-4">
-                   <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <span className="text-xs text-gray-500 font-mono block">{formatDate(visit.date)}</span>
-                        <div className="flex items-center gap-1 mt-0.5">
-                           {visit.creatorPhotoURL && <img src={visit.creatorPhotoURL} className="w-3 h-3 rounded-full" />}
-                           <span className="text-xs text-gray-300 font-bold">{visit.creatorName}</span>
-                        </div>
+                <span className="text-white/90 font-semibold text-sm tracking-wide">TraceBook</span>
+              </div>
+
+              {/* Grade Badge */}
+              <div
+                className="absolute top-4 right-4 w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
+                style={{ background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)' }}
+              >
+                <span className={`text-3xl font-black ${getGradeColor(avgGrade)}`}>{avgGrade}</span>
+              </div>
+
+              {/* Restaurant Name & Location */}
+              <h1 className="text-2xl font-bold text-white leading-tight mb-2" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+                {restaurant.name}
+              </h1>
+              <div className="flex items-center gap-1.5 text-white/70 text-sm">
+                <MapPin size={14} className="flex-shrink-0" />
+                <span className="truncate">{restaurant.address}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="flex mx-6 -mt-4 relative z-20 rounded-xl overflow-hidden shadow-lg" style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.15)' }}>
+            <div className="flex-1 py-4 text-center border-r" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+              <span className="block text-2xl font-bold text-white">{restaurant.visits.length}</span>
+              <span className="text-xs text-white/60 uppercase tracking-wider">{language === 'zh' ? '次访问' : 'Visits'}</span>
+            </div>
+            <div className="flex-1 py-4 text-center">
+              <span className={`block text-2xl font-bold ${getGradeColor(avgGrade)}`}>{avgGrade}</span>
+              <span className="text-xs text-white/60 uppercase tracking-wider">{language === 'zh' ? '评分' : 'Rating'}</span>
+            </div>
+          </div>
+
+          {/* Latest Experiences Preview */}
+          <div className="p-6 pt-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white/80 uppercase tracking-wider">{language === 'zh' ? '最新体验' : 'Latest Experiences'}</h3>
+              <span className="text-xs text-white/50">{sortedVisits.length} {language === 'zh' ? '条记录' : 'memories'}</span>
+            </div>
+
+            {/* Experience Cards - Show max 2 */}
+            <div className="space-y-3">
+              {sortedVisits.slice(0, 2).map((visit, i) => (
+                <div
+                  key={i}
+                  className="flex gap-3 p-3 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  {/* Photo Thumbnail */}
+                  <div
+                    className="w-16 h-16 rounded-lg bg-cover bg-center flex-shrink-0"
+                    style={{
+                      backgroundImage: `url(${shareBase64Map[visit.photoDataUrl] || visit.photoDataUrl})`,
+                      border: '1px solid rgba(255,255,255,0.1)'
+                    }}
+                  />
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between mb-1">
+                      <div className="flex items-center gap-1.5">
+                        {visit.creatorPhotoURL && (
+                          <img
+                            src={visit.creatorPhotoURL}
+                            className="w-4 h-4 rounded-full border border-white/20"
+                          />
+                        )}
+                        <span className="text-xs text-white/80 font-medium truncate">{visit.creatorName || 'Anonymous'}</span>
                       </div>
-                      <span className={`text-lg font-bold ${getGradeColor(visit.rating)}`}>{visit.rating}</span>
-                   </div>
+                      <span className={`text-sm font-bold ${getGradeColor(visit.rating)}`}>{visit.rating}</span>
+                    </div>
 
-                   {/* Use Background Image to prevent stretching and ensure cover fit */}
-                   <div className="rounded-lg overflow-hidden mb-2 border border-gray-700 h-64 bg-gray-800">
-                     <div 
-                        className="w-full h-full bg-cover bg-center"
-                        style={{ 
-                          backgroundImage: `url(${shareBase64Map[visit.photoDataUrl] || visit.photoDataUrl})` 
-                        }}
-                     ></div>
-                   </div>
-                   
-                   {visit.comment && <p className="text-sm text-gray-300 italic mb-1">"{visit.comment}"</p>}
+                    {visit.comment && (
+                      <p className="text-xs text-white/60 line-clamp-2 leading-relaxed">"{visit.comment}"</p>
+                    )}
+
+                    <span className="text-[10px] text-white/40 mt-1 block">{formatDate(visit.date)}</span>
+                  </div>
                 </div>
-             </div>
-           ))}
+              ))}
+            </div>
+
+            {/* More indicator if there are more visits */}
+            {sortedVisits.length > 2 && (
+              <div className="text-center mt-3">
+                <span className="text-xs text-white/50">+{sortedVisits.length - 2} {language === 'zh' ? '更多体验' : 'more experiences'}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Call to Action with QR Code */}
+          <div
+            className="mx-6 mb-4 p-4 rounded-xl"
+            style={{ background: 'linear-gradient(135deg, rgba(102,126,234,0.25) 0%, rgba(118,75,162,0.25) 100%)', border: '1px solid rgba(102,126,234,0.3)' }}
+          >
+            <div className="flex items-center gap-4">
+              {/* QR Code */}
+              <div className="flex-shrink-0">
+                <div className="w-16 h-16 bg-white rounded-lg p-1 flex items-center justify-center">
+                  <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=56x56&data=https://TraceMap.ca&bgcolor=ffffff&color=000000&margin=0"
+                    alt="QR Code"
+                    className="w-14 h-14"
+                    crossOrigin="anonymous"
+                  />
+                </div>
+              </div>
+              {/* Text Content */}
+              <div className="flex-1 text-left">
+                <p className="text-sm text-white font-semibold mb-1">
+                  {language === 'zh' ? '扫码加入 TraceBook' : 'Scan to join TraceBook'}
+                </p>
+                <p className="text-xs text-white/70 leading-relaxed">
+                  {language === 'zh'
+                    ? '发现美食，分享体验'
+                    : 'Discover great food, share experiences'}
+                </p>
+                <p className="text-[10px] text-white/50 mt-1 font-medium">TraceMap.ca</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Branding */}
+          <div className="px-6 pb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                <span className="text-white font-bold text-[10px]">TB</span>
+              </div>
+              <span className="text-white/60 text-xs font-medium">TraceMap.ca</span>
+            </div>
+            <span className="text-[10px] text-white/40">{language === 'zh' ? '记录美好体验' : 'Map Your Memories'}</span>
+          </div>
         </div>
       </div>
     </>

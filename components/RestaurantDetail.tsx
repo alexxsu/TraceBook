@@ -103,6 +103,7 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
 
   // Drag Handlers
   const onTouchStart = (e: React.TouchEvent) => {
+    // Only start drag if this is the draggable header area
     startYRef.current = e.touches[0].clientY;
     setIsDragging(true);
   };
@@ -111,6 +112,11 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
     if (!isDragging) return;
     const currentY = e.touches[0].clientY;
     const diff = currentY - startYRef.current;
+
+    // Prevent default only if event is cancelable (avoid intervention errors)
+    if (e.cancelable) {
+      e.preventDefault();
+    }
 
     // Allow both up and down dragging
     if (!isExpanded && diff < 0) {
@@ -441,7 +447,10 @@ const RestaurantDetail: React.FC<RestaurantDetailProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div
+          className="flex-1 overflow-y-auto p-4 space-y-6"
+          style={{ scrollbarGutter: 'stable' }}
+        >
           
           {/* TIMELINE TAB */}
           {activeTab === 'timeline' && (
