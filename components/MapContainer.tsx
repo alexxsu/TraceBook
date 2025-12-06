@@ -108,13 +108,50 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
   const clustererRef = useRef<MarkerClusterer | null>(null);
   // Store marker instances to manage updates (using regular Marker)
   const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
+  // Store explored radius circles for each marker
+  const circlesRef = useRef<Map<string, google.maps.Circle>>(new Map());
   // Track current map type for marker updates
   const currentMapTypeRef = useRef<string>(mapType);
   // Track previous restaurant IDs for animation
   const prevRestaurantIdsRef = useRef<Set<string>>(new Set());
   // Store onMapClick ref for use in map click listener
   const onMapClickRef = useRef(onMapClick);
-  
+
+  // Explored radius configuration (300 meters)
+  const EXPLORED_RADIUS = 300;
+
+  // Get circle style based on map type - subtle and understated
+  const getCircleStyle = (isDarkMode: boolean, isSatellite: boolean) => {
+    if (isDarkMode) {
+      // Dark mode: soft blue-purple glow
+      return {
+        fillColor: '#6366f1',
+        fillOpacity: 0.08,
+        strokeColor: '#818cf8',
+        strokeOpacity: 0.15,
+        strokeWeight: 1,
+      };
+    } else if (isSatellite) {
+      // Satellite mode: warm amber/gold glow
+      return {
+        fillColor: '#fbbf24',
+        fillOpacity: 0.1,
+        strokeColor: '#f59e0b',
+        strokeOpacity: 0.2,
+        strokeWeight: 1,
+      };
+    } else {
+      // Roadmap mode: soft blue
+      return {
+        fillColor: '#3b82f6',
+        fillOpacity: 0.06,
+        strokeColor: '#60a5fa',
+        strokeOpacity: 0.12,
+        strokeWeight: 1,
+      };
+    }
+  };
+
   // Keep ref updated
   useEffect(() => {
     onMapClickRef.current = onMapClick;
@@ -254,13 +291,23 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         (prevIds.size > 0 && removedCount === prevIds.size) || 
         (currentIds.size > 0 && addedCount === currentIds.size && prevIds.size > 0);
 
+      const isSatellite = mapType === 'satellite';
+      const circleStyle = getCircleStyle(isDarkMode, isSatellite);
+
       try {
-        // A. Fade out and remove old markers
+        // A. Fade out and remove old markers + circles
         const markersToRemove: google.maps.Marker[] = [];
         const removePromises: Promise<void>[] = [];
-        
+
         for (const [id, marker] of markersRef.current) {
           if (!currentIds.has(id)) {
+            // Remove associated circle
+            const circle = circlesRef.current.get(id);
+            if (circle) {
+              circle.setMap(null);
+              circlesRef.current.delete(id);
+            }
+
             if (isMapSwitch) {
               // Animate fade out
               removePromises.push(new Promise<void>((resolve) => {
@@ -286,9 +333,9 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
           clustererRef.current.removeMarkers(markersToRemove);
         }
 
-        // B. Add new markers with fade in animation
+        // B. Add new markers with fade in animation + explored circles
         const newMarkers: google.maps.Marker[] = [];
-        
+
         restaurants.forEach(restaurant => {
           if (!markersRef.current.has(restaurant.id)) {
             const marker = new google.maps.Marker({
@@ -307,7 +354,18 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
 
             markersRef.current.set(restaurant.id, marker);
             newMarkers.push(marker);
-            
+
+            // Create explored radius circle for this marker
+            const circle = new google.maps.Circle({
+              map: mapInstance,
+              center: restaurant.location,
+              radius: EXPLORED_RADIUS,
+              ...circleStyle,
+              clickable: false,
+              zIndex: -1, // Behind markers
+            });
+            circlesRef.current.set(restaurant.id, circle);
+
             // Animate fade in for new markers during map switch
             if (isMapSwitch) {
               setTimeout(() => {
@@ -333,13 +391,15 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
     updateMarkers();
   }, [mapInstance, restaurants, onMarkerClick, mapType]);
 
-  // 3. Update marker icons when map type changes (dark mode toggle)
+  // 3. Update marker icons and circle styles when map type changes (dark mode toggle)
   useEffect(() => {
     if (!mapInstance || !clustererRef.current) return;
     if (currentMapTypeRef.current === mapType) return;
 
     currentMapTypeRef.current = mapType;
     const isDarkMode = mapType === 'dark';
+    const isSatellite = mapType === 'satellite';
+    const circleStyle = getCircleStyle(isDarkMode, isSatellite);
 
     // Update all existing marker icons
     for (const [, marker] of markersRef.current) {
@@ -347,6 +407,17 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         url: createPinSvg(isDarkMode),
         scaledSize: new google.maps.Size(36, 48),
         anchor: new google.maps.Point(18, 48),
+      });
+    }
+
+    // Update all existing circle styles
+    for (const [, circle] of circlesRef.current) {
+      circle.setOptions({
+        fillColor: circleStyle.fillColor,
+        fillOpacity: circleStyle.fillOpacity,
+        strokeColor: circleStyle.strokeColor,
+        strokeOpacity: circleStyle.strokeOpacity,
+        strokeWeight: circleStyle.strokeWeight,
       });
     }
 

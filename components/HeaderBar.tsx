@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Menu, Search, Filter, X, Bell, Lock, Users, Globe, Sparkles } from 'lucide-react';
+import { Menu, Search, Filter, X, Bell, Lock, Users, Globe, Sparkles, ChevronUp } from 'lucide-react';
 import { Restaurant, AppNotification, UserMap } from '../types';
 import { GRADES, getGradeColor } from '../utils/rating';
 import { NotificationPanel } from './NotificationPanel';
@@ -285,7 +285,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               </>
             )}
 
-            {/* Close button */}
+            {/* Close button - up arrow since search collapses upward */}
             {showSearchInput && (
               <button
                 onClick={(e) => {
@@ -299,7 +299,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 }}
                 className="text-gray-400 hover:text-white p-1 transition-colors"
               >
-                <X size={14} />
+                <ChevronUp size={18} />
               </button>
             )}
           </div>
@@ -312,7 +312,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               onClick={(e) => {
                 e.stopPropagation();
                 setIsSearchFocused(true);
-                if (isAdmin) setAdminSearchMode('list');
+                if (isAdmin) {
+                  setAdminSearchMode('list');
+                } else {
+                  // For non-admin, focus input immediately
+                  setTimeout(() => searchInputRef.current?.focus(), 150);
+                }
               }}
               className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white"
             >

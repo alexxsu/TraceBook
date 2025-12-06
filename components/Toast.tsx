@@ -17,23 +17,34 @@ export const Toast: React.FC<ToastProps> = ({
   onHide,
   duration = 3000
 }) => {
-  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+  const [shouldRender, setShouldRender] = useState(false);
+  const [isAnimatingIn, setIsAnimatingIn] = useState(false);
 
   useEffect(() => {
-    if (!isVisible) return;
+    if (isVisible) {
+      setShouldRender(true);
+      // Trigger animation after mount
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsAnimatingIn(true);
+        });
+      });
 
-    const hideTimer = setTimeout(() => {
-      setIsAnimatingOut(true);
-      setTimeout(() => {
-        setIsAnimatingOut(false);
-        onHide();
-      }, 300);
-    }, duration);
+      const hideTimer = setTimeout(() => {
+        setIsAnimatingIn(false);
+        setTimeout(() => {
+          setShouldRender(false);
+          onHide();
+        }, 300);
+      }, duration);
 
-    return () => clearTimeout(hideTimer);
+      return () => clearTimeout(hideTimer);
+    } else {
+      setIsAnimatingIn(false);
+    }
   }, [isVisible, duration, onHide]);
 
-  if (!isVisible && !isAnimatingOut) return null;
+  if (!shouldRender) return null;
 
   const toast = (
     <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-[200] pointer-events-none">
@@ -43,9 +54,9 @@ export const Toast: React.FC<ToastProps> = ({
           bg-gray-800/95 backdrop-blur-md border border-gray-600
           rounded-xl shadow-2xl
           transition-all duration-300 ease-out
-          ${isAnimatingOut
-            ? 'opacity-0 translate-y-4 scale-95'
-            : 'opacity-100 translate-y-0 scale-100 animate-fade-in-up'
+          ${isAnimatingIn
+            ? 'opacity-100 translate-y-0 scale-100'
+            : 'opacity-0 translate-y-6 scale-95'
           }
         `}
       >
