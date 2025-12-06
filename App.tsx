@@ -36,6 +36,7 @@ import { UserDetailModal } from './components/UserDetailModal';
 import { MemberAvatars } from './components/MemberAvatars';
 import { AddButton } from './components/AddButton';
 import { MapControls, MapControlsRef } from './components/MapControls';
+import { Toast } from './components/Toast';
 
 function App() {
   // Auth hook
@@ -102,7 +103,6 @@ function App() {
       return activeMap ? [activeMap] : [];
     }
 
-    const hideDefault = !isGuestUser && !isAdmin;
     let candidates: UserMap[] = [];
 
     if (isAdmin) {
@@ -112,23 +112,18 @@ function App() {
         candidates = [activeMap];
       }
     } else {
-      candidates = [...userSharedMaps, ...userJoinedMaps];
-      if (!hideDefault && activeMap) {
-        candidates = [activeMap, ...candidates];
-      }
+      // Include all user's own maps + shared maps they created + maps they joined
+      candidates = [...userOwnMaps, ...userSharedMaps, ...userJoinedMaps];
     }
 
-    if (candidates.length === 0 && activeMap && (!hideDefault || isGuestUser || isAdmin)) {
-      candidates = [activeMap];
-    }
-
+    // Deduplicate by map ID
     const seen = new Set<string>();
     return candidates.filter((map) => {
       if (seen.has(map.id)) return false;
       seen.add(map.id);
       return true;
     });
-  }, [activeMap, allMaps, isAdmin, isGuestUser, user, userJoinedMaps, userSharedMaps]);
+  }, [activeMap, allMaps, isAdmin, isGuestUser, user, userOwnMaps, userJoinedMaps, userSharedMaps]);
 
   // Keep active map pins in the search cache
   React.useEffect(() => {
@@ -244,6 +239,7 @@ function App() {
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant; visit: Visit } | null>(null);
   const [pendingSearchSelection, setPendingSearchSelection] = useState<{ restaurant: Restaurant; map: UserMap } | null>(null);
   const [isTutorialActive, setIsTutorialActive] = useState(false);
+  const [mapSwitchToast, setMapSwitchToast] = useState<{ visible: boolean; mapName: string }>({ visible: false, mapName: '' });
 
   // Tutorial handlers
   const handleStartTutorial = useCallback(() => {
@@ -536,6 +532,8 @@ function App() {
     if (map.id !== activeMap?.id) {
       setPendingSearchSelection({ restaurant, map });
       setActiveMap(map);
+      // Show toast notification for map switch
+      setMapSwitchToast({ visible: true, mapName: map.name });
       return;
     }
 
@@ -864,6 +862,15 @@ function App() {
           closeSearch();
         }}
         isGuestUser={user?.isAnonymous || false}
+      />
+
+      {/* Map Switch Toast */}
+      <Toast
+        message="Switching to map"
+        mapName={mapSwitchToast.mapName}
+        isVisible={mapSwitchToast.visible}
+        onHide={() => setMapSwitchToast({ visible: false, mapName: '' })}
+        duration={2500}
       />
     </div>
   );

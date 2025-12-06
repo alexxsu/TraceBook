@@ -220,87 +220,90 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <Menu size={20} className="transition-transform duration-300" />
         </button>
 
-        {/* Logo/Title - clickable to trigger search */}
-        {!showSearchInput && (
+        {/* Logo/Title and Search Input - morphing transition */}
+        <div className="flex-1 relative h-[40px]">
+          {/* Logo/Title - visible when not searching */}
           <div
             data-tutorial="search-bar"
             onClick={() => {
               setIsSearchFocused(true);
               if (isAdmin) setAdminSearchMode('list');
+              // Focus input after transition
+              setTimeout(() => searchInputRef.current?.focus(), 150);
             }}
-            className="flex-1 flex items-center gap-2 px-1 text-white cursor-pointer hover:opacity-80 transition-opacity duration-200 animate-scale-in"
+            className={`absolute inset-0 flex items-center gap-2 px-1 text-white cursor-pointer transition-all duration-200 ease-out ${
+              showSearchInput
+                ? 'opacity-0 scale-95 pointer-events-none'
+                : 'opacity-100 scale-100'
+            }`}
           >
             <img src="/logo.svg" className="w-7 h-7 object-contain" alt="Logo" />
             <span className="font-bold truncate">TraceBook</span>
           </div>
-        )}
 
-        {/* Search Input - appears when search is active */}
-        {showSearchInput && (
-          <>
-            {/* Admin list mode (no input) */}
-            {isAdmin && adminSearchMode === 'list' && (
+          {/* Search Input Container - always in DOM, animated visibility */}
+          <div
+            data-tutorial="search"
+            className={`absolute inset-0 flex items-center rounded-lg px-2 border transition-all duration-200 ease-out ${
+              showSearchInput
+                ? `opacity-100 scale-100 ${isAdmin ? 'border-indigo-500/50 bg-gray-800/70' : 'border-gray-600 bg-gray-700/50'}`
+                : 'opacity-0 scale-95 pointer-events-none border-transparent bg-transparent'
+            }`}
+          >
+            {/* Admin list mode indicator */}
+            {isAdmin && adminSearchMode === 'list' && showSearchInput && (
               <div
-                data-tutorial="search"
-                className={`flex-1 flex items-center rounded-lg px-2 h-[36px] bg-gray-800/70 ${isSearchClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
+                className="flex-1 flex items-center cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsSearchFocused(true);
                   setAdminSearchMode('input');
                   setTimeout(() => searchInputRef.current?.focus(), 0);
                 }}
               >
                 <Search size={14} className="text-gray-300 mr-2 flex-shrink-0" />
                 <div className="text-xs text-gray-300">Admin Search - search the database</div>
-                <div className="ml-auto flex items-center gap-1">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeSearch();
-                    }}
-                    className="text-gray-400 hover:text-white p-1"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
               </div>
             )}
 
-            {/* Normal or admin input mode */}
+            {/* Normal search input */}
             {(!isAdmin || adminSearchMode === 'input') && (
-              <div data-tutorial="search" className={`flex-1 flex items-center rounded-lg px-2 h-[40px] border ${isAdmin ? 'border-indigo-500/50 bg-gray-800/70' : 'border-transparent bg-gray-700/50'} ${isSearchClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
+              <>
                 <Search size={16} className="text-gray-400 mr-2 flex-shrink-0" />
                 <input
-              ref={searchInputRef}
-              type="text"
-              placeholder={t('searchExperiences')}
-              className="bg-transparent border-none focus:outline-none text-base text-white w-full placeholder-gray-500"
-              value={searchQuery}
-              onFocus={() => setIsSearchFocused(true)}
-              onBlur={() => {
-                if (isAdmin) return; // admins close via backdrop/map click
-                setTimeout(() => { if (!searchQuery) closeSearch(); }, 150);
-              }}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isAdmin && adminSearchMode === 'input') {
-                      setAdminSearchMode('list');
-                      setSearchQuery('');
-                    } else {
-                      closeSearch();
-                    }
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder={t('searchExperiences')}
+                  className="bg-transparent border-none focus:outline-none text-base text-white w-full placeholder-gray-500"
+                  value={searchQuery}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => {
+                    if (isAdmin) return;
+                    setTimeout(() => { if (!searchQuery) closeSearch(); }, 150);
                   }}
-                  className="text-gray-400 hover:text-white p-1"
-                >
-                  <X size={14} />
-                </button>
-              </div>
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </>
             )}
-          </>
-        )}
+
+            {/* Close button */}
+            {showSearchInput && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isAdmin && adminSearchMode === 'input') {
+                    setAdminSearchMode('list');
+                    setSearchQuery('');
+                  } else {
+                    closeSearch();
+                  }
+                }}
+                className="text-gray-400 hover:text-white p-1 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Search, Filter, and Notification Buttons */}
         {!showSearchInput && (
