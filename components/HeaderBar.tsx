@@ -369,7 +369,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
 
       {/* Search Results */}
-      {isSearchFocused && searchResults.length > 0 && (searchQuery || isAdmin) && (
+      {isSearchFocused && searchResults.length > 0 && (
         <>
           <div
             className="fixed inset-0 z-10 bg-black/30 transition-opacity duration-200"
