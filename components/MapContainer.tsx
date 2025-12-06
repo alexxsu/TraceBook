@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Restaurant } from '../types';
-import { MarkerClusterer } from '@googlemaps/markerclusterer';
 
 interface MapContainerProps {
   apiKey: string;
@@ -13,166 +12,417 @@ interface MapContainerProps {
 
 const DEFAULT_CENTER = { lat: 43.6532, lng: -79.3832 };
 
-// SVG icon for pins - matches UI button style
-const createPinSvg = (isDarkMode: boolean = false, opacity: number = 1) => {
-  const fillColor = isDarkMode ? `rgba(255, 255, 255, ${opacity * 0.95})` : `rgba(31, 41, 55, ${opacity * 0.95})`;
-  const strokeColor = isDarkMode ? `rgba(200, 200, 200, ${opacity})` : `rgba(75, 85, 99, ${opacity})`;
-  const dotColor = isDarkMode ? `rgba(31, 41, 55, ${opacity * 0.95})` : `rgba(255, 255, 255, ${opacity * 0.95})`;
+// Dark mode styles
+const DARK_MODE_STYLES: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
+  { featureType: "administrative.country", elementType: "geometry.stroke", stylers: [{ color: "#4b6878" }] },
+  { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#64779e" }] },
+  { featureType: "administrative.province", elementType: "geometry.stroke", stylers: [{ color: "#4b6878" }] },
+  { featureType: "landscape.man_made", elementType: "geometry.stroke", stylers: [{ color: "#334e87" }] },
+  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#023e58" }] },
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#283d6a" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6f9ba5" }] },
+  { featureType: "poi", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
+  { featureType: "poi.park", elementType: "geometry.fill", stylers: [{ color: "#023e58" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#3C7680" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#98a5be" }] },
+  { featureType: "road", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2c6675" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#255763" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#b0d5ce" }] },
+  { featureType: "road.highway", elementType: "labels.text.stroke", stylers: [{ color: "#023e58" }] },
+  { featureType: "transit", elementType: "labels.text.fill", stylers: [{ color: "#98a5be" }] },
+  { featureType: "transit", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
+  { featureType: "transit.line", elementType: "geometry.fill", stylers: [{ color: "#283d6a" }] },
+  { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#3a4762" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6d70" }] },
+];
 
-  return `data:image/svg+xml,${encodeURIComponent(`
-    <svg width="36" height="48" viewBox="0 0 36 48" xmlns="http://www.w3.org/2000/svg">
-      <path d="M18 0C9.72 0 3 6.72 3 15c0 10.5 15 33 15 33s15-22.5 15-33c0-8.28-6.72-15-15-15z"
-            fill="${fillColor}"/>
-      <path d="M18 1.5C10.56 1.5 4.5 7.56 4.5 15c0 9.5 13.5 30 13.5 30s13.5-20.5 13.5-30c0-7.44-6.06-13.5-13.5-13.5z"
-            fill="none" stroke="${strokeColor}" stroke-width="1.5"/>
-      <circle cx="18" cy="15" r="5" fill="${dotColor}"/>
-    </svg>
-  `)}`;
-};
+const EXPLORED_RADIUS = 300;
 
-// SVG icon for clusters
-const createClusterSvg = (count: number, isDarkMode: boolean = false, opacity: number = 1) => {
-  let size = 48;
-  let fontSize = 16;
-
-  if (count < 10) {
-    size = 44;
-    fontSize = 15;
-  } else if (count < 30) {
-    size = 50;
-    fontSize = 17;
-  } else if (count < 100) {
-    size = 56;
-    fontSize = 18;
+const getCircleStyle = (isDarkMode: boolean, isSatellite: boolean) => {
+  if (isDarkMode) {
+    return {
+      fillColor: '#6366f1',
+      fillOpacity: 0.08,
+      strokeColor: '#818cf8',
+      strokeOpacity: 0.15,
+      strokeWeight: 1,
+    };
+  } else if (isSatellite) {
+    return {
+      fillColor: '#fbbf24',
+      fillOpacity: 0.1,
+      strokeColor: '#f59e0b',
+      strokeOpacity: 0.2,
+      strokeWeight: 1,
+    };
   } else {
-    size = 62;
-    fontSize = 20;
+    return {
+      fillColor: '#3b82f6',
+      fillOpacity: 0.06,
+      strokeColor: '#60a5fa',
+      strokeOpacity: 0.15,
+      strokeWeight: 1,
+    };
   }
-
-  const fillColor = isDarkMode ? `rgba(255, 255, 255, ${opacity * 0.95})` : `rgba(31, 41, 55, ${opacity * 0.95})`;
-  const strokeColor = isDarkMode ? `rgba(200, 200, 200, ${opacity})` : `rgba(75, 85, 99, ${opacity})`;
-  const textColor = isDarkMode ? `rgba(31, 41, 55, ${opacity * 0.95})` : `rgba(255, 255, 255, ${opacity * 0.95})`;
-
-  const svg = `
-    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 1}" fill="${fillColor}"/>
-      <circle cx="${size/2}" cy="${size/2}" r="${size/2 - 2}" fill="none" stroke="${strokeColor}" stroke-width="1.5"/>
-      <text x="${size/2}" y="${size/2}" font-size="${fontSize}" font-weight="600" fill="${textColor}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, -apple-system, sans-serif">${count}</text>
-    </svg>
-  `;
-
-  return { svg, size };
 };
 
-// Animate marker opacity
-const animateMarkerOpacity = (
-  marker: google.maps.Marker, 
-  fromOpacity: number, 
-  toOpacity: number, 
-  duration: number,
-  isDarkMode: boolean,
-  onComplete?: () => void
-) => {
-  const startTime = performance.now();
+// Create HTML element for custom pin
+const createPinElement = (restaurant: Restaurant, onClick: () => void): HTMLDivElement => {
+  const container = document.createElement('div');
+  container.style.cssText = `
+    position: absolute;
+    transform: translate(-50%, -100%);
+    cursor: pointer;
+    z-index: 1;
+    transition: transform 0.2s ease, z-index 0s;
+  `;
   
-  const animate = (currentTime: number) => {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
+  // Get data from restaurant
+  const visits = restaurant.visits || [];
+  const hasMultiplePosts = visits.length >= 2;
+  
+  // Get photos from visits
+  const firstVisit = visits[0];
+  const secondVisit = visits[1];
+  const photoUrl1 = firstVisit?.photoDataUrl || firstVisit?.photos?.[0] || '';
+  const photoUrl2 = secondVisit?.photoDataUrl || secondVisit?.photos?.[0] || '';
+  
+  if (hasMultiplePosts) {
+    // Stacked cards design for 2+ posts
+    container.innerHTML = `
+      <div style="
+        position: relative;
+        width: 60px;
+        height: 72px;
+        filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
+      ">
+        <!-- Back card (rotated) -->
+        <div style="
+          position: absolute;
+          top: 0;
+          left: 50%;
+          transform: translateX(-50%) rotate(8deg);
+          width: 48px;
+          height: 48px;
+          background: #fffef8;
+          border: 2px solid #d4c5a9;
+          border-radius: 6px;
+          overflow: hidden;
+        ">
+          ${photoUrl2 ? `
+            <img src="${photoUrl2}" style="
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+            " onerror="this.style.display='none';" />
+          ` : `
+            <div style="
+              width: 100%;
+              height: 100%;
+              background: #f3f4f6;
+            "></div>
+          `}
+        </div>
+        
+        <!-- Front card -->
+        <div style="
+          position: absolute;
+          top: 4px;
+          left: 50%;
+          transform: translateX(-50%) rotate(-3deg);
+          width: 48px;
+          height: 48px;
+          background: #fffef8;
+          border: 2px solid #d4c5a9;
+          border-radius: 6px;
+          overflow: hidden;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        ">
+          ${photoUrl1 ? `
+            <img src="${photoUrl1}" style="
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+            " onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+            <div style="
+              display: none;
+              width: 100%;
+              height: 100%;
+              background: #f3f4f6;
+              align-items: center;
+              justify-content: center;
+              font-size: 18px;
+              position: absolute;
+              top: 0;
+              left: 0;
+            ">🍽️</div>
+          ` : `
+            <div style="
+              width: 100%;
+              height: 100%;
+              background: #f3f4f6;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 18px;
+            ">🍽️</div>
+          `}
+        </div>
+        
+        <!-- Pointer/tail -->
+        <div style="
+          position: absolute;
+          bottom: 0;
+          left: 50%;
+          transform: translateX(-50%);
+        ">
+          <div style="
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 10px solid #d4c5a9;
+          "></div>
+          <div style="
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 8px solid #fffef8;
+            margin-top: -10px;
+            margin-left: 2px;
+          "></div>
+        </div>
+      </div>
+    `;
+  } else {
+    // Single card design for 1 post
+    container.innerHTML = `
+      <div style="
+        position: relative;
+        width: 52px;
+        filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
+      ">
+        <!-- Main card -->
+        <div style="
+          width: 52px;
+          height: 52px;
+          background: #fffef8;
+          border: 2px solid #d4c5a9;
+          border-radius: 8px;
+          overflow: hidden;
+          position: relative;
+        ">
+          <!-- Photo -->
+          ${photoUrl1 ? `
+            <img src="${photoUrl1}" style="
+              width: 100%;
+              height: 100%;
+              object-fit: cover;
+            " onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+            <div style="
+              display: none;
+              width: 100%;
+              height: 100%;
+              background: #f3f4f6;
+              align-items: center;
+              justify-content: center;
+              font-size: 20px;
+              position: absolute;
+              top: 0;
+              left: 0;
+            ">🍽️</div>
+          ` : `
+            <div style="
+              width: 100%;
+              height: 100%;
+              background: #f3f4f6;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 20px;
+            ">🍽️</div>
+          `}
+        </div>
+        
+        <!-- Pointer/tail -->
+        <div style="
+          width: 0;
+          height: 0;
+          border-left: 8px solid transparent;
+          border-right: 8px solid transparent;
+          border-top: 10px solid #d4c5a9;
+          margin: -1px auto 0;
+        "></div>
+        <div style="
+          width: 0;
+          height: 0;
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+          border-top: 8px solid #fffef8;
+          margin: -11px auto 0;
+        "></div>
+      </div>
+    `;
+  }
+  
+  // Hover effect
+  container.addEventListener('mouseenter', () => {
+    container.style.transform = 'translate(-50%, -100%) scale(1.15)';
+    container.style.zIndex = '1000';
+  });
+  container.addEventListener('mouseleave', () => {
+    container.style.transform = 'translate(-50%, -100%)';
+    container.style.zIndex = '1';
+  });
+  
+  container.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  
+  return container;
+};
+
+// Custom Overlay class factory - must be called after Google Maps is loaded
+let CustomMarkerOverlayClass: any = null;
+
+const getCustomMarkerOverlayClass = () => {
+  if (CustomMarkerOverlayClass) return CustomMarkerOverlayClass;
+  
+  CustomMarkerOverlayClass = class extends google.maps.OverlayView {
+    private position: google.maps.LatLng;
+    private container: HTMLDivElement;
+    private restaurant: Restaurant;
+    private onClick: () => void;
+
+    constructor(position: google.maps.LatLng, restaurant: Restaurant, onClick: () => void) {
+      super();
+      this.position = position;
+      this.restaurant = restaurant;
+      this.onClick = onClick;
+      this.container = createPinElement(restaurant, onClick);
+    }
+
+    onAdd() {
+      const panes = this.getPanes();
+      panes?.overlayMouseTarget.appendChild(this.container);
+    }
+
+    draw() {
+      const projection = this.getProjection();
+      if (!projection) return;
+      
+      const point = projection.fromLatLngToDivPixel(this.position);
+      if (point) {
+        this.container.style.left = point.x + 'px';
+        this.container.style.top = point.y + 'px';
+      }
+    }
+
+    onRemove() {
+      if (this.container.parentElement) {
+        this.container.parentElement.removeChild(this.container);
+      }
+    }
+
+    getPosition() {
+      return this.position;
+    }
+
+    getContainer() {
+      return this.container;
+    }
     
-    // Ease out cubic
-    const easeProgress = 1 - Math.pow(1 - progress, 3);
-    const currentOpacity = fromOpacity + (toOpacity - fromOpacity) * easeProgress;
-    
-    marker.setIcon({
-      url: createPinSvg(isDarkMode, currentOpacity),
-      scaledSize: new google.maps.Size(36, 48),
-      anchor: new google.maps.Point(18, 48),
-    });
-    
-    if (progress < 1) {
-      requestAnimationFrame(animate);
-    } else if (onComplete) {
-      onComplete();
+    updateContent(restaurant: Restaurant) {
+      this.restaurant = restaurant;
+      const newContainer = createPinElement(restaurant, this.onClick);
+      this.container.innerHTML = newContainer.innerHTML;
     }
   };
   
-  requestAnimationFrame(animate);
+  return CustomMarkerOverlayClass;
 };
 
-const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMarkerClick, onMapLoad, onMapClick, mapType = 'satellite' }) => {
+const MapContainer: React.FC<MapContainerProps> = ({ 
+  apiKey, 
+  restaurants, 
+  onMarkerClick, 
+  onMapLoad, 
+  onMapClick, 
+  mapType = 'satellite' 
+}) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
 
-  // Store clusterer instance
-  const clustererRef = useRef<MarkerClusterer | null>(null);
-  // Store marker instances to manage updates (using regular Marker)
-  const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
-  // Track current map type for marker updates
+  const overlaysRef = useRef<Map<string, any>>(new Map());
+  const circlesRef = useRef<Map<string, google.maps.Circle>>(new Map());
   const currentMapTypeRef = useRef<string>(mapType);
-  // Track previous restaurant IDs for animation
-  const prevRestaurantIdsRef = useRef<Set<string>>(new Set());
-  // Store onMapClick ref for use in map click listener
   const onMapClickRef = useRef(onMapClick);
-  
-  // Keep ref updated
+  const restaurantsMapRef = useRef<Map<string, Restaurant>>(new Map());
+
   useEffect(() => {
     onMapClickRef.current = onMapClick;
   }, [onMapClick]);
 
-  // 1. Load Map
+  // Load Google Maps API
   useEffect(() => {
     if (!apiKey) return;
 
-    // Define global error handler for Google Maps Auth Failures
     (window as any).gm_authFailure = () => {
-      const message = "Google Maps API Blocked. Please check your API Key Restrictions in Google Cloud Console. You may need to add this preview domain to the allowed list.";
+      const message = "Google Maps API Blocked. Please check your API Key Restrictions.";
       setAuthError(message);
       console.error(message);
     };
 
     const loadMaps = async () => {
-      // Check if script already exists
-      if (document.querySelector('script[src*="maps.googleapis.com"]')) {
-         initMap();
-         return;
+      if ((window as any).google?.maps?.Map) {
+        initMap();
+        return;
       }
 
-      (function(g: any){
-        var h: any, a: any, k: any, p: string = "The Google Maps JavaScript API", c: string = "google", l: string = "importLibrary", q: string = "__ib__", m: Document = document, b: any = window;
-        b = b[c] || (b[c] = {});
-        var d = b.maps || (b.maps = {}), r = new Set(), e = new URLSearchParams(), u = () => h || (h = new Promise(async (f, n) => {
-            await (a = m.createElement("script"));
-            e.set("libraries", [...r] + "");
-            for (k in g) e.set(k.replace(/[A-Z]/g, (t: string) => "_" + t[0].toLowerCase()), g[k]);
-            e.set("callback", c + ".maps." + q);
-            a.src = `https://maps.googleapis.com/maps/api/js?` + e;
-            d[q] = f;
-            a.onerror = () => h = n(Error(p + " could not load."));
-            a.nonce = (m.querySelector("script[nonce]") as any)?.nonce || "";
-            m.head.append(a);
-        }));
-        d[l] ? console.warn(p + " only loads once. Ignoring:", g) : d[l] = (f: any, ...n: any[]) => r.add(f) && u().then(() => d[l](f, ...n));
-      })({
-        key: apiKey,
-        v: "weekly",
-        loading: "async"
-      });
+      if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+        const checkGoogle = setInterval(() => {
+          if ((window as any).google?.maps?.Map) {
+            clearInterval(checkGoogle);
+            initMap();
+          }
+        }, 100);
+        return;
+      }
 
-      initMap();
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMap`;
+      script.async = true;
+      script.defer = true;
+      
+      (window as any).initGoogleMap = () => {
+        initMap();
+      };
+      
+      document.head.appendChild(script);
     };
 
     loadMaps();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey]);
 
   const initMap = async () => {
     if (!mapRef.current) return;
+    if (!(window as any).google?.maps) {
+      console.error('Google Maps not loaded');
+      return;
+    }
 
     try {
-      const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
-
-      const map = new Map(mapRef.current, {
+      const map = new google.maps.Map(mapRef.current, {
         center: DEFAULT_CENTER,
         zoom: 13,
         mapTypeId: 'satellite',
@@ -186,206 +436,132 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
         gestureHandling: 'greedy',
       });
 
-      // Add click listener to close UI elements when clicking on map
       map.addListener('click', () => {
         if (onMapClickRef.current) {
           onMapClickRef.current();
         }
       });
 
-      // Custom cluster renderer using regular Marker
-      const renderer = {
-        render: ({ count, position }: { count: number; position: google.maps.LatLng }) => {
-          const { svg, size } = createClusterSvg(count);
-
-          return new google.maps.Marker({
-            position,
-            icon: {
-              url: `data:image/svg+xml,${encodeURIComponent(svg)}`,
-              scaledSize: new google.maps.Size(size, size),
-              anchor: new google.maps.Point(size / 2, size / 2),
-            },
-            zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
-          });
-        }
-      };
-
-      // Initialize MarkerClusterer with custom renderer and click handler
-      clustererRef.current = new MarkerClusterer({
-        map,
-        renderer,
-        onClusterClick: (event, cluster, map) => {
-          const bounds = new google.maps.LatLngBounds();
-          if (cluster.markers) {
-            cluster.markers.forEach(m => {
-              if (m.position) {
-                bounds.extend(m.position);
-              }
-            });
-            map.fitBounds(bounds, 50);
-          }
-        }
-      });
-
       setMapInstance(map);
+      setIsMapReady(true);
       onMapLoad(map);
-    } catch (error) {
-      console.error("Failed to initialize Google Map:", error);
+      
+      console.log('Map initialized successfully');
+    } catch (e) {
+      console.error("Map initialization error:", e);
     }
   };
 
-  // 2. Handle Markers & Clustering with animations
+  // Update markers when restaurants change
   useEffect(() => {
-    const updateMarkers = async () => {
-      if (!mapInstance || !clustererRef.current) return;
+    if (!mapInstance || !isMapReady) {
+      return;
+    }
 
-      const isDarkMode = mapType === 'dark';
-      const currentIds = new Set(restaurants.map(r => r.id));
-      const prevIds = prevRestaurantIdsRef.current;
-      
-      // Check if this is a map switch - animate whenever significant changes occur
-      // or when switching between different sets of markers
-      const addedCount = [...currentIds].filter(id => !prevIds.has(id)).length;
-      const removedCount = [...prevIds].filter(id => !currentIds.has(id)).length;
-      const totalChange = addedCount + removedCount;
-      
-      // Animate if: many markers changing, OR all markers are new/removed (map switch)
-      const isMapSwitch = totalChange > 2 || 
-        (prevIds.size > 0 && removedCount === prevIds.size) || 
-        (currentIds.size > 0 && addedCount === currentIds.size && prevIds.size > 0);
+    const isDarkMode = mapType === 'dark';
+    const isSatellite = mapType === 'satellite';
+    const circleStyle = getCircleStyle(isDarkMode, isSatellite);
 
-      try {
-        // A. Fade out and remove old markers
-        const markersToRemove: google.maps.Marker[] = [];
-        const removePromises: Promise<void>[] = [];
+    // Filter restaurants with valid coordinates
+    const validRestaurants = restaurants.filter(r => 
+      r.location && 
+      typeof r.location.lat === 'number' && 
+      typeof r.location.lng === 'number'
+    );
+
+    console.log(`Processing ${validRestaurants.length} valid restaurants out of ${restaurants.length}`);
+
+    const currentIds = new Set(validRestaurants.map(r => r.id));
+
+    restaurantsMapRef.current.clear();
+    validRestaurants.forEach(r => restaurantsMapRef.current.set(r.id, r));
+
+    // Remove old overlays not in current set
+    for (const [id, overlay] of overlaysRef.current) {
+      if (!currentIds.has(id)) {
+        overlay.setMap(null);
+        overlaysRef.current.delete(id);
+
+        const circle = circlesRef.current.get(id);
+        if (circle) {
+          circle.setMap(null);
+          circlesRef.current.delete(id);
+        }
+      }
+    }
+
+    // Add or update overlays
+    for (const restaurant of validRestaurants) {
+      if (!overlaysRef.current.has(restaurant.id)) {
+        const position = new google.maps.LatLng(restaurant.location.lat, restaurant.location.lng);
         
-        for (const [id, marker] of markersRef.current) {
-          if (!currentIds.has(id)) {
-            if (isMapSwitch) {
-              // Animate fade out
-              removePromises.push(new Promise<void>((resolve) => {
-                animateMarkerOpacity(marker, 1, 0, 300, isDarkMode, () => {
-                  marker.setMap(null);
-                  resolve();
-                });
-              }));
-            } else {
-              marker.setMap(null);
-            }
-            markersToRemove.push(marker);
-            markersRef.current.delete(id);
-          }
-        }
+        const OverlayClass = getCustomMarkerOverlayClass();
+        const overlay = new OverlayClass(
+          position,
+          restaurant,
+          () => onMarkerClick(restaurant)
+        );
+        overlay.setMap(mapInstance);
+        overlaysRef.current.set(restaurant.id, overlay);
 
-        // Wait for fade out animations
-        if (removePromises.length > 0) {
-          await Promise.all(removePromises);
-        }
-
-        if (markersToRemove.length > 0) {
-          clustererRef.current.removeMarkers(markersToRemove);
-        }
-
-        // B. Add new markers with fade in animation
-        const newMarkers: google.maps.Marker[] = [];
-        
-        restaurants.forEach(restaurant => {
-          if (!markersRef.current.has(restaurant.id)) {
-            const marker = new google.maps.Marker({
-              position: restaurant.location,
-              title: restaurant.name,
-              icon: {
-                url: createPinSvg(isDarkMode, isMapSwitch ? 0 : 1),
-                scaledSize: new google.maps.Size(36, 48),
-                anchor: new google.maps.Point(18, 48),
-              },
-            });
-
-            marker.addListener('click', () => {
-              onMarkerClick(restaurant);
-            });
-
-            markersRef.current.set(restaurant.id, marker);
-            newMarkers.push(marker);
-            
-            // Animate fade in for new markers during map switch
-            if (isMapSwitch) {
-              setTimeout(() => {
-                animateMarkerOpacity(marker, 0, 1, 400, isDarkMode);
-              }, 50);
-            }
-          }
+        // Create exploration circle
+        const circle = new google.maps.Circle({
+          strokeColor: circleStyle.strokeColor,
+          strokeOpacity: circleStyle.strokeOpacity,
+          strokeWeight: circleStyle.strokeWeight,
+          fillColor: circleStyle.fillColor,
+          fillOpacity: circleStyle.fillOpacity,
+          map: mapInstance,
+          center: { lat: restaurant.location.lat, lng: restaurant.location.lng },
+          radius: EXPLORED_RADIUS,
+          clickable: false,
         });
 
-        // Add new markers to clusterer
-        if (newMarkers.length > 0) {
-          clustererRef.current.addMarkers(newMarkers);
-        }
-
-        // Update previous IDs reference
-        prevRestaurantIdsRef.current = currentIds;
-
-      } catch (e) {
-        console.error("Error updating markers", e);
+        circlesRef.current.set(restaurant.id, circle);
+      } else {
+        // Update existing overlay content
+        const overlay = overlaysRef.current.get(restaurant.id)!;
+        overlay.updateContent(restaurant);
       }
-    };
+    }
 
-    updateMarkers();
-  }, [mapInstance, restaurants, onMarkerClick, mapType]);
+    console.log(`Active overlays: ${overlaysRef.current.size}`);
 
-  // 3. Update marker icons when map type changes (dark mode toggle)
+  }, [mapInstance, restaurants, onMarkerClick, mapType, isMapReady]);
+
+  // Update map type/style
   useEffect(() => {
-    if (!mapInstance || !clustererRef.current) return;
+    if (!mapInstance) return;
     if (currentMapTypeRef.current === mapType) return;
 
     currentMapTypeRef.current = mapType;
     const isDarkMode = mapType === 'dark';
+    const isSatellite = mapType === 'satellite';
+    const circleStyle = getCircleStyle(isDarkMode, isSatellite);
 
-    // Update all existing marker icons
-    for (const [, marker] of markersRef.current) {
-      marker.setIcon({
-        url: createPinSvg(isDarkMode),
-        scaledSize: new google.maps.Size(36, 48),
-        anchor: new google.maps.Point(18, 48),
-      });
+    console.log('Switching map type to:', mapType);
+
+    if (mapType === 'satellite') {
+      mapInstance.setMapTypeId('satellite');
+      mapInstance.setOptions({ styles: [] });
+    } else if (mapType === 'roadmap') {
+      mapInstance.setMapTypeId('roadmap');
+      mapInstance.setOptions({ styles: [] });
+    } else if (mapType === 'dark') {
+      mapInstance.setMapTypeId('roadmap');
+      mapInstance.setOptions({ styles: DARK_MODE_STYLES });
     }
 
-    // Recreate clusterer with new renderer for dark mode
-    const allMarkers = Array.from(markersRef.current.values());
-    clustererRef.current.clearMarkers();
-
-    const renderer = {
-      render: ({ count, position }: { count: number; position: google.maps.LatLng }) => {
-        const { svg, size } = createClusterSvg(count, isDarkMode);
-
-        return new google.maps.Marker({
-          position,
-          icon: {
-            url: `data:image/svg+xml,${encodeURIComponent(svg)}`,
-            scaledSize: new google.maps.Size(size, size),
-            anchor: new google.maps.Point(size / 2, size / 2),
-          },
-          zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
-        });
-      }
-    };
-
-    clustererRef.current = new MarkerClusterer({
-      map: mapInstance,
-      renderer,
-      markers: allMarkers,
-      onClusterClick: (event, cluster, map) => {
-        const bounds = new google.maps.LatLngBounds();
-        if (cluster.markers) {
-          cluster.markers.forEach(m => {
-            if ((m as any).position) {
-              bounds.extend((m as any).position);
-            }
-          });
-          map.fitBounds(bounds, 50);
-        }
-      }
-    });
+    // Update circles
+    for (const [, circle] of circlesRef.current) {
+      circle.setOptions({
+        fillColor: circleStyle.fillColor,
+        fillOpacity: circleStyle.fillOpacity,
+        strokeColor: circleStyle.strokeColor,
+        strokeOpacity: circleStyle.strokeOpacity,
+        strokeWeight: circleStyle.strokeWeight,
+      });
+    }
   }, [mapType, mapInstance]);
 
   if (authError) {
@@ -395,7 +571,7 @@ const MapContainer: React.FC<MapContainerProps> = ({ apiKey, restaurants, onMark
           <h3 className="text-red-400 font-bold text-lg mb-2">Map Loading Failed</h3>
           <p className="text-gray-300 mb-4">{authError}</p>
           <p className="text-xs text-gray-500">
-             If you are in preview mode, go to Google Cloud Console and set restrictions to "None" temporarily.
+            If you are in preview mode, go to Google Cloud Console and set restrictions to "None" temporarily.
           </p>
         </div>
       </div>

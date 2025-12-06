@@ -170,9 +170,11 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({
             ) : (
               <>
                 <h2 className="text-xl font-semibold text-white">
-                  {user.displayName || userProfile?.displayName || 'Anonymous User'}
+                  {user.displayName || userProfile?.displayName || (isGuest ? 'Guest' : 'Anonymous User')}
                 </h2>
-                {user.email && (
+                {isGuest ? (
+                  <p className="text-gray-500 text-sm mt-1">guest@tracebook.app</p>
+                ) : user.email && (
                   <p className="text-gray-500 text-sm mt-1">{user.email}</p>
                 )}
               </>

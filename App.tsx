@@ -36,6 +36,7 @@ import { UserDetailModal } from './components/UserDetailModal';
 import { MemberAvatars } from './components/MemberAvatars';
 import { AddButton } from './components/AddButton';
 import { MapControls, MapControlsRef } from './components/MapControls';
+import { Toast } from './components/Toast';
 
 function App() {
   // Auth hook
@@ -102,7 +103,6 @@ function App() {
       return activeMap ? [activeMap] : [];
     }
 
-    const hideDefault = !isGuestUser && !isAdmin;
     let candidates: UserMap[] = [];
 
     if (isAdmin) {
@@ -112,23 +112,18 @@ function App() {
         candidates = [activeMap];
       }
     } else {
-      candidates = [...userSharedMaps, ...userJoinedMaps];
-      if (!hideDefault && activeMap) {
-        candidates = [activeMap, ...candidates];
-      }
+      // Include all user's own maps + shared maps they created + maps they joined
+      candidates = [...userOwnMaps, ...userSharedMaps, ...userJoinedMaps];
     }
 
-    if (candidates.length === 0 && activeMap && (!hideDefault || isGuestUser || isAdmin)) {
-      candidates = [activeMap];
-    }
-
+    // Deduplicate by map ID
     const seen = new Set<string>();
     return candidates.filter((map) => {
       if (seen.has(map.id)) return false;
       seen.add(map.id);
       return true;
     });
-  }, [activeMap, allMaps, isAdmin, isGuestUser, user, userJoinedMaps, userSharedMaps]);
+  }, [activeMap, allMaps, isAdmin, isGuestUser, user, userOwnMaps, userJoinedMaps, userSharedMaps]);
 
   // Keep active map pins in the search cache
   React.useEffect(() => {
@@ -202,7 +197,7 @@ function App() {
     searchInputRef,
     closeSearch,
     handleSearchSelect
-  } = useSearch(searchSources, { showAllWhenEmpty: isAdmin });
+  } = useSearch(searchSources, { showAllWhenEmpty: !isGuestUser });
 
   // Filter hook
   const {
@@ -244,6 +239,7 @@ function App() {
   const [editingData, setEditingData] = useState<{ restaurant: Restaurant; visit: Visit } | null>(null);
   const [pendingSearchSelection, setPendingSearchSelection] = useState<{ restaurant: Restaurant; map: UserMap } | null>(null);
   const [isTutorialActive, setIsTutorialActive] = useState(false);
+  const [mapSwitchToast, setMapSwitchToast] = useState<{ visible: boolean; mapName: string }>({ visible: false, mapName: '' });
 
   // Tutorial handlers
   const handleStartTutorial = useCallback(() => {
@@ -262,37 +258,57 @@ function App() {
 
   const handleTutorialComplete = useCallback(() => {
     setIsTutorialActive(false);
-    // Close map management modal after tutorial ends
+    // Close map management modal after tutorial ends - only if open
     if (viewState === ViewState.MAP_MANAGEMENT) {
       setViewState(ViewState.MAP);
     }
-    // Close compact card
-    setIsCompactCardOpen(false);
-    // Close side menu
-    setIsMenuOpen(false);
-    setIsMenuClosing(false);
-    setIsMenuAnimatingIn(false);
-    // Close filter and search
-    closeFilter();
+    // Close compact card - only if open
+    if (isCompactCardOpen) {
+      setIsCompactCardOpen(false);
+    }
+    // Close side menu - only if open (prevents flicker)
+    if (isMenuOpen) {
+      setIsMenuClosing(true);
+      setTimeout(() => {
+        setIsMenuOpen(false);
+        setIsMenuClosing(false);
+        setIsMenuAnimatingIn(false);
+      }, 300);
+    }
+    // Close filter only if open (prevents flicker)
+    if (isFilterOpen) {
+      closeFilter();
+    }
+    // Close search only if open (the hook already has this guard)
     closeSearch();
-  }, [viewState, closeFilter, closeSearch]);
+  }, [viewState, closeFilter, closeSearch, isCompactCardOpen, isMenuOpen, isFilterOpen]);
 
   const handleTutorialSkip = useCallback(() => {
     setIsTutorialActive(false);
-    // Close map management modal after tutorial skip
+    // Close map management modal after tutorial skip - only if open
     if (viewState === ViewState.MAP_MANAGEMENT) {
       setViewState(ViewState.MAP);
     }
-    // Close compact card
-    setIsCompactCardOpen(false);
-    // Close side menu
-    setIsMenuOpen(false);
-    setIsMenuClosing(false);
-    setIsMenuAnimatingIn(false);
-    // Close filter and search
-    closeFilter();
+    // Close compact card - only if open
+    if (isCompactCardOpen) {
+      setIsCompactCardOpen(false);
+    }
+    // Close side menu - only if open (prevents flicker)
+    if (isMenuOpen) {
+      setIsMenuClosing(true);
+      setTimeout(() => {
+        setIsMenuOpen(false);
+        setIsMenuClosing(false);
+        setIsMenuAnimatingIn(false);
+      }, 300);
+    }
+    // Close filter only if open (prevents flicker)
+    if (isFilterOpen) {
+      closeFilter();
+    }
+    // Close search only if open (the hook already has this guard)
     closeSearch();
-  }, [viewState, closeFilter, closeSearch]);
+  }, [viewState, closeFilter, closeSearch, isCompactCardOpen, isMenuOpen, isFilterOpen]);
 
   // Open map management for tutorial
   const handleOpenMapManagementForTutorial = useCallback(() => {
@@ -306,11 +322,11 @@ function App() {
     } else if (user.isAnonymous) {
       setViewState(ViewState.MAP);
     } else if (userProfile) {
-      // Check if email is verified AND admin approved
+      // Check if email is verified OR admin approved (only one condition needed)
       const emailVerified = user.emailVerified ?? userProfile.emailVerified ?? false;
       const isApproved = userProfile.status === 'approved';
-      
-      if (emailVerified && isApproved) {
+
+      if (emailVerified || isApproved) {
         if (viewState === ViewState.LOGIN || viewState === ViewState.PENDING) {
           setViewState(ViewState.MAP);
         }
@@ -333,18 +349,16 @@ function App() {
       const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
       const dateKey = now.toISOString().split('T')[0]; // YYYY-MM-DD
 
-      // Determine time period with time-specific emoji
+      // Determine time period with time-specific emoji - only 3 periods
       const getGreetingByHour = (h: number) => {
         if (h >= 5 && h < 12) {
           return { period: 'morning' as const, emoji: '☀️', en: 'Good morning', zh: '早上好' };
         }
-        if (h >= 12 && h < 17) {
+        if (h >= 12 && h < 18) {
           return { period: 'afternoon' as const, emoji: '🌤️', en: 'Good afternoon', zh: '下午好' };
         }
-        if (h >= 17 && h < 21) {
-          return { period: 'evening' as const, emoji: '🌆', en: 'Good evening', zh: '晚上好' };
-        }
-        return { period: 'night' as const, emoji: '🌙', en: 'Good night', zh: '晚安' };
+        // Evening covers 18:00 to 04:59 (includes night)
+        return { period: 'evening' as const, emoji: '🌆', en: 'Good evening', zh: '晚上好' };
       };
 
       const { period: timePeriod, emoji, en: greetingEn, zh: greetingZh } = getGreetingByHour(hour);
@@ -536,6 +550,8 @@ function App() {
     if (map.id !== activeMap?.id) {
       setPendingSearchSelection({ restaurant, map });
       setActiveMap(map);
+      // Show toast notification for map switch
+      setMapSwitchToast({ visible: true, mapName: map.name });
       return;
     }
 
@@ -654,10 +670,18 @@ function App() {
             currentUserUid={user?.uid}
           />
 
-            {/* Map Selector Pill */}
-            {activeMap && user && (
+            {/* Map Selector Pill - Always render for guests with fallback */}
+            {user && (activeMap || user.isAnonymous) && (
               <MapSelectorPill
-                activeMap={activeMap}
+                activeMap={activeMap || {
+                  id: 'guest-demo-map',
+                  ownerUid: 'demo-owner',
+                  ownerDisplayName: 'Demo',
+                  name: 'Demo Map',
+                  visibility: 'public',
+                  isDefault: true,
+                  createdAt: new Date().toISOString()
+                }}
                 user={user}
                 userProfile={userProfile}
                 userOwnMaps={userOwnMaps}
@@ -843,12 +867,15 @@ function App() {
         onClose={handleTutorialComplete}
         onOpenMapManagement={handleOpenMapManagementForTutorial}
         onCloseMapManagement={() => {
+          // Close map management modal - only if open
           if (viewState === ViewState.MAP_MANAGEMENT) {
             setViewState(ViewState.MAP);
           }
-          // Close the compact card if open
-          setIsCompactCardOpen(false);
-          // Close side menu if open
+          // Close the compact card - only if open
+          if (isCompactCardOpen) {
+            setIsCompactCardOpen(false);
+          }
+          // Close side menu - only if open (prevents flicker)
           if (isMenuOpen) {
             setIsMenuClosing(true);
             setTimeout(() => {
@@ -856,14 +883,25 @@ function App() {
               setIsMenuClosing(false);
               setIsMenuAnimatingIn(false);
             }, 300);
-          } else {
-            setIsMenuAnimatingIn(false);
           }
-          // Close filter and search
-          closeFilter();
+          // Close filter only if open (prevents flicker)
+          if (isFilterOpen) {
+            closeFilter();
+          }
+          // Close search only if open
           closeSearch();
         }}
         isGuestUser={user?.isAnonymous || false}
+      />
+
+      {/* Map Switch Toast with Glass Blur Effect */}
+      <Toast
+        message="Switching to map"
+        mapName={mapSwitchToast.mapName}
+        isVisible={mapSwitchToast.visible}
+        onHide={() => setMapSwitchToast({ visible: false, mapName: '' })}
+        duration={1800}
+        isMapSwitch={true}
       />
     </div>
   );

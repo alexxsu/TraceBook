@@ -1,10 +1,33 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Menu, Search, Filter, X, Bell, Lock, Users, Globe, Sparkles } from 'lucide-react';
+import { Menu, Search, Filter, X, Bell, Lock, Users, Globe, Sparkles, ChevronUp, ChevronDown } from 'lucide-react';
 import { Restaurant, AppNotification, UserMap } from '../types';
 import { GRADES, getGradeColor } from '../utils/rating';
 import { NotificationPanel } from './NotificationPanel';
 import { useLanguage } from '../hooks/useLanguage';
 import { SearchResultGroup } from '../hooks/useSearch';
+
+// Helper to highlight matching text
+const HighlightedText: React.FC<{ text: string; query: string }> = ({ text, query }) => {
+  if (!query.trim()) return <>{text}</>;
+
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase().trim();
+  const index = lowerText.indexOf(lowerQuery);
+
+  if (index === -1) return <>{text}</>;
+
+  const before = text.slice(0, index);
+  const match = text.slice(index, index + query.trim().length);
+  const after = text.slice(index + query.trim().length);
+
+  return (
+    <>
+      {before}
+      <span className="font-bold text-blue-300">{match}</span>
+      {after}
+    </>
+  );
+};
 
 interface HeaderBarProps {
   // Search props
@@ -74,29 +97,20 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const [isNotifClosing, setIsNotifClosing] = useState(false);
   const showSearchInput = isSearchFocused || searchQuery || isSearchClosing;
   const [openMaps, setOpenMaps] = useState<Record<string, boolean>>({});
-  const [adminSearchMode, setAdminSearchMode] = useState<'list' | 'input'>('list');
 
-  // Reset admin search mode when search closes
+  // Auto-expand maps that have search matches when there's a search query
   useEffect(() => {
-    if (!showSearchInput) {
-      setAdminSearchMode('list');
+    if (searchQuery.trim() && searchResults.length > 0) {
+      const matchedMapIds = searchResults.reduce((acc, group) => {
+        acc[group.map.id] = true;
+        return acc;
+      }, {} as Record<string, boolean>);
+      setOpenMaps(matchedMapIds);
+    } else if (!searchQuery.trim()) {
+      // Collapse all when search is cleared
+      setOpenMaps({});
     }
-  }, [showSearchInput]);
-
-  // Clear any lingering query when returning to admin list mode
-  useEffect(() => {
-    if (isAdmin && adminSearchMode === 'list' && searchQuery) {
-      setSearchQuery('');
-    }
-  }, [adminSearchMode, isAdmin, searchQuery, setSearchQuery]);
-
-  // When admin enters input mode, ensure focus stays active
-  useEffect(() => {
-    if (isAdmin && adminSearchMode === 'input') {
-      setIsSearchFocused(true);
-      setTimeout(() => searchInputRef.current?.focus(), 0);
-    }
-  }, [adminSearchMode, isAdmin, setIsSearchFocused, searchInputRef]);
+  }, [searchQuery, searchResults]);
 
   const toggleMapOpen = (mapId: string) => {
     setOpenMaps(prev => {
@@ -137,10 +151,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const mapIcon = (map: UserMap) => {
     // Demo/public maps get Globe (green)
     if (map.visibility === 'public') return <Globe size={14} className="text-green-400 flex-shrink-0" />;
-    // Default maps get Lock (blue)
-    if (map.isDefault) return <Lock size={14} className="text-blue-400 flex-shrink-0" />;
-    // Shared maps get Users (purple)
-    return <Users size={14} className="text-purple-400 flex-shrink-0" />;
+    // User's own shared maps get Users (purple) - indicates sharing
+    if (map.ownerUid === currentUserUid && !map.isDefault) return <Users size={14} className="text-purple-400 flex-shrink-0" />;
+    // Default maps and other users' maps get Lock (blue) - indicates personal/private
+    return <Lock size={14} className="text-blue-400 flex-shrink-0" />;
   };
 
   const mapSubtext = (map: UserMap) => {
@@ -206,101 +220,80 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   return (
     <div data-component="header-bar" className={`w-full bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 ${adminAura} ${adminGlow}`}>
           <div className="flex items-center gap-2 relative min-h-[40px]">
-            {/* Hamburger Menu Button */}
+            {/* Hamburger Menu Button - Wider touch target */}
         <button
           data-tutorial="menu-button"
           onClick={(e) => { e.stopPropagation(); onMenuToggle(); }}
-          className={`p-1.5 rounded-lg flex-shrink-0 transition-all duration-300 ${
+          className={`px-3 py-2.5 rounded-lg flex-shrink-0 transition-all duration-300 ${
             isMenuOpen
               ? 'bg-gray-700/80 text-blue-300 rotate-90 scale-110'
               : 'text-gray-400 hover:text-white hover:bg-gray-700'
           }`}
           aria-pressed={isMenuOpen}
         >
-          <Menu size={20} className="transition-transform duration-300" />
+          <Menu size={22} className="transition-transform duration-300" />
         </button>
 
-        {/* Logo/Title - clickable to trigger search */}
-        {!showSearchInput && (
+        {/* Logo/Title and Search Input - morphing transition */}
+        <div className="flex-1 relative h-[40px]">
+          {/* Logo/Title - visible when not searching */}
           <div
             data-tutorial="search-bar"
             onClick={() => {
               setIsSearchFocused(true);
               if (isAdmin) setAdminSearchMode('list');
+              // Focus input after transition
+              setTimeout(() => searchInputRef.current?.focus(), 150);
             }}
-            className="flex-1 flex items-center gap-2 px-1 text-white cursor-pointer hover:opacity-80 transition-opacity duration-200 animate-scale-in"
+            className={`absolute inset-0 flex items-center gap-2 px-1 text-white cursor-pointer transition-all duration-200 ease-out ${
+              showSearchInput
+                ? 'opacity-0 scale-95 pointer-events-none'
+                : 'opacity-100 scale-100'
+            }`}
           >
             <img src="/logo.svg" className="w-7 h-7 object-contain" alt="Logo" />
             <span className="font-bold truncate">TraceBook</span>
           </div>
-        )}
 
-        {/* Search Input - appears when search is active */}
-        {showSearchInput && (
-          <>
-            {/* Admin list mode (no input) */}
-            {isAdmin && adminSearchMode === 'list' && (
-              <div
-                data-tutorial="search"
-                className={`flex-1 flex items-center rounded-lg px-2 h-[36px] bg-gray-800/70 ${isSearchClosing ? 'animate-scale-out' : 'animate-scale-in'}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsSearchFocused(true);
-                  setAdminSearchMode('input');
-                  setTimeout(() => searchInputRef.current?.focus(), 0);
-                }}
-              >
-                <Search size={14} className="text-gray-300 mr-2 flex-shrink-0" />
-                <div className="text-xs text-gray-300">Admin Search - search the database</div>
-                <div className="ml-auto flex items-center gap-1">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeSearch();
-                    }}
-                    className="text-gray-400 hover:text-white p-1"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Normal or admin input mode */}
-            {(!isAdmin || adminSearchMode === 'input') && (
-              <div data-tutorial="search" className={`flex-1 flex items-center rounded-lg px-2 h-[40px] border ${isAdmin ? 'border-indigo-500/50 bg-gray-800/70' : 'border-transparent bg-gray-700/50'} ${isSearchClosing ? 'animate-scale-out' : 'animate-scale-in'}`}>
-                <Search size={16} className="text-gray-400 mr-2 flex-shrink-0" />
-                <input
+          {/* Search Input Container - always in DOM, animated visibility */}
+          <div
+            data-tutorial="search"
+            className={`absolute inset-0 flex items-center rounded-lg px-2 border transition-all duration-150 ease-out ${
+              showSearchInput
+                ? `opacity-100 scale-100 ${isAdmin ? 'border-indigo-500/50 bg-gray-800/70' : 'border-gray-600 bg-gray-700/50'}`
+                : 'opacity-0 scale-95 pointer-events-none border-transparent bg-transparent'
+            }`}
+          >
+            {/* Search input - same for both admin and regular users */}
+            <Search size={16} className="text-gray-400 mr-2 flex-shrink-0" />
+            <input
               ref={searchInputRef}
               type="text"
-              placeholder={t('searchExperiences')}
+              placeholder={isAdmin ? 'Admin Search - search the database' : t('searchExperiences')}
               className="bg-transparent border-none focus:outline-none text-base text-white w-full placeholder-gray-500"
               value={searchQuery}
               onFocus={() => setIsSearchFocused(true)}
               onBlur={() => {
-                if (isAdmin) return; // admins close via backdrop/map click
+                if (isAdmin) return;
                 setTimeout(() => { if (!searchQuery) closeSearch(); }, 150);
               }}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isAdmin && adminSearchMode === 'input') {
-                      setAdminSearchMode('list');
-                      setSearchQuery('');
-                    } else {
-                      closeSearch();
-                    }
-                  }}
-                  className="text-gray-400 hover:text-white p-1"
-                >
-                  <X size={14} />
-                </button>
-              </div>
+
+            {/* Close button - up arrow since search collapses upward */}
+            {showSearchInput && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeSearch();
+                }}
+                className="text-gray-400 hover:text-white p-1 transition-colors"
+              >
+                <ChevronUp size={18} />
+              </button>
             )}
-          </>
-        )}
+          </div>
+        </div>
 
         {/* Search, Filter, and Notification Buttons */}
         {!showSearchInput && (
@@ -309,7 +302,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               onClick={(e) => {
                 e.stopPropagation();
                 setIsSearchFocused(true);
-                if (isAdmin) setAdminSearchMode('list');
+                // Focus input immediately for both admin and regular users
+                setTimeout(() => searchInputRef.current?.focus(), 150);
               }}
               className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white"
             >
@@ -361,17 +355,20 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       </div>
 
       {/* Search Results */}
-      {isSearchFocused && searchResults.length > 0 && (searchQuery || isAdmin) && (
+      {(isSearchFocused || isSearchClosing) && searchResults.length > 0 && (
         <>
           <div
-            className="fixed inset-0 z-10 bg-black/30 transition-opacity duration-200"
+            className={`fixed inset-0 z-10 bg-black/30 transition-opacity duration-150 ${
+              isSearchClosing ? 'opacity-0' : 'opacity-100'
+            }`}
             onClick={() => {
-              setAdminSearchMode('list');
               closeSearch();
             }}
           ></div>
-          <div 
-            className="mt-2 border-t border-gray-700 pt-2 max-h-72 overflow-y-scroll rounded-lg bg-gray-800/80 backdrop-blur-md animate-scale-in relative z-20"
+          <div
+            className={`mt-2 border-t border-gray-700 pt-2 max-h-72 overflow-y-scroll rounded-lg bg-gray-800/80 backdrop-blur-md relative z-20 transition-all duration-150 ease-out ${
+              isSearchClosing ? 'opacity-0 -translate-y-2 scale-95' : 'opacity-100 translate-y-0 scale-100 animate-scale-in'
+            }`}
             style={{ scrollbarGutter: 'stable' }}
           >
             {categorizedResults.sections.length > 0 ? (
@@ -392,8 +389,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                               <button
                                 onClick={(e) => { e.stopPropagation(); toggleMapOpen(group.map.id); }}
                                 className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all duration-200 ease-out ${
-                                  isOpen 
-                                    ? 'bg-blue-600/20 border-blue-500/30 shadow-sm' 
+                                  isOpen
+                                    ? 'bg-blue-600/20 border-blue-500/30 shadow-sm'
                                     : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600 hover:bg-gray-800/70'
                                 }`}
                               >
@@ -404,18 +401,25 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                                     <span className="text-[10px] text-gray-500">{mapSubtext(group.map)}</span>
                                   </div>
                                 </div>
-                                <span className="text-[10px] text-gray-400 ml-2 flex-shrink-0">{group.matches.length} pins</span>
+                                <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                                  <span className="text-[10px] text-gray-400">{group.matches.length} pins</span>
+                                  <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                                </div>
                               </button>
                               <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                                <div className="mt-1 flex flex-col gap-0.5 pl-3 pr-1 pb-1">
+                                <div className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pr-1 pb-1">
                                   {group.matches.map(r => (
                                     <button
                                       key={r.id}
                                       onClick={(e) => { e.stopPropagation(); onSearchSelect(r, group.map); }}
                                       className="w-full text-left px-3 py-2 hover:bg-gray-700/60 rounded-md text-sm text-gray-200 hover:text-white flex flex-col border border-transparent hover:border-gray-600/50 transition-all duration-150"
                                     >
-                                      <span className="font-medium truncate">{r.name}</span>
-                                      <span className="text-[10px] text-gray-500 truncate">{r.address}</span>
+                                      <span className="font-medium truncate">
+                                        <HighlightedText text={r.name} query={searchQuery} />
+                                      </span>
+                                      <span className="text-[10px] text-gray-500 truncate">
+                                        <HighlightedText text={r.address} query={searchQuery} />
+                                      </span>
                                     </button>
                                   ))}
                                 </div>
@@ -444,8 +448,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                               <button
                                 onClick={(e) => { e.stopPropagation(); toggleMapOpen(group.map.id); }}
                                 className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all duration-200 ease-out ${
-                                  isOpen 
-                                    ? 'bg-blue-600/20 border-blue-500/30 shadow-sm' 
+                                  isOpen
+                                    ? 'bg-blue-600/20 border-blue-500/30 shadow-sm'
                                     : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600 hover:bg-gray-800/70'
                                 }`}
                               >
@@ -456,18 +460,25 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                                     <span className="text-[10px] text-gray-500">{mapSubtext(group.map)}</span>
                                   </div>
                                 </div>
-                                <span className="text-[10px] text-gray-400 ml-2 flex-shrink-0">{group.matches.length} pins</span>
+                                <div className="flex items-center gap-2 ml-2 flex-shrink-0">
+                                  <span className="text-[10px] text-gray-400">{group.matches.length} pins</span>
+                                  <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                                </div>
                               </button>
                               <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                                <div className="mt-1 flex flex-col gap-0.5 pl-3 pr-1 pb-1">
+                                <div className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pr-1 pb-1">
                                   {group.matches.map(r => (
                                     <button
                                       key={r.id}
                                       onClick={(e) => { e.stopPropagation(); onSearchSelect(r, group.map); }}
                                       className="w-full text-left px-3 py-2 hover:bg-gray-700/60 rounded-md text-sm text-gray-200 hover:text-white flex flex-col border border-transparent hover:border-gray-600/50 transition-all duration-150"
                                     >
-                                      <span className="font-medium truncate">{r.name}</span>
-                                      <span className="text-[10px] text-gray-500 truncate">{r.address}</span>
+                                      <span className="font-medium truncate">
+                                        <HighlightedText text={r.name} query={searchQuery} />
+                                      </span>
+                                      <span className="text-[10px] text-gray-500 truncate">
+                                        <HighlightedText text={r.address} query={searchQuery} />
+                                      </span>
                                     </button>
                                   ))}
                                 </div>

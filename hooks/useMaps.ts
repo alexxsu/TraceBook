@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, onSnapshot, doc, setDoc, getDoc, getDocs, updateDoc, arrayUnion, query, where, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { UserMap, UserProfile } from '../types';
@@ -18,12 +18,26 @@ interface UseMapsReturn {
   kickMember: (mapId: string, memberUid: string) => Promise<void>;
 }
 
+// Demo map for guest users
+const GUEST_DEMO_MAP: UserMap = {
+  id: 'guest-demo-map',
+  ownerUid: 'demo-owner',
+  ownerDisplayName: 'Demo',
+  name: 'Demo Map',
+  visibility: 'public',
+  isDefault: true,
+  createdAt: new Date().toISOString()
+};
+
 export function useMaps(user: AppUser | null, userProfile: UserProfile | null): UseMapsReturn {
   const [activeMap, setActiveMap] = useState<UserMap | null>(null);
   const [allMaps, setAllMaps] = useState<UserMap[]>([]);
   const [userOwnMaps, setUserOwnMaps] = useState<UserMap[]>([]);
   const [userSharedMaps, setUserSharedMaps] = useState<UserMap[]>([]);
   const [userJoinedMaps, setUserJoinedMaps] = useState<UserMap[]>([]);
+  
+  // Track if demo map has been set for guest users
+  const guestMapSetRef = useRef(false);
 
   // Ensure default map for approved non-guest users
   useEffect(() => {
@@ -33,10 +47,17 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
         setUserOwnMaps([]);
         setUserSharedMaps([]);
         setUserJoinedMaps([]);
+        guestMapSetRef.current = false;
         return;
       }
 
+      // For anonymous/guest users, set up a demo map
       if (user.uid === 'guest-user' || user.isAnonymous) {
+        // Only set demo map if not already set (prevent overwriting)
+        if (!guestMapSetRef.current) {
+          guestMapSetRef.current = true;
+          setActiveMap(GUEST_DEMO_MAP);
+        }
         return;
       }
 
