@@ -97,29 +97,20 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const [isNotifClosing, setIsNotifClosing] = useState(false);
   const showSearchInput = isSearchFocused || searchQuery || isSearchClosing;
   const [openMaps, setOpenMaps] = useState<Record<string, boolean>>({});
-  const [adminSearchMode, setAdminSearchMode] = useState<'list' | 'input'>('list');
 
-  // Reset admin search mode when search closes
+  // Auto-expand maps that have search matches when there's a search query
   useEffect(() => {
-    if (!showSearchInput) {
-      setAdminSearchMode('list');
+    if (searchQuery.trim() && searchResults.length > 0) {
+      const matchedMapIds = searchResults.reduce((acc, group) => {
+        acc[group.map.id] = true;
+        return acc;
+      }, {} as Record<string, boolean>);
+      setOpenMaps(matchedMapIds);
+    } else if (!searchQuery.trim()) {
+      // Collapse all when search is cleared
+      setOpenMaps({});
     }
-  }, [showSearchInput]);
-
-  // Clear any lingering query when returning to admin list mode
-  useEffect(() => {
-    if (isAdmin && adminSearchMode === 'list' && searchQuery) {
-      setSearchQuery('');
-    }
-  }, [adminSearchMode, isAdmin, searchQuery, setSearchQuery]);
-
-  // When admin enters input mode, ensure focus stays active
-  useEffect(() => {
-    if (isAdmin && adminSearchMode === 'input') {
-      setIsSearchFocused(true);
-      setTimeout(() => searchInputRef.current?.focus(), 0);
-    }
-  }, [adminSearchMode, isAdmin, setIsSearchFocused, searchInputRef]);
+  }, [searchQuery, searchResults]);
 
   const toggleMapOpen = (mapId: string) => {
     setOpenMaps(prev => {
@@ -160,10 +151,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const mapIcon = (map: UserMap) => {
     // Demo/public maps get Globe (green)
     if (map.visibility === 'public') return <Globe size={14} className="text-green-400 flex-shrink-0" />;
-    // Default maps get Lock (blue)
-    if (map.isDefault) return <Lock size={14} className="text-blue-400 flex-shrink-0" />;
-    // Shared maps get Users (purple)
-    return <Users size={14} className="text-purple-400 flex-shrink-0" />;
+    // User's own shared maps get Users (purple) - indicates sharing
+    if (map.ownerUid === currentUserUid && !map.isDefault) return <Users size={14} className="text-purple-400 flex-shrink-0" />;
+    // Default maps and other users' maps get Lock (blue) - indicates personal/private
+    return <Lock size={14} className="text-blue-400 flex-shrink-0" />;
   };
 
   const mapSubtext = (map: UserMap) => {
@@ -212,7 +203,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       setTimeout(() => {
         setIsNotifOpen(false);
         setIsNotifClosing(false);
-      }, 400);
+      }, 300);
     } else {
       setIsNotifOpen(true);
     }
@@ -223,7 +214,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     setTimeout(() => {
       setIsNotifOpen(false);
       setIsNotifClosing(false);
-    }, 400);
+    }, 300);
   };
 
   return (
@@ -267,58 +258,34 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           {/* Search Input Container - always in DOM, animated visibility */}
           <div
             data-tutorial="search"
-            className={`absolute inset-0 flex items-center rounded-lg px-2 border transition-all duration-200 ease-out ${
+            className={`absolute inset-0 flex items-center rounded-lg px-2 border transition-all duration-150 ease-out ${
               showSearchInput
                 ? `opacity-100 scale-100 ${isAdmin ? 'border-indigo-500/50 bg-gray-800/70' : 'border-gray-600 bg-gray-700/50'}`
                 : 'opacity-0 scale-95 pointer-events-none border-transparent bg-transparent'
             }`}
           >
-            {/* Admin list mode indicator */}
-            {isAdmin && adminSearchMode === 'list' && showSearchInput && (
-              <div
-                className="flex-1 flex items-center cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setAdminSearchMode('input');
-                  setTimeout(() => searchInputRef.current?.focus(), 0);
-                }}
-              >
-                <Search size={14} className="text-gray-300 mr-2 flex-shrink-0" />
-                <div className="text-xs text-gray-300">Admin Search - search the database</div>
-              </div>
-            )}
-
-            {/* Normal search input */}
-            {(!isAdmin || adminSearchMode === 'input') && (
-              <>
-                <Search size={16} className="text-gray-400 mr-2 flex-shrink-0" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder={t('searchExperiences')}
-                  className="bg-transparent border-none focus:outline-none text-base text-white w-full placeholder-gray-500"
-                  value={searchQuery}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => {
-                    if (isAdmin) return;
-                    setTimeout(() => { if (!searchQuery) closeSearch(); }, 150);
-                  }}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </>
-            )}
+            {/* Search input - same for both admin and regular users */}
+            <Search size={16} className="text-gray-400 mr-2 flex-shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder={isAdmin ? 'Admin Search - search the database' : t('searchExperiences')}
+              className="bg-transparent border-none focus:outline-none text-base text-white w-full placeholder-gray-500"
+              value={searchQuery}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => {
+                if (isAdmin) return;
+                setTimeout(() => { if (!searchQuery) closeSearch(); }, 150);
+              }}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
 
             {/* Close button - up arrow since search collapses upward */}
             {showSearchInput && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (isAdmin && adminSearchMode === 'input') {
-                    setAdminSearchMode('list');
-                    setSearchQuery('');
-                  } else {
-                    closeSearch();
-                  }
+                  closeSearch();
                 }}
                 className="text-gray-400 hover:text-white p-1 transition-colors"
               >
@@ -335,12 +302,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               onClick={(e) => {
                 e.stopPropagation();
                 setIsSearchFocused(true);
-                if (isAdmin) {
-                  setAdminSearchMode('list');
-                } else {
-                  // For non-admin, focus input immediately
-                  setTimeout(() => searchInputRef.current?.focus(), 150);
-                }
+                // Focus input immediately for both admin and regular users
+                setTimeout(() => searchInputRef.current?.focus(), 150);
               }}
               className="p-1.5 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white"
             >
@@ -395,16 +358,15 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       {(isSearchFocused || isSearchClosing) && searchResults.length > 0 && (
         <>
           <div
-            className={`fixed inset-0 z-10 bg-black/30 transition-opacity duration-300 ${
+            className={`fixed inset-0 z-10 bg-black/30 transition-opacity duration-150 ${
               isSearchClosing ? 'opacity-0' : 'opacity-100'
             }`}
             onClick={() => {
-              setAdminSearchMode('list');
               closeSearch();
             }}
           ></div>
           <div
-            className={`mt-2 border-t border-gray-700 pt-2 max-h-72 overflow-y-scroll rounded-lg bg-gray-800/80 backdrop-blur-md relative z-20 transition-all duration-300 ease-out ${
+            className={`mt-2 border-t border-gray-700 pt-2 max-h-72 overflow-y-scroll rounded-lg bg-gray-800/80 backdrop-blur-md relative z-20 transition-all duration-150 ease-out ${
               isSearchClosing ? 'opacity-0 -translate-y-2 scale-95' : 'opacity-100 translate-y-0 scale-100 animate-scale-in'
             }`}
             style={{ scrollbarGutter: 'stable' }}

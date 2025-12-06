@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, X, Check, CheckCheck, Users, UserMinus, UserPlus, MapPin, Trash2, LogOut, Info, PartyPopper } from 'lucide-react';
 import { AppNotification, NotificationType } from '../types';
@@ -48,6 +48,17 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
   onMarkAllAsRead,
 }) => {
   const { t, language } = useLanguage();
+  const [isOpening, setIsOpening] = useState(false);
+
+  // Handle opening animation
+  useEffect(() => {
+    if (isOpen && !isClosing) {
+      setIsOpening(true);
+      // Small delay to allow the initial render before animation starts
+      const timer = setTimeout(() => setIsOpening(false), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, isClosing]);
 
   const formatTimeAgo = (dateStr: string): string => {
     const date = new Date(dateStr);
@@ -84,10 +95,9 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 z-[9990] bg-black/40 transition-opacity duration-400 ${
-          isClosing ? 'opacity-0' : 'opacity-100'
+        className={`fixed inset-0 z-[9990] bg-black/40 transition-opacity duration-300 ${
+          isClosing ? 'opacity-0' : isOpening ? 'opacity-0' : 'opacity-100'
         }`}
-        style={{ transitionDuration: '400ms' }}
         onClick={handleBackdropClick}
       />
 
@@ -103,9 +113,11 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
           className={`bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden transition-all ease-out ${
             isClosing
               ? 'opacity-0 -translate-y-3 scale-95'
+              : isOpening
+              ? 'opacity-0 -translate-y-3 scale-95'
               : 'opacity-100 translate-y-0 scale-100'
           }`}
-          style={{ transitionDuration: '400ms', transitionProperty: 'opacity, transform' }}
+          style={{ transitionDuration: '300ms', transitionProperty: 'opacity, transform' }}
         >
           {/* Header */}
           <div className="p-3 border-b border-gray-700 flex items-center justify-between bg-gray-900/50">

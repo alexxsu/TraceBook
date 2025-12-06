@@ -38,8 +38,9 @@ export const AddButton: React.FC<AddButtonProps> = ({
   if (!shouldRender) return null;
 
   return (
-    <div data-tutorial="add-button" className={`fixed bottom-8 inset-x-0 flex justify-center z-[60] pointer-events-none ${isAnimatingOut ? 'animate-fade-out-down' : 'animate-fade-in-up'}`}>
+    <div className={`fixed bottom-8 inset-x-0 flex justify-center z-[60] pointer-events-none ${isAnimatingOut ? 'animate-fade-out-down' : 'animate-fade-in-up'}`}>
       <button
+        data-tutorial="add-button"
         onClick={onToggle}
         className={`pointer-events-auto group relative flex items-center justify-center w-16 h-16 rounded-full border backdrop-blur-xl shadow-[0_0_20px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out active:scale-95
           ${isAddModalOpen

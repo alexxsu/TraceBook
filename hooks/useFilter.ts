@@ -43,12 +43,14 @@ export function useFilter(restaurants: Restaurant[]): UseFilterReturn {
   }, []);
 
   const closeFilter = useCallback(() => {
+    // Guard: Don't do anything if filter is already closed (prevents flicker)
+    if (!isFilterOpen) return;
     setIsFilterClosing(true);
     setTimeout(() => {
       setIsFilterOpen(false);
       setIsFilterClosing(false);
     }, 200);
-  }, []);
+  }, [isFilterOpen]);
 
   const handleFilterToggle = useCallback(() => {
     if (isFilterOpen) {

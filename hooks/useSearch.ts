@@ -80,7 +80,7 @@ export function useSearch(
       setSearchQuery('');
       setIsSearchFocused(false);
       setIsSearchClosing(false);
-    }, 300);
+    }, 150);
   }, [isSearchFocused, searchQuery]);
 
   const handleSearchSelect = useCallback((

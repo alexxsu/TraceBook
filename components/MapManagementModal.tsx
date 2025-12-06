@@ -222,7 +222,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
           };
         case 'joined':
           return {
-            icon: <Globe size={18} className="text-green-400" />,
+            icon: <Users size={18} className="text-green-400" />,
             bgColor: 'bg-green-500/20',
             activeBg: 'bg-green-600/20 border border-green-500/50',
             label: language === 'zh' ? '共享 (成员)' : 'Shared (Member)'
@@ -621,7 +621,7 @@ const MapManagementModal: React.FC<MapManagementModalProps> = ({
             {!isGuest && (
               <div>
                 <h3 className="text-xs font-bold text-green-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Globe size={12} />
+                  <Users size={12} />
                   {language === 'zh' ? `您加入的共享地图 (${joinedMaps.length}/${maxSharedMaps})` : `Shared Maps You Joined (${joinedMaps.length}/${maxSharedMaps})`}
                 </h3>
                 <div className="space-y-2">

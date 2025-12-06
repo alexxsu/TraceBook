@@ -258,37 +258,57 @@ function App() {
 
   const handleTutorialComplete = useCallback(() => {
     setIsTutorialActive(false);
-    // Close map management modal after tutorial ends
+    // Close map management modal after tutorial ends - only if open
     if (viewState === ViewState.MAP_MANAGEMENT) {
       setViewState(ViewState.MAP);
     }
-    // Close compact card
-    setIsCompactCardOpen(false);
-    // Close side menu
-    setIsMenuOpen(false);
-    setIsMenuClosing(false);
-    setIsMenuAnimatingIn(false);
-    // Close filter and search
-    closeFilter();
+    // Close compact card - only if open
+    if (isCompactCardOpen) {
+      setIsCompactCardOpen(false);
+    }
+    // Close side menu - only if open (prevents flicker)
+    if (isMenuOpen) {
+      setIsMenuClosing(true);
+      setTimeout(() => {
+        setIsMenuOpen(false);
+        setIsMenuClosing(false);
+        setIsMenuAnimatingIn(false);
+      }, 300);
+    }
+    // Close filter only if open (prevents flicker)
+    if (isFilterOpen) {
+      closeFilter();
+    }
+    // Close search only if open (the hook already has this guard)
     closeSearch();
-  }, [viewState, closeFilter, closeSearch]);
+  }, [viewState, closeFilter, closeSearch, isCompactCardOpen, isMenuOpen, isFilterOpen]);
 
   const handleTutorialSkip = useCallback(() => {
     setIsTutorialActive(false);
-    // Close map management modal after tutorial skip
+    // Close map management modal after tutorial skip - only if open
     if (viewState === ViewState.MAP_MANAGEMENT) {
       setViewState(ViewState.MAP);
     }
-    // Close compact card
-    setIsCompactCardOpen(false);
-    // Close side menu
-    setIsMenuOpen(false);
-    setIsMenuClosing(false);
-    setIsMenuAnimatingIn(false);
-    // Close filter and search
-    closeFilter();
+    // Close compact card - only if open
+    if (isCompactCardOpen) {
+      setIsCompactCardOpen(false);
+    }
+    // Close side menu - only if open (prevents flicker)
+    if (isMenuOpen) {
+      setIsMenuClosing(true);
+      setTimeout(() => {
+        setIsMenuOpen(false);
+        setIsMenuClosing(false);
+        setIsMenuAnimatingIn(false);
+      }, 300);
+    }
+    // Close filter only if open (prevents flicker)
+    if (isFilterOpen) {
+      closeFilter();
+    }
+    // Close search only if open (the hook already has this guard)
     closeSearch();
-  }, [viewState, closeFilter, closeSearch]);
+  }, [viewState, closeFilter, closeSearch, isCompactCardOpen, isMenuOpen, isFilterOpen]);
 
   // Open map management for tutorial
   const handleOpenMapManagementForTutorial = useCallback(() => {
@@ -329,18 +349,16 @@ function App() {
       const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
       const dateKey = now.toISOString().split('T')[0]; // YYYY-MM-DD
 
-      // Determine time period with time-specific emoji
+      // Determine time period with time-specific emoji - only 3 periods
       const getGreetingByHour = (h: number) => {
         if (h >= 5 && h < 12) {
           return { period: 'morning' as const, emoji: '☀️', en: 'Good morning', zh: '早上好' };
         }
-        if (h >= 12 && h < 17) {
+        if (h >= 12 && h < 18) {
           return { period: 'afternoon' as const, emoji: '🌤️', en: 'Good afternoon', zh: '下午好' };
         }
-        if (h >= 17 && h < 21) {
-          return { period: 'evening' as const, emoji: '🌆', en: 'Good evening', zh: '晚上好' };
-        }
-        return { period: 'night' as const, emoji: '🌙', en: 'Good night', zh: '晚安' };
+        // Evening covers 18:00 to 04:59 (includes night)
+        return { period: 'evening' as const, emoji: '🌆', en: 'Good evening', zh: '晚上好' };
       };
 
       const { period: timePeriod, emoji, en: greetingEn, zh: greetingZh } = getGreetingByHour(hour);
@@ -841,12 +859,15 @@ function App() {
         onClose={handleTutorialComplete}
         onOpenMapManagement={handleOpenMapManagementForTutorial}
         onCloseMapManagement={() => {
+          // Close map management modal - only if open
           if (viewState === ViewState.MAP_MANAGEMENT) {
             setViewState(ViewState.MAP);
           }
-          // Close the compact card if open
-          setIsCompactCardOpen(false);
-          // Close side menu if open
+          // Close the compact card - only if open
+          if (isCompactCardOpen) {
+            setIsCompactCardOpen(false);
+          }
+          // Close side menu - only if open (prevents flicker)
           if (isMenuOpen) {
             setIsMenuClosing(true);
             setTimeout(() => {
@@ -854,11 +875,12 @@ function App() {
               setIsMenuClosing(false);
               setIsMenuAnimatingIn(false);
             }, 300);
-          } else {
-            setIsMenuAnimatingIn(false);
           }
-          // Close filter and search
-          closeFilter();
+          // Close filter only if open (prevents flicker)
+          if (isFilterOpen) {
+            closeFilter();
+          }
+          // Close search only if open
           closeSearch();
         }}
         isGuestUser={user?.isAnonymous || false}
