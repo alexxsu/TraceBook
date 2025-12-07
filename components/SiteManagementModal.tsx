@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, Check, XIcon, Trash2, Loader2, ChevronRight, ArrowLeft, Shield, Mail, Clock } from 'lucide-react';
+import { X, Users, Check, XIcon, Trash2, Loader2, ChevronRight, ArrowLeft, Shield, Mail, Clock, AlertTriangle, RefreshCw, ShieldCheck } from 'lucide-react';
 import { collection, getDocs, doc, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getAuth, sendSignInLinkToEmail } from 'firebase/auth';
 import { db } from '../firebaseConfig';
 import { UserProfile } from '../types';
 import { useLanguage } from '../hooks/useLanguage';
@@ -28,6 +29,7 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserWithId | null>(null);
+  const [resendSuccess, setResendSuccess] = useState(false);
 
   const handleClose = () => {
     setIsClosing(true);
@@ -46,6 +48,7 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
   const goBack = () => {
     setTransitionDirection('back');
     setIsViewTransitioning(true);
+    setResendSuccess(false);
     setTimeout(() => {
       if (currentView === 'userDetail') {
         setCurrentView('users');
@@ -59,6 +62,7 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
 
   const navigateToUserDetail = (user: UserWithId) => {
     setSelectedUser(user);
+    setResendSuccess(false);
     setTransitionDirection('forward');
     setIsViewTransitioning(true);
     setTimeout(() => {
@@ -109,7 +113,20 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
   const approvedUsers = users.filter(u => u.status === 'approved');
   const pendingUsers = users.filter(u => u.status === 'pending');
 
-  const handleApproveUser = async (userId: string) => {
+  const handleApproveUser = async (userId: string, override: boolean = false) => {
+    const user = users.find(u => u.id === userId);
+    
+    // If not override and email not verified, warn
+    if (!override && user && !user.emailVerified) {
+      if (!window.confirm(
+        language === 'zh' 
+          ? '此用户尚未验证邮箱。确定要批准吗？' 
+          : 'This user has not verified their email. Are you sure you want to approve?'
+      )) {
+        return;
+      }
+    }
+    
     setActionLoading(userId);
     try {
       const userRef = doc(db, 'users', userId);
@@ -128,6 +145,11 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
       setUsers(prev => prev.map(u => 
         u.id === userId ? { ...u, status: 'approved' } : u
       ));
+      
+      // Update selected user if in detail view
+      if (selectedUser?.id === userId) {
+        setSelectedUser(prev => prev ? { ...prev, status: 'approved' } : null);
+      }
     } catch (error) {
       console.error('Error approving user:', error);
       alert('Failed to approve user');
@@ -184,6 +206,48 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
       });
     } catch {
       return 'Unknown';
+    }
+  };
+
+  const formatDateTime = (dateStr: string) => {
+    try {
+      return new Date(dateStr).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'Unknown';
+    }
+  };
+
+  const handleResendVerificationEmail = async (user: UserWithId) => {
+    if (!user.email) return;
+    
+    setActionLoading('resend-' + user.id);
+    try {
+      const auth = getAuth();
+      // Send a sign-in link that also verifies the email when clicked
+      const actionCodeSettings = {
+        url: window.location.origin + '/login?verified=true',
+        handleCodeInApp: true,
+      };
+      await sendSignInLinkToEmail(auth, user.email, actionCodeSettings);
+      // Store the email for later verification
+      window.localStorage.setItem('emailForSignIn', user.email);
+      setResendSuccess(true);
+      setTimeout(() => setResendSuccess(false), 5000);
+    } catch (error: any) {
+      console.error('Error sending verification email:', error);
+      alert(
+        language === 'zh' 
+          ? '发送验证邮件失败: ' + error.message 
+          : 'Failed to send verification email: ' + error.message
+      );
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -297,9 +361,10 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
                     ) : (
                       <div className="space-y-2">
                         {pendingUsers.map((user) => (
-                          <div 
+                          <button 
                             key={user.id}
-                            className="flex items-center justify-between p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl"
+                            onClick={() => navigateToUserDetail(user)}
+                            className="w-full flex items-center justify-between p-3 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 rounded-xl transition group text-left"
                           >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -307,7 +372,8 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
                                   {user.displayName || user.email}
                                 </p>
                                 {!user.emailVerified && (
-                                  <span className="text-xs bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full">
+                                  <span className="text-xs bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <AlertTriangle size={10} />
                                     {t('emailNotVerified')}
                                   </span>
                                 )}
@@ -320,29 +386,9 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
                               <p className="text-xs text-gray-400 truncate">{user.email}</p>
                               <p className="text-xs text-gray-500">{t('joined')} {formatDate(user.createdAt)}</p>
                             </div>
-                            <div className="flex items-center gap-2 ml-3">
-                              {actionLoading === user.id ? (
-                                <Loader2 size={18} className="animate-spin text-gray-400" />
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => handleApproveUser(user.id)}
-                                    className="p-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition"
-                                    title={t('approve')}
-                                  >
+                            <ChevronRight size={18} className="text-yellow-500/50 group-hover:text-yellow-400 transition ml-2" />
                                     <Check size={16} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleRejectUser(user.id)}
-                                    className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition"
-                                    title={t('reject')}
-                                  >
-                                    <XIcon size={16} />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )}
@@ -411,75 +457,159 @@ export const SiteManagementModal: React.FC<SiteManagementModalProps> = ({
             }`}>
               <div className="flex flex-col items-center">
                 {/* Profile Picture */}
-                <div className="mb-6">
+                <div className="mb-4 relative">
                   {selectedUser.photoURL ? (
                     <img
                       src={selectedUser.photoURL}
                       alt={selectedUser.displayName || 'User'}
-                      className="w-24 h-24 rounded-full object-cover border-4 border-gray-600"
+                      className="w-20 h-20 rounded-full object-cover border-4 border-gray-600"
                     />
                   ) : (
-                    <div className="w-24 h-24 rounded-full bg-gray-700 border-4 border-gray-600 flex items-center justify-center">
-                      <Users size={40} className="text-gray-500" />
+                    <div className="w-20 h-20 rounded-full bg-gray-700 border-4 border-gray-600 flex items-center justify-center">
+                      <Users size={32} className="text-gray-500" />
                     </div>
                   )}
+                  {/* Status Badge */}
+                  <div className={`absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    selectedUser.status === 'approved' 
+                      ? 'bg-green-500 text-white' 
+                      : selectedUser.status === 'pending'
+                        ? 'bg-yellow-500 text-black'
+                        : 'bg-red-500 text-white'
+                  }`}>
+                    {selectedUser.status === 'approved' ? t('approved') : selectedUser.status === 'pending' ? t('pending') : t('rejected')}
+                  </div>
                 </div>
 
+                {/* Success Message */}
+                {resendSuccess && (
+                  <div className="w-full mb-4 p-3 bg-green-500/20 border border-green-500/50 rounded-xl text-green-300 text-sm text-center">
+                    {language === 'zh' ? '验证邮件已发送！' : 'Verification email sent!'}
+                  </div>
+                )}
+
                 {/* User Info */}
-                <div className="w-full space-y-4">
+                <div className="w-full space-y-3">
                   {/* Display Name */}
-                  <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                  <div className="bg-gray-700/50 rounded-xl p-3 border border-gray-600">
                     <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{t('displayName')}</p>
                     <p className="text-white font-medium">{selectedUser.displayName || '-'}</p>
                   </div>
 
-                  {/* Email */}
-                  <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                  {/* Email with Verification Status */}
+                  <div className="bg-gray-700/50 rounded-xl p-3 border border-gray-600">
                     <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{t('email')}</p>
-                    <div className="flex items-center gap-2">
-                      <Mail size={16} className="text-gray-400" />
-                      <p className="text-white">{selectedUser.email}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Mail size={14} className="text-gray-400" />
+                      <p className="text-white text-sm">{selectedUser.email}</p>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      {selectedUser.emailVerified ? (
+                        <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full flex items-center gap-1">
+                          <Check size={12} />
+                          {t('emailVerified')}
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded-full flex items-center gap-1">
+                          <AlertTriangle size={12} />
+                          {t('emailNotVerified')}
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   {/* Role */}
-                  <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                  <div className="bg-gray-700/50 rounded-xl p-3 border border-gray-600">
                     <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{t('role')}</p>
                     <div className="flex items-center gap-2">
                       {selectedUser.role === 'admin' ? (
                         <>
-                          <Shield size={16} className="text-purple-400" />
-                          <p className="text-purple-300 font-medium">{t('admin')}</p>
+                          <Shield size={14} className="text-purple-400" />
+                          <p className="text-purple-300 font-medium text-sm">{t('admin')}</p>
                         </>
                       ) : (
                         <>
-                          <Users size={16} className="text-gray-400" />
-                          <p className="text-white">{t('user')}</p>
+                          <Users size={14} className="text-gray-400" />
+                          <p className="text-white text-sm">{t('user')}</p>
                         </>
                       )}
                     </div>
                   </div>
 
                   {/* Joined Date */}
-                  <div className="bg-gray-700/50 rounded-xl p-4 border border-gray-600">
+                  <div className="bg-gray-700/50 rounded-xl p-3 border border-gray-600">
                     <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{t('joined')}</p>
                     <div className="flex items-center gap-2">
-                      <Clock size={16} className="text-gray-400" />
-                      <p className="text-white">{formatDate(selectedUser.createdAt)}</p>
+                      <Clock size={14} className="text-gray-400" />
+                      <p className="text-white text-sm">{formatDateTime(selectedUser.createdAt)}</p>
                     </div>
                   </div>
 
-                  {/* Delete Button */}
-                  <div className="pt-4">
+                  {/* User ID */}
+                  <div className="bg-gray-700/50 rounded-xl p-3 border border-gray-600">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">User ID</p>
+                    <p className="text-gray-300 text-xs font-mono break-all">{selectedUser.id}</p>
+                  </div>
+
+                  {/* Actions Section */}
+                  <div className="pt-2 space-y-2">
+                    {/* Resend Verification Email - Only for unverified users */}
+                    {!selectedUser.emailVerified && (
+                      <button
+                        onClick={() => handleResendVerificationEmail(selectedUser)}
+                        disabled={actionLoading === 'resend-' + selectedUser.id}
+                        className="w-full flex items-center justify-center gap-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 font-medium py-2.5 px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {actionLoading === 'resend-' + selectedUser.id ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <RefreshCw size={16} />
+                        )}
+                        {language === 'zh' ? '重新发送验证邮件' : 'Resend Verification Email'}
+                      </button>
+                    )}
+
+                    {/* Approve/Override Button - Only for pending users */}
+                    {selectedUser.status === 'pending' && (
+                      <button
+                        onClick={() => handleApproveUser(selectedUser.id, true)}
+                        disabled={actionLoading === selectedUser.id}
+                        className="w-full flex items-center justify-center gap-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 font-medium py-2.5 px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {actionLoading === selectedUser.id ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <ShieldCheck size={16} />
+                        )}
+                        {!selectedUser.emailVerified 
+                          ? (language === 'zh' ? '强制批准 (跳过验证)' : 'Force Approve (Skip Verification)')
+                          : (language === 'zh' ? '批准用户' : 'Approve User')
+                        }
+                      </button>
+                    )}
+
+                    {/* Reject Button - Only for pending users */}
+                    {selectedUser.status === 'pending' && (
+                      <button
+                        onClick={() => handleRejectUser(selectedUser.id)}
+                        disabled={actionLoading === selectedUser.id}
+                        className="w-full flex items-center justify-center gap-2 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-400 font-medium py-2.5 px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <XIcon size={16} />
+                        {language === 'zh' ? '拒绝' : 'Reject'}
+                      </button>
+                    )}
+
+                    {/* Delete Button */}
                     <button
                       onClick={() => handleDeleteUser(selectedUser.id)}
                       disabled={actionLoading === selectedUser.id}
-                      className="w-full flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 font-medium py-3 px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 font-medium py-2.5 px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {actionLoading === selectedUser.id ? (
-                        <Loader2 size={18} className="animate-spin" />
+                        <Loader2 size={16} className="animate-spin" />
                       ) : (
-                        <Trash2 size={18} />
+                        <Trash2 size={16} />
                       )}
                       {t('deleteUser')}
                     </button>

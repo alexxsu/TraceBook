@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
+import mapboxgl from 'mapbox-gl';
 import { Place, Visit, ViewState, UserMap, GUEST_ID } from './types';
-import { db, GOOGLE_MAPS_API_KEY } from './firebaseConfig';
+import { db } from './firebaseConfig';
 
 // Hooks
 import {
@@ -40,6 +41,7 @@ import { Toast } from './components/Toast';
 import { UserLocationMarker } from './components/UserLocationMarker';
 import { FriendsPage } from './components/FriendsPage';
 import { FeedsPage } from './components/FeedsPage';
+import { MapRevealAnimation } from './components/MapRevealAnimation';
 
 function App() {
   // Auth hook
@@ -110,7 +112,7 @@ function App() {
   const [searchablePins, setSearchablePins] = useState<Record<string, Place[]>>({});
 
   // Maps that should appear in the search module
-  // - Admin: ALL maps in the system (they can see everything for moderation)
+  // - Admin: ALL maps in the system (including demo map)
   // - Normal user: Their own maps (userOwnMaps) + maps they joined (userJoinedMaps), NOT demo map
   // - Guest: Only demo map
   const searchableMaps = useMemo(() => {
@@ -128,24 +130,12 @@ function App() {
         candidates = [activeMap];
       }
     } else if (isAdmin) {
-      // Admin can see ALL maps in the system
+      // Admin can see ALL maps in the system (including demo map)
       console.log('[SearchableMaps] Admin user, using allMaps:', allMaps.length);
       candidates = [...allMaps];
-      
-      // Ensure demo map is included if it exists in the database
-      // The demo map might be in allMaps already, but check just in case
-      const hasDemoMap = candidates.some(m => m.id === 'guest-demo-map');
-      if (!hasDemoMap) {
-        // Add demo map definition for admin to search
-        candidates.push({
-          id: 'guest-demo-map',
-          ownerUid: 'demo-owner',
-          ownerDisplayName: 'Demo',
-          name: 'Demo Map',
-          visibility: 'public',
-          isDefault: true,
-          createdAt: new Date().toISOString()
-        });
+      // Also include demo map if it exists and not already in allMaps
+      if (activeMap && activeMap.id === 'guest-demo-map' && !allMaps.find(m => m.id === 'guest-demo-map')) {
+        candidates.push(activeMap);
       }
     } else {
       // Normal users: their own maps + maps they joined (NO demo map)
@@ -181,9 +171,6 @@ function App() {
 
   // Track which maps have been fetched (use ref to avoid triggering re-renders)
   const fetchedMapIdsRef = React.useRef<Set<string>>(new Set());
-  
-  // Track the last time we did a full refresh
-  const lastRefreshRef = React.useRef<number>(0);
 
   const sortedSearchableMaps = useMemo(() => {
     const weight = (m: UserMap) => {
@@ -213,46 +200,20 @@ function App() {
     closeSearch,
     handleSearchSelect
   } = useSearch(searchSources, { showAllWhenEmpty: true });
+  const isSearchOverlayActive = isSearchFocused || !!searchQuery || isSearchClosing;
 
   // Fetch pins for other maps - runs on initial load and when search is opened
   React.useEffect(() => {
     let cancelled = false;
 
     const fetchPins = async () => {
-      const now = Date.now();
-      const timeSinceLastRefresh = now - lastRefreshRef.current;
-      
-      // When search is focused, refetch maps that have 0 pins (they might have new data)
-      // Also refetch if it's been more than 30 seconds since last refresh
-      const shouldRefreshEmpty = isSearchFocused && timeSinceLastRefresh > 5000;
-      
-      // Filter maps that need fetching
-      const mapsToFetch = searchableMaps.filter((map) => {
-        // Skip active map (it's always up to date via places state)
-        if (map.id === activeMap?.id) return false;
-        
-        // If never fetched, fetch it
-        if (!fetchedMapIdsRef.current.has(map.id)) return true;
-        
-        // If search is focused and this map has 0 pins, refetch to check for new pins
-        if (shouldRefreshEmpty) {
-          const currentPins = searchablePins[map.id];
-          if (!currentPins || currentPins.length === 0) {
-            // Remove from cache so it will be refetched
-            fetchedMapIdsRef.current.delete(map.id);
-            return true;
-          }
-        }
-        
-        return false;
-      });
+      // Filter maps that haven't been fetched yet (not the active map, and not already fetched)
+      const mapsToFetch = searchableMaps.filter(
+        (map) => map.id !== activeMap?.id && !fetchedMapIdsRef.current.has(map.id)
+      );
 
       if (mapsToFetch.length === 0) {
         return;
-      }
-      
-      if (shouldRefreshEmpty) {
-        lastRefreshRef.current = now;
       }
       
       console.log('[FetchPins] Maps to fetch:', mapsToFetch.length, mapsToFetch.map(m => ({ id: m.id, name: m.name, visibility: m.visibility })));
@@ -265,8 +226,7 @@ function App() {
         
         try {
           console.log(`[FetchPins] Fetching places for map: ${map.name} (${map.id})`);
-          // Note: Firestore collection is named 'restaurants' for backward compatibility
-          const placesRef = collection(db, 'maps', map.id, 'restaurants');
+          const placesRef = collection(db, 'maps', map.id, 'places');
           const snap = await getDocs(placesRef);
           const pins = snap.docs
             .map((docSnap) => docSnap.data() as Place)
@@ -305,7 +265,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeMap?.id, searchableMaps, searchablePins, isSearchFocused]);
+  }, [activeMap?.id, searchableMaps, isSearchFocused]);
 
   // Filter hook
   const {
@@ -325,6 +285,7 @@ function App() {
     mapInstance,
     currentMapCenter,
     mapType,
+    isLocating,
     handleMapLoad,
     handleToggleMapType,
     handleLocateMe,
@@ -351,62 +312,59 @@ function App() {
   
   // Navigation state
   const [currentNavPage, setCurrentNavPage] = useState<NavigationPage>('map');
-  const [friendsPageVisible, setFriendsPageVisible] = useState(false);
-  const [feedsPageVisible, setFeedsPageVisible] = useState(false);
-  const [friendsAnimatingOut, setFriendsAnimatingOut] = useState(false);
-  const [feedsAnimatingOut, setFeedsAnimatingOut] = useState(false);
-  const [friendsAnimationDirection, setFriendsAnimationDirection] = useState<'left' | 'right'>('left');
-  const [feedsAnimationDirection, setFeedsAnimationDirection] = useState<'left' | 'right'>('right');
-
-  // Page order for determining animation direction: friends(0) < map(1) < feeds(2)
-  const getPageOrder = (page: NavigationPage): number => {
-    switch (page) {
-      case 'friends': return 0;
-      case 'map': return 1;
-      case 'feeds': return 2;
-    }
-  };
+  const [friendsPageAnimating, setFriendsPageAnimating] = useState(false);
+  const [feedsPageAnimating, setFeedsPageAnimating] = useState(false);
+  const [mapRevealAnimating, setMapRevealAnimating] = useState(false);
 
   // Navigation handlers
   const handleNavigation = useCallback((page: NavigationPage) => {
     if (page === currentNavPage) return;
     
-    const fromOrder = getPageOrder(currentNavPage);
-    const toOrder = getPageOrder(page);
-    const goingRight = toOrder > fromOrder; // true if navigating right, false if left
-    
-    // First, animate out the current page (if not map)
-    if (currentNavPage === 'friends') {
-      setFriendsAnimationDirection(goingRight ? 'left' : 'right'); // Exit opposite to navigation direction
-      setFriendsAnimatingOut(true);
-    } else if (currentNavPage === 'feeds') {
-      setFeedsAnimationDirection(goingRight ? 'left' : 'right');
-      setFeedsAnimatingOut(true);
-    }
-    
-    // After exit animation, show new page
-    setTimeout(() => {
-      // Hide the old page
+    // Handle all possible transitions
+    if (page === 'map') {
+      // Going TO map from Friends or Feeds
+      // Trigger exit animation on current page, show earth loader
+      setMapRevealAnimating(true);
+      
       if (currentNavPage === 'friends') {
-        setFriendsPageVisible(false);
-        setFriendsAnimatingOut(false);
+        setFriendsPageAnimating(false); // Trigger exit
       } else if (currentNavPage === 'feeds') {
-        setFeedsPageVisible(false);
-        setFeedsAnimatingOut(false);
+        setFeedsPageAnimating(false); // Trigger exit
       }
       
-      // Update current page
-      setCurrentNavPage(page);
+      // Wait for exit animation, then switch page
+      setTimeout(() => setCurrentNavPage(page), 350);
       
-      // Show and animate in the new page (if not map)
-      if (page === 'friends') {
-        setFriendsAnimationDirection(goingRight ? 'right' : 'left'); // Enter from navigation direction
-        setFriendsPageVisible(true);
-      } else if (page === 'feeds') {
-        setFeedsAnimationDirection(goingRight ? 'right' : 'left');
-        setFeedsPageVisible(true);
+    } else if (page === 'friends') {
+      // Going TO friends
+      if (currentNavPage === 'feeds') {
+        // From feeds: exit feeds first, then enter friends
+        setFeedsPageAnimating(false);
+        setTimeout(() => {
+          setCurrentNavPage(page);
+          setFriendsPageAnimating(true);
+        }, 300);
+      } else {
+        // From map: just enter friends
+        setFriendsPageAnimating(true);
+        setTimeout(() => setCurrentNavPage(page), 50);
       }
-    }, currentNavPage === 'map' ? 50 : 300); // Faster if coming from map (no exit animation)
+      
+    } else if (page === 'feeds') {
+      // Going TO feeds
+      if (currentNavPage === 'friends') {
+        // From friends: exit friends first, then enter feeds
+        setFriendsPageAnimating(false);
+        setTimeout(() => {
+          setCurrentNavPage(page);
+          setFeedsPageAnimating(true);
+        }, 300);
+      } else {
+        // From map: just enter feeds
+        setFeedsPageAnimating(true);
+        setTimeout(() => setCurrentNavPage(page), 50);
+      }
+    }
   }, [currentNavPage]);
 
   // Tutorial handlers
@@ -771,9 +729,6 @@ function App() {
 
   // Check if we should show the map view
   const showMapView = useMemo(() => {
-    // Only show map when on map navigation page
-    if (currentNavPage !== 'map') return false;
-    
     return [
       ViewState.MAP,
       ViewState.PLACE_DETAIL,
@@ -785,7 +740,10 @@ function App() {
       ViewState.SITE_MANAGEMENT,
       ViewState.MAP_MANAGEMENT
     ].includes(viewState);
-  }, [viewState, currentNavPage]);
+  }, [viewState]);
+
+  // Map should always be mounted but hidden when on other pages
+  const isMapVisible = showMapView && currentNavPage === 'map';
 
   const isAddModalOpen = viewState === ViewState.ADD_ENTRY;
 
@@ -820,10 +778,30 @@ function App() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-gray-900">
+      {/* Map section - always mounted when showMapView, visibility controlled by isMapVisible */}
       {showMapView && (
-        <>
+        <div 
+          className="absolute inset-0"
+          style={{ 
+            visibility: isMapVisible ? 'visible' : 'hidden',
+            pointerEvents: isMapVisible ? 'auto' : 'none'
+          }}
+        >
+          {/* Search backdrop: closes search when clicking outside, keeps search animation smooth */}
+          {isSearchOverlayActive && (
+            <div
+              className={`absolute inset-0 z-20 bg-black/40 backdrop-blur-[1px] transition-opacity duration-200 ${
+                isSearchClosing ? 'opacity-0' : 'opacity-100'
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                closeSearch();
+              }}
+            />
+          )}
+
           {/* Top Center Controls */}
-          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-30 flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
             <HeaderBar
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
@@ -883,7 +861,7 @@ function App() {
           </div>
 
           <MapContainer
-            apiKey={GOOGLE_MAPS_API_KEY}
+            accessToken={import.meta.env.VITE_MAPBOX_ACCESS_TOKEN}
             places={filteredPlaces}
             onMapLoad={handleMapLoad}
             onMarkerClick={handleMarkerClick}
@@ -905,11 +883,12 @@ function App() {
             onLocateUser={handleLocateMe}
             onZoomToCity={handleZoomToMunicipality}
             onToggleMapType={handleToggleMapType}
+            isLocating={isLocating}
           />
 
           {/* Member Avatars */}
           {activeMap && <MemberAvatars activeMap={activeMap} />}
-        </>
+        </div>
       )}
 
       {/* Navigation Island - replaces AddButton */}
@@ -926,16 +905,20 @@ function App() {
 
       {/* Friends Page */}
       <FriendsPage
-        isVisible={friendsPageVisible}
-        animationDirection={friendsAnimationDirection}
-        isAnimatingOut={friendsAnimatingOut}
+        isVisible={currentNavPage === 'friends'}
+        isAnimatingIn={friendsPageAnimating}
       />
 
       {/* Feeds Page */}
       <FeedsPage
-        isVisible={feedsPageVisible}
-        animationDirection={feedsAnimationDirection}
-        isAnimatingOut={feedsAnimatingOut}
+        isVisible={currentNavPage === 'feeds'}
+        isAnimatingIn={feedsPageAnimating}
+      />
+
+      {/* Map Reveal Animation - plays when switching to map page */}
+      <MapRevealAnimation
+        isRevealing={mapRevealAnimating}
+        onComplete={() => setMapRevealAnimating(false)}
       />
 
       {/* Side Menu */}

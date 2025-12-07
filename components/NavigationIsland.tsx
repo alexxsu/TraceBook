@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Users, Rss, Map } from 'lucide-react';
+import { Plus, Users, Rss, MapPin } from 'lucide-react';
 
 export type NavigationPage = 'map' | 'friends' | 'feeds';
 
@@ -59,24 +59,24 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
         isAnimatingOut ? 'animate-fade-out-down' : 'animate-fade-in-up'
       }`}
     >
-      {/* Navigation Island Container */}
+      {/* Navigation Island Container - slimmer and longer */}
       <div 
-        className="pointer-events-auto flex items-center gap-2 px-3 py-2 bg-gray-900/80 backdrop-blur-xl border border-white/20 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
+        className="pointer-events-auto flex items-center gap-4 px-4 py-1.5 bg-gray-900/80 backdrop-blur-xl border border-white/20 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
         style={{
           boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
         }}
       >
-        {/* Friends Button (Left) */}
+        {/* Friends Button */}
         <button
           onClick={() => handleNavigate('friends')}
           className={`relative flex items-center justify-center rounded-full transition-all duration-300 ease-out ${
             currentPage === 'friends'
-              ? 'w-14 h-14 bg-gradient-to-br from-purple-500 to-violet-600 shadow-lg shadow-purple-500/30'
-              : 'w-11 h-11 bg-gray-800/80 hover:bg-gray-700/80'
+              ? 'w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-600 shadow-lg shadow-purple-500/30'
+              : 'w-10 h-10 bg-gray-800/80 hover:bg-gray-700/80'
           } ${animatingTo === 'friends' ? 'scale-110' : ''}`}
         >
           <Users 
-            size={currentPage === 'friends' ? 26 : 22} 
+            size={currentPage === 'friends' ? 22 : 20} 
             className={`transition-all duration-300 ${
               currentPage === 'friends' ? 'text-white' : 'text-gray-400'
             }`}
@@ -86,7 +86,7 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
           )}
         </button>
 
-        {/* Center Button - Plus (on map) or Map icon (on other pages) */}
+        {/* Center Button - Plus or Map */}
         <button
           data-tutorial="add-button"
           onClick={() => {
@@ -99,10 +99,12 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
           className={`relative flex items-center justify-center rounded-full transition-all duration-300 ease-out active:scale-95 ${
             isOnMap
               ? isAddModalOpen
-                ? 'w-16 h-16 bg-red-500/80 border border-red-400/50 shadow-red-500/20'
-                : 'w-16 h-16 bg-gray-900/70 border border-white/30 hover:bg-gray-900/80 hover:shadow-blue-500/20 hover:scale-105'
-              : 'w-11 h-11 bg-gray-800/80 hover:bg-gray-700/80'
-          } ${animatingTo === 'map' ? 'scale-110' : ''}`}
+                ? 'w-14 h-14 bg-red-500/80 border border-red-400/50 shadow-red-500/20'
+                : 'w-14 h-14 bg-gray-900/70 border border-white/30 hover:bg-gray-900/80 hover:shadow-blue-500/20 hover:scale-105'
+              : currentPage === 'map' || animatingTo === 'map'
+                ? 'w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30'
+                : 'w-10 h-10 bg-gray-800/80 hover:bg-gray-700/80'
+          }`}
         >
           {/* Gradient glow for map page add button */}
           {isOnMap && !isAddModalOpen && (
@@ -115,30 +117,35 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
           }`}>
             {isOnMap ? (
               <Plus 
-                size={28} 
+                size={26} 
                 className="text-white" 
                 strokeWidth={2.5} 
               />
             ) : (
-              <Map 
-                size={22} 
-                className="text-gray-400"
+              <MapPin 
+                size={currentPage === 'map' ? 22 : 20} 
+                className={currentPage === 'map' ? 'text-white' : 'text-gray-400'}
               />
             )}
           </div>
+          
+          {/* Active indicator glow */}
+          {!isOnMap && currentPage === 'map' && (
+            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" />
+          )}
         </button>
 
-        {/* Feeds Button (Right) */}
+        {/* Feeds Button */}
         <button
           onClick={() => handleNavigate('feeds')}
           className={`relative flex items-center justify-center rounded-full transition-all duration-300 ease-out ${
             currentPage === 'feeds'
-              ? 'w-14 h-14 bg-gradient-to-br from-orange-500 to-red-500 shadow-lg shadow-orange-500/30'
-              : 'w-11 h-11 bg-gray-800/80 hover:bg-gray-700/80'
+              ? 'w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 shadow-lg shadow-orange-500/30'
+              : 'w-10 h-10 bg-gray-800/80 hover:bg-gray-700/80'
           } ${animatingTo === 'feeds' ? 'scale-110' : ''}`}
         >
           <Rss 
-            size={currentPage === 'feeds' ? 26 : 22} 
+            size={currentPage === 'feeds' ? 22 : 20} 
             className={`transition-all duration-300 ${
               currentPage === 'feeds' ? 'text-white' : 'text-gray-400'
             }`}

@@ -1,217 +1,300 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import mapboxgl from 'mapbox-gl';
 import { Coordinates } from '../types';
 
 type MapType = 'satellite' | 'roadmap' | 'dark';
 
-// Dark mode map styles - moved outside component to avoid recreating
-const DARK_MODE_STYLES: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
-  { featureType: "administrative.country", elementType: "geometry.stroke", stylers: [{ color: "#4b6878" }] },
-  { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#64779e" }] },
-  { featureType: "administrative.province", elementType: "geometry.stroke", stylers: [{ color: "#4b6878" }] },
-  { featureType: "landscape.man_made", elementType: "geometry.stroke", stylers: [{ color: "#334e87" }] },
-  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#023e58" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#283d6a" }] },
-  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6f9ba5" }] },
-  { featureType: "poi", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
-  { featureType: "poi.park", elementType: "geometry.fill", stylers: [{ color: "#023e58" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#3C7680" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#98a5be" }] },
-  { featureType: "road", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2c6675" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#255763" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#b0d5ce" }] },
-  { featureType: "road.highway", elementType: "labels.text.stroke", stylers: [{ color: "#023e58" }] },
-  { featureType: "transit", elementType: "labels.text.fill", stylers: [{ color: "#98a5be" }] },
-  { featureType: "transit", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
-  { featureType: "transit.line", elementType: "geometry.fill", stylers: [{ color: "#283d6a" }] },
-  { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#3a4762" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6d70" }] },
-];
-
-// Default bounds for Toronto area
-const DEFAULT_BOUNDS = {
-  sw: { lat: 43.48, lng: -79.80 },
-  ne: { lat: 43.90, lng: -79.00 }
+const MAP_STYLES: Record<MapType, string> = {
+  satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
+  roadmap: 'mapbox://styles/mapbox/streets-v12',
+  dark: 'mapbox://styles/mapbox/dark-v11',
 };
 
+const DEFAULT_BOUNDS: [[number, number], [number, number]] = [
+  [-79.80, 43.48],
+  [-79.00, 43.90]
+];
+
 interface UseMapControlsReturn {
-  mapInstance: google.maps.Map | null;
+  mapInstance: mapboxgl.Map | null;
   currentMapCenter: Coordinates;
   mapType: MapType;
-  handleMapLoad: (map: google.maps.Map) => void;
+  isLocating: boolean;
+  handleMapLoad: (map: mapboxgl.Map) => void;
   handleToggleMapType: () => void;
   handleLocateMe: () => void;
   handleResetView: () => void;
   handleZoomToMunicipality: () => void;
 }
 
-export function useMapControls(): UseMapControlsReturn {
-  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
-  const [currentMapCenter, setCurrentMapCenter] = useState<Coordinates>({ lat: 43.6532, lng: -79.3832 });
-  const [mapType, setMapType] = useState<MapType>('satellite');
+const MAPBOX_GEOCODING_URL = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
 
-  const handleMapLoad = useCallback((map: google.maps.Map) => {
+interface GeocodingFeature {
+  id: string;
+  type: string;
+  place_type: string[];
+  text: string;
+  place_name: string;
+  bbox?: [number, number, number, number];
+  center: [number, number];
+  context?: Array<{
+    id: string;
+    text: string;
+  }>;
+}
+
+interface GeocodingResponse {
+  features: GeocodingFeature[];
+}
+
+// Helper to get user's current position with better error handling
+const getCurrentPosition = (): Promise<GeolocationPosition> => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported by this browser.'));
+      return;
+    }
+
+    // Check if we already have permission
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then((permissionStatus) => {
+        if (permissionStatus.state === 'denied') {
+          reject(new Error('Location permission was denied. Please enable location access in your browser settings.'));
+          return;
+        }
+        // Permission is granted or prompt - proceed with geolocation
+        requestLocation();
+      }).catch(() => {
+        // Permissions API not available, try anyway
+        requestLocation();
+      });
+    } else {
+      requestLocation();
+    }
+
+    function requestLocation() {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve(position);
+        },
+        (error) => {
+          let errorMessage = 'Could not get your location.';
+          
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access was denied. Please allow location access in your browser settings and try again.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location information is unavailable. Please check your device\'s location settings.';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out. Please try again.';
+              break;
+          }
+          
+          reject(new Error(errorMessage));
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000, // Increased timeout
+          maximumAge: 30000 // Allow cached position up to 30 seconds old
+        }
+      );
+    }
+  });
+};
+
+export function useMapControls(): UseMapControlsReturn {
+  const getPreferredMapType = () => {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'roadmap';
+    }
+    return 'roadmap';
+  };
+
+  const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
+  const [currentMapCenter, setCurrentMapCenter] = useState<Coordinates>({ lat: 43.6532, lng: -79.3832 });
+  const [mapType, setMapType] = useState<MapType>(() => getPreferredMapType());
+  const [isLocating, setIsLocating] = useState(false);
+  const styleLoadCallbackRef = useRef<(() => void) | null>(null);
+
+  const handleMapLoad = useCallback((map: mapboxgl.Map) => {
     setMapInstance(map);
-    map.addListener('center_changed', () => {
+    
+    map.on('moveend', () => {
       const center = map.getCenter();
-      if (center) {
-        setCurrentMapCenter({ lat: center.lat(), lng: center.lng() });
-      }
+      setCurrentMapCenter({ lat: center.lat, lng: center.lng });
     });
   }, []);
 
   const handleToggleMapType = useCallback(() => {
     if (!mapInstance) return;
 
+    let newType: MapType;
     if (mapType === 'satellite') {
-      mapInstance.setMapTypeId('roadmap');
-      mapInstance.setOptions({ styles: [] });
-      setMapType('roadmap');
+      newType = 'roadmap';
     } else if (mapType === 'roadmap') {
-      mapInstance.setMapTypeId('roadmap');
-      mapInstance.setOptions({ styles: DARK_MODE_STYLES });
-      setMapType('dark');
+      newType = 'dark';
     } else {
-      mapInstance.setMapTypeId('satellite');
-      mapInstance.setOptions({ styles: [] });
-      setMapType('satellite');
+      newType = 'satellite';
     }
+
+    if (styleLoadCallbackRef.current) {
+      mapInstance.off('style.load', styleLoadCallbackRef.current);
+    }
+
+    mapInstance.setStyle(MAP_STYLES[newType]);
+    setMapType(newType);
   }, [mapInstance, mapType]);
 
-  const handleLocateMe = useCallback(() => {
+  const handleLocateMe = useCallback(async () => {
     console.log('handleLocateMe called, mapInstance:', !!mapInstance);
-    
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by this browser.");
-      return;
-    }
-    
+
     if (!mapInstance) {
       console.warn('Map instance not available yet');
+      alert('Map is still loading. Please wait and try again.');
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const pos = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        };
-        console.log('Got position:', pos);
-        mapInstance.panTo(pos);
-        mapInstance.setZoom(17);
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        alert("Could not access your location. Please check browser permissions.");
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  }, [mapInstance]);
+    if (isLocating) {
+      console.log('Already locating, skipping');
+      return;
+    }
+
+    setIsLocating(true);
+
+    try {
+      const position = await getCurrentPosition();
+      
+      const pos: [number, number] = [
+        position.coords.longitude,
+        position.coords.latitude,
+      ];
+      
+      console.log('Got position:', pos, 'accuracy:', position.coords.accuracy);
+      
+      mapInstance.flyTo({
+        center: pos,
+        zoom: 17,
+        duration: 1500
+      });
+      
+    } catch (error: any) {
+      console.error('Location error:', error);
+      alert(error.message || 'Could not access your location. Please check browser permissions.');
+    } finally {
+      setIsLocating(false);
+    }
+  }, [mapInstance, isLocating]);
 
   const handleResetView = useCallback(() => {
     if (!mapInstance) return;
 
-    const bounds = new google.maps.LatLngBounds(DEFAULT_BOUNDS.sw, DEFAULT_BOUNDS.ne);
-    mapInstance.fitBounds(bounds);
+    mapInstance.fitBounds(DEFAULT_BOUNDS, {
+      padding: 50,
+      duration: 1000
+    });
   }, [mapInstance]);
 
-  const handleZoomToMunicipality = useCallback(() => {
+  const handleZoomToMunicipality = useCallback(async () => {
     console.log('handleZoomToMunicipality called, mapInstance:', !!mapInstance);
-    
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by this browser.");
-      return;
-    }
-    
+
     if (!mapInstance) {
       console.warn('Map instance not available yet');
+      alert('Map is still loading. Please wait and try again.');
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const userPos = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        };
-        console.log('Got position for city zoom:', userPos);
+    if (isLocating) {
+      console.log('Already locating, skipping');
+      return;
+    }
 
-        // Try geocoding, but fallback to simple zoom if it fails
-        try {
-          const geocoder = new google.maps.Geocoder();
-          geocoder.geocode({ location: userPos }, (results, status) => {
-            console.log('Geocoding status:', status, 'results:', results?.length);
-            
-            if (status === 'OK' && results && results.length > 0) {
-              let municipalityResult = results.find(r =>
-                r.types.includes('locality') || r.types.includes('sublocality')
-              );
+    setIsLocating(true);
 
-              if (!municipalityResult) {
-                municipalityResult = results.find(r =>
-                  r.types.includes('administrative_area_level_3') ||
-                  r.types.includes('administrative_area_level_2')
-                );
-              }
+    const accessToken = mapboxgl.accessToken;
 
-              if (municipalityResult && municipalityResult.geometry.bounds) {
-                console.log('Found municipality with bounds:', municipalityResult.formatted_address);
-                const center = municipalityResult.geometry.location;
-                mapInstance.panTo(center);
-                setTimeout(() => {
-                  mapInstance.fitBounds(municipalityResult!.geometry.bounds!);
-                }, 300);
-              } else if (municipalityResult && municipalityResult.geometry.viewport) {
-                console.log('Found municipality with viewport:', municipalityResult.formatted_address);
-                const center = municipalityResult.geometry.location;
-                mapInstance.panTo(center);
-                setTimeout(() => {
-                  mapInstance.fitBounds(municipalityResult!.geometry.viewport!);
-                }, 300);
-              } else {
-                // Fallback: just pan to user location with city-level zoom
-                console.log('No municipality bounds found, using fallback zoom');
-                mapInstance.panTo(userPos);
-                setTimeout(() => {
-                  mapInstance.setZoom(13);
-                }, 300);
-              }
-            } else {
-              // Geocoding failed, fallback to simple zoom
-              console.warn('Geocoding failed, using fallback zoom. Status:', status);
-              mapInstance.panTo(userPos);
-              setTimeout(() => {
-                mapInstance.setZoom(13);
-              }, 300);
-            }
-          });
-        } catch (error) {
-          // Geocoder not available (API not enabled), fallback to simple zoom
-          console.warn('Geocoding API not available, using fallback zoom:', error);
-          mapInstance.panTo(userPos);
-          setTimeout(() => {
-            mapInstance.setZoom(13);
-          }, 300);
+    try {
+      const position = await getCurrentPosition();
+      
+      const userPos = {
+        lng: position.coords.longitude,
+        lat: position.coords.latitude,
+      };
+      
+      console.log('Got position for city zoom:', userPos);
+
+      try {
+        const response = await fetch(
+          `${MAPBOX_GEOCODING_URL}/${userPos.lng},${userPos.lat}.json?types=place,locality&access_token=${accessToken}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Geocoding failed: ${response.status}`);
         }
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        alert("Could not access your location. Please check browser permissions.");
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  }, [mapInstance]);
+
+        const data: GeocodingResponse = await response.json();
+        console.log('Geocoding results:', data.features.length);
+
+        const municipality = data.features.find(f => 
+          f.place_type.includes('place') || f.place_type.includes('locality')
+        );
+
+        if (municipality && municipality.bbox) {
+          console.log('Found municipality with bounds:', municipality.place_name);
+          
+          const bounds: [[number, number], [number, number]] = [
+            [municipality.bbox[0], municipality.bbox[1]],
+            [municipality.bbox[2], municipality.bbox[3]]
+          ];
+
+          mapInstance.flyTo({
+            center: municipality.center,
+            duration: 500
+          });
+
+          setTimeout(() => {
+            mapInstance.fitBounds(bounds, {
+              padding: 50,
+              duration: 1000
+            });
+          }, 500);
+        } else if (municipality) {
+          console.log('Found municipality without bounds:', municipality.place_name);
+          mapInstance.flyTo({
+            center: municipality.center,
+            zoom: 13,
+            duration: 1500
+          });
+        } else {
+          console.log('No municipality found, using fallback zoom');
+          mapInstance.flyTo({
+            center: [userPos.lng, userPos.lat],
+            zoom: 13,
+            duration: 1500
+          });
+        }
+      } catch (geocodeError) {
+        console.warn('Geocoding API error, using fallback zoom:', geocodeError);
+        mapInstance.flyTo({
+          center: [userPos.lng, userPos.lat],
+          zoom: 13,
+          duration: 1500
+        });
+      }
+    } catch (error: any) {
+      console.error('Location error:', error);
+      alert(error.message || 'Could not access your location. Please check browser permissions.');
+    } finally {
+      setIsLocating(false);
+    }
+  }, [mapInstance, isLocating]);
 
   return {
     mapInstance,
     currentMapCenter,
     mapType,
+    isLocating,
     handleMapLoad,
     handleToggleMapType,
     handleLocateMe,

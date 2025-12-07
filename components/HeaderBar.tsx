@@ -99,6 +99,19 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const [openMaps, setOpenMaps] = useState<Record<string, boolean>>({});
   const [searchOpenKey, setSearchOpenKey] = useState(0);
   const [searchAnimating, setSearchAnimating] = useState(false);
+  
+  // Glow border animation state - detect mobile for CSS class
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile on mount
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.matchMedia('(max-width: 768px)').matches || 'ontouchstart' in window);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Trigger animation when search opens
   useEffect(() => {
@@ -190,52 +203,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   };
 
   const categorizedResults = useMemo(() => {
-    // For admin: show all maps categorized by owner
-    // For normal user: "My Maps" (owned) vs "Other Maps" (joined/demo)
-    // For guest: just demo map
-    
-    if (isAdmin) {
-      // Admin view: Group ALL maps - "My Maps" for admin's own maps, "Other Maps" for everyone else's
-      const myDefault = searchResults.filter(g => 
-        currentUserUid && g.map.ownerUid === currentUserUid && g.map.isDefault
-      );
-      const myShared = searchResults.filter(g => 
-        currentUserUid && g.map.ownerUid === currentUserUid && !g.map.isDefault
-      );
-      
-      // For admin, "Other Maps" includes ALL other users' maps (both default and shared)
-      const otherUsersDefault = searchResults.filter(g => 
-        g.map.ownerUid !== currentUserUid && g.map.isDefault
-      );
-      const otherUsersShared = searchResults.filter(g => 
-        g.map.ownerUid !== currentUserUid && !g.map.isDefault
-      );
-      
-      const sections = [
-        { key: 'my-default', label: 'My Default Map', items: myDefault, isMyMaps: true },
-        { key: 'my-shared', label: 'My Shared Maps', items: myShared, isMyMaps: true },
-        { key: 'other-default', label: "Users' Default Maps", items: otherUsersDefault, isMyMaps: false },
-        { key: 'other-shared', label: "Users' Shared Maps", items: otherUsersShared, isMyMaps: false }
-      ].filter(section => section.items.length > 0);
-
-      const myMaps = sections.filter(s => s.isMyMaps);
-      const otherMaps = sections.filter(s => !s.isMyMaps);
-      
-      return { sections, myMaps, otherMaps };
-    }
-    
-    // For guest: everything goes to "Demo Maps"
-    if (isGuest) {
-      const demoMaps = searchResults.filter(g => g.map.visibility === 'public');
-      
-      const sections = [
-        { key: 'demo', label: 'Demo Maps', items: demoMaps, isMyMaps: false }
-      ].filter(section => section.items.length > 0);
-      
-      return { sections, myMaps: [], otherMaps: sections };
-    }
-    
-    // For normal users: My Maps (default + shared I created) vs Other Maps (joined)
+    // My Maps
     const myDefault = searchResults.filter(g => 
       currentUserUid && g.map.ownerUid === currentUserUid && g.map.isDefault
     );
@@ -243,15 +211,19 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       currentUserUid && g.map.ownerUid === currentUserUid && !g.map.isDefault
     );
     
-    // Maps I joined (not owned by me)
-    const joinedMaps = searchResults.filter(g => 
-      g.map.ownerUid !== currentUserUid && g.map.visibility === 'shared'
+    // Other Maps - separate demo (public) from other users' shared
+    const demoMaps = searchResults.filter(g => 
+      g.map.ownerUid !== currentUserUid && g.map.visibility === 'public'
+    );
+    const otherUserMaps = searchResults.filter(g => 
+      g.map.ownerUid !== currentUserUid && g.map.visibility !== 'public'
     );
 
     const sections = [
       { key: 'my-default', label: 'My Default Map', items: myDefault, isMyMaps: true },
       { key: 'my-shared', label: 'My Shared Maps', items: myShared, isMyMaps: true },
-      { key: 'joined', label: 'Joined Maps', items: joinedMaps, isMyMaps: false }
+      { key: 'demo', label: 'Demo Maps', items: demoMaps, isMyMaps: false },
+      { key: 'other-users', label: "Other Users' Maps", items: otherUserMaps, isMyMaps: false }
     ].filter(section => section.items.length > 0);
 
     // Group into categories
@@ -259,7 +231,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     const otherMaps = sections.filter(s => !s.isMyMaps);
     
     return { sections, myMaps, otherMaps };
-  }, [searchResults, currentUserUid, isAdmin, isGuest]);
+  }, [searchResults, currentUserUid]);
 
   const adminAura = useMemo(() => isAdmin ? 'shadow-[0_0_0_1px_rgba(148,163,255,0.35)] ring-1 ring-indigo-400/40 bg-gradient-to-r from-gray-800/90 via-gray-800/80 to-gray-900/90' : '', [isAdmin]);
   const adminGlow = isAdmin ? 'shadow-[0_12px_40px_-18px_rgba(99,102,241,0.45)]' : '';
@@ -285,7 +257,132 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   };
 
   return (
-    <div data-component="header-bar" className={`w-full bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 ${adminAura} ${adminGlow}`}>
+    <div 
+      data-component="header-bar" 
+      className={`w-full relative pointer-events-auto transition-all duration-200 focus-within:ring-2 focus-within:ring-blue-500 ${adminGlow}`}
+    >
+      {/* Animated glow border - CSS animation approach for reliability */}
+      <style>{`
+        @keyframes headerGlowRotate {
+          0%, 25% { transform: translate(-50%, -50%) rotate(0deg); }
+          50% { transform: translate(-50%, -50%) rotate(180deg); }
+          50.1%, 75% { transform: translate(-50%, -50%) rotate(180deg); }
+          100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        .header-glow-mobile .glow-spinner {
+          animation: headerGlowRotate 6s ease-in-out infinite;
+        }
+        .header-glow-desktop .glow-spinner {
+          transform: translate(-50%, -50%) rotate(0deg);
+          transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .header-glow-desktop:hover .glow-spinner {
+          transform: translate(-50%, -50%) rotate(180deg);
+        }
+        
+        /* Animated TraceBook title - reversed: dark base, blue fill */
+        .header-title-animated {
+          position: relative;
+          display: inline-block;
+        }
+        .header-title-base {
+          color: #4b5563;
+          letter-spacing: 1px;
+        }
+        .header-title-glow {
+          position: absolute;
+          top: 0;
+          left: 0;
+          color: #60a5fa;
+          letter-spacing: 1px;
+          width: 0%;
+          overflow: hidden;
+          white-space: nowrap;
+          text-shadow: 0 0 10px rgba(96, 165, 250, 0.5);
+          transition: width 0.5s ease-out;
+        }
+        .header-title-animated:hover .header-title-glow {
+          width: 100%;
+          filter: drop-shadow(0 0 8px #60a5fa);
+        }
+        /* Mobile: auto-animate */
+        @media (max-width: 768px) {
+          @keyframes headerTitleFill {
+            0%, 20% { width: 0%; }
+            50%, 70% { width: 100%; filter: drop-shadow(0 0 8px #60a5fa); }
+            90%, 100% { width: 0%; }
+          }
+          .header-title-glow {
+            animation: headerTitleFill 5s ease-in-out infinite;
+          }
+        }
+      `}</style>
+      
+      <div
+        className={`absolute -inset-[3px] rounded-[14px] pointer-events-none z-0 ${isMobile ? 'header-glow-mobile' : 'header-glow-desktop'}`}
+        style={{
+          opacity: 1,
+        }}
+      >
+        {/* Outer soft glow */}
+        <div
+          className="absolute inset-0 rounded-[14px] overflow-hidden"
+          style={{ filter: 'blur(8px)', opacity: 0.7 }}
+        >
+          <div
+            className="glow-spinner"
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              width: '600px',
+              height: '600px',
+              backgroundImage: `conic-gradient(
+                transparent 0%,
+                #6366f1 3%,
+                #8b5cf6 6%,
+                transparent 12%,
+                transparent 45%,
+                #ec4899 48%,
+                #f472b6 51%,
+                transparent 57%,
+                transparent 100%
+              )`,
+            }}
+          />
+        </div>
+        
+        {/* Sharp border glow */}
+        <div
+          className="absolute inset-0 rounded-[14px] overflow-hidden"
+          style={{ filter: 'blur(1px)' }}
+        >
+          <div
+            className="glow-spinner"
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              width: '600px',
+              height: '600px',
+              backgroundImage: `conic-gradient(
+                #1f2937 0%,
+                #818cf8 2%,
+                #a78bfa 5%,
+                #1f2937 10%,
+                #1f2937 45%,
+                #f472b6 48%,
+                #fb7185 51%,
+                #1f2937 56%,
+                #1f2937 100%
+              )`,
+            }}
+          />
+        </div>
+      </div>
+      
+      {/* Main content container */}
+      <div className={`relative z-10 bg-gray-800/90 backdrop-blur border border-gray-700 p-2 rounded-xl shadow-lg ${adminAura}`}>
           <div className="flex items-center gap-2 relative min-h-[40px]">
             {/* Hamburger Menu Button - Wider touch target */}
         <button
@@ -324,7 +421,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             }}
           >
             <img src="/logo.svg" className="w-7 h-7 object-contain" alt="Logo" />
-            <span className="font-bold truncate">TraceBook</span>
+            <span className="font-bold truncate header-title-animated">
+              <span className="header-title-base">TraceBook</span>
+              <span className="header-title-glow" aria-hidden="true">TraceBook</span>
+            </span>
           </div>
 
           {/* Search Input Container - always in DOM, animated visibility */}
@@ -449,7 +549,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             }}
           ></div>
           <div
-            className="mt-2 border-t border-gray-700 pt-2 max-h-[60vh] overflow-y-auto rounded-lg bg-gray-800/80 backdrop-blur-md relative z-20"
+            className="mt-2 border-t border-gray-700 pt-2 max-h-72 overflow-y-scroll rounded-lg bg-gray-800/80 backdrop-blur-md relative z-20"
             style={{ 
               scrollbarGutter: 'stable',
               willChange: 'opacity, transform',
@@ -505,11 +605,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                                   <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                                 </div>
                               </button>
-                              <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-[40vh] opacity-100' : 'max-h-0 opacity-0'}`}>
-                                <div 
-                                  className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pb-1 overflow-y-auto"
-                                  style={{ maxHeight: 'calc(40vh - 20px)', scrollbarGutter: 'stable', paddingRight: '4px' }}
-                                >
+                              <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                <div className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pr-1 pb-1">
                                   {group.matches.map(r => (
                                     <button
                                       key={r.id}
@@ -567,11 +664,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                                   <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                                 </div>
                               </button>
-                              <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-[40vh] opacity-100' : 'max-h-0 opacity-0'}`}>
-                                <div 
-                                  className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pb-1 overflow-y-auto"
-                                  style={{ maxHeight: 'calc(40vh - 20px)', scrollbarGutter: 'stable', paddingRight: '4px' }}
-                                >
+                              <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                <div className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pr-1 pb-1">
                                   {group.matches.map(r => (
                                     <button
                                       key={r.id}
@@ -632,6 +726,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </div>
         </>
       )}
+      </div>
     </div>
   );
 };

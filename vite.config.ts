@@ -1,35 +1,45 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig(({ mode }) => {
-  // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, (process as any).cwd(), '');
-  
-  // Ensure apiKey is a string to prevent JSON.stringify(undefined) which can break variable replacement
   const apiKey = env.API_KEY || '';
 
   return {
     plugins: [react()],
-    // Define global constants to replace process.env.API_KEY in the client code
     define: {
       'process.env.API_KEY': JSON.stringify(apiKey)
+    },
+    // Fix Vite cache issues - disable dep optimization caching
+    optimizeDeps: {
+      force: true,
+      esbuildOptions: {
+        target: 'esnext'
+      }
     },
     server: {
       host: true,
       port: 5173,
-      strictPort: false, // Allow fallback to another port if 5173 is busy
+      strictPort: false,
       hmr: {
         overlay: true,
-        timeout: 5000, // Increase timeout for slower connections
+        timeout: 5000,
       },
       headers: {
         'Cache-Control': 'no-store',
+      },
+      // Clear cache on server start
+      fs: {
+        strict: false,
       },
     },
     build: {
       outDir: 'dist',
       chunkSizeWarningLimit: 1600,
-    }
+      target: 'esnext',
+    },
+    // Use absolute path for cache to avoid OneDrive issues
+    cacheDir: path.resolve(__dirname, '.vite'),
   };
 });

@@ -7,7 +7,7 @@ interface InfoModalProps {
   onClose: () => void;
 }
 
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 
 interface VersionNote {
   version: string;
@@ -19,6 +19,24 @@ interface VersionNote {
 }
 
 const VERSION_HISTORY: VersionNote[] = [
+  {
+    version: '0.3.0',
+    date: '2026-01',
+    title: 'Mapbox Era',
+    titleZh: 'Mapbox æ—¶ä»£',
+    notes: [
+      'Switched map provider from Google Maps to Mapbox GL',
+      'Improved marker/cluster stability and layering',
+      'Desktop right-click drag now adjusts map tilt/rotation',
+      'Friendlier errors when Foursquare autocomplete lacks an API key'
+    ],
+    notesZh: [
+      'å°†åœ°å›¾æä¾›å•†ä»Ž Google Maps åˆ‡æ¢åˆ° Mapbox GL',
+      'æ ‡è®°/èšåˆç¨³å®šæ€§å’Œå±‚çº§æ´ä¼˜',
+      'æ¡Œé¢å³é”®æ‹–æ‹½å¯è°ƒæ•´åœ°å›¾æŠ˜å æœä½œç’°',
+      'Foursquare æœç´¢åœ°æœå­˜åœ¨ API key æ—¶çš„é”™è¯¯æ›´å‹å¥½'
+    ]
+  },
   {
     version: '0.2.0',
     date: '2025-12',

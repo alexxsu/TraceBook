@@ -1,3 +1,10 @@
+/**
+ * TraceBook Types - Mapbox GL Version
+ * 
+ * This file contains type definitions for the app.
+ * Google Maps types have been removed in favor of Mapbox GL JS types.
+ * Import mapbox-gl types directly where needed: import mapboxgl from 'mapbox-gl';
+ */
 
 export interface Coordinates {
   lat: number;
@@ -17,7 +24,7 @@ export interface Visit {
 }
 
 export interface Place {
-  id: string; // Google Place ID or internal ID
+  id: string; // Place ID (Foursquare fsq_id or internal ID)
   name: string;
   address: string;
   location: Coordinates;
@@ -37,252 +44,25 @@ export interface UserProfile {
   joinedMaps?: string[]; // Array of map IDs user has joined
 }
 
-// Global declaration for Google Maps
-declare global {
-  namespace google {
-    namespace maps {
-      // Core Map Class
-      class Map {
-        constructor(mapDiv: Element | null, opts?: MapOptions);
-        setCenter(latLng: LatLng | LatLngLiteral): void;
-        getCenter(): LatLng;
-        setZoom(zoom: number): void;
-        getZoom(): number;
-        panTo(latLng: LatLng | LatLngLiteral): void;
-        fitBounds(bounds: LatLngBounds | LatLngBoundsLiteral, padding?: number | Padding): void;
-        addListener(eventName: string, handler: Function): MapsEventListener;
-        setMapTypeId(mapTypeId: string): void;
-        setOptions(options: MapOptions): void;
-      }
-
-      class LatLng {
-        constructor(lat: number, lng: number);
-        lat(): number;
-        lng(): number;
-      }
-
-      class LatLngBounds {
-        constructor(sw?: LatLng | LatLngLiteral, ne?: LatLng | LatLngLiteral);
-        extend(point: LatLng | LatLngLiteral): LatLngBounds;
-      }
-
-      // OverlayView for custom overlays
-      class OverlayView {
-        setMap(map: Map | null): void;
-        getMap(): Map | null;
-        getPanes(): MapPanes | null;
-        getProjection(): MapCanvasProjection | null;
-        onAdd(): void;
-        draw(): void;
-        onRemove(): void;
-      }
-
-      interface MapPanes {
-        floatPane: Element;
-        mapPane: Element;
-        markerLayer: Element;
-        overlayLayer: Element;
-        overlayMouseTarget: Element;
-      }
-
-      interface MapCanvasProjection {
-        fromLatLngToDivPixel(latLng: LatLng | LatLngLiteral): Point | null;
-        fromDivPixelToLatLng(pixel: Point): LatLng | null;
-      }
-
-      interface Point {
-        x: number;
-        y: number;
-      }
-
-      // Circle class
-      class Circle {
-        constructor(options?: CircleOptions);
-        setMap(map: Map | null): void;
-        setOptions(options: CircleOptions): void;
-      }
-
-      interface CircleOptions {
-        center?: LatLng | LatLngLiteral;
-        radius?: number;
-        strokeColor?: string;
-        strokeOpacity?: number;
-        strokeWeight?: number;
-        fillColor?: string;
-        fillOpacity?: number;
-        map?: Map;
-        clickable?: boolean;
-      }
-
-      // Modern Library Import
-      function importLibrary(libraryName: string): Promise<any>;
-
-      // Options
-      interface MapOptions {
-        center?: LatLngLiteral;
-        zoom?: number;
-        mapId?: string; // Required for AdvancedMarkerElement
-        mapTypeId?: string;
-        disableDefaultUI?: boolean;
-        mapTypeControl?: boolean;
-        streetViewControl?: boolean;
-        zoomControl?: boolean;
-        fullscreenControl?: boolean;
-        rotateControl?: boolean;
-        scaleControl?: boolean;
-        styles?: any[];
-        gestureHandling?: string;
-        tilt?: number;
-      }
-
-      // Coordinates
-      interface LatLngLiteral {
-        lat: number;
-        lng: number;
-      }
-      interface LatLngBoundsLiteral {
-          east: number;
-          north: number;
-          south: number;
-          west: number;
-      }
-      interface Padding {
-          bottom: number;
-          left: number;
-          right: number;
-          top: number;
-      }
-
-      // Events
-      interface MapsEventListener {
-        remove(): void;
-      }
-
-      // Marker Library (AdvancedMarkerElement)
-      namespace marker {
-        class AdvancedMarkerElement {
-          constructor(options: AdvancedMarkerElementOptions);
-          map: google.maps.Map | null;
-          position: LatLngLiteral | LatLng | null;
-          content: Element | null;
-          title: string;
-          addListener(eventName: string, handler: Function): MapsEventListener;
-        }
-        
-        class PinElement {
-          constructor(options: PinElementOptions);
-          element: Element;
-        }
-
-        interface AdvancedMarkerElementOptions {
-          map?: google.maps.Map | null;
-          position?: LatLngLiteral | LatLng | null;
-          content?: Element | null;
-          title?: string;
-          gmpClickable?: boolean;
-        }
-
-        interface PinElementOptions {
-          background?: string;
-          borderColor?: string;
-          glyph?: string | Element;
-          scale?: number;
-        }
-      }
-
-      // Legacy & Utilities
-      namespace Animation {
-        const DROP: any;
-        const BOUNCE: any;
-      }
-
-      // Geocoder
-      class Geocoder {
-        constructor();
-        geocode(
-          request: GeocoderRequest,
-          callback: (results: GeocoderResult[] | null, status: GeocoderStatus) => void
-        ): void;
-      }
-
-      interface GeocoderRequest {
-        address?: string;
-        location?: LatLng | LatLngLiteral;
-        placeId?: string;
-        bounds?: LatLngBounds | LatLngBoundsLiteral;
-        componentRestrictions?: any;
-        region?: string;
-      }
-
-      interface GeocoderResult {
-        address_components: any[];
-        formatted_address: string;
-        geometry: GeocoderGeometry;
-        place_id: string;
-        types: string[];
-      }
-
-      interface GeocoderGeometry {
-        location: LatLng;
-        location_type: string;
-        viewport: LatLngBounds;
-        bounds?: LatLngBounds;
-      }
-
-      type GeocoderStatus = 'OK' | 'ZERO_RESULTS' | 'OVER_QUERY_LIMIT' | 'REQUEST_DENIED' | 'INVALID_REQUEST' | 'UNKNOWN_ERROR' | 'ERROR';
-
-      // Places Library
-      namespace places {
-        class PlacesService {
-          constructor(attrContainer: any);
-          nearbySearch(request: any, callback: (results: PlaceResult[] | null, status: PlacesServiceStatus) => void): void;
-          getDetails(request: any, callback: (place: PlaceResult | null, status: PlacesServiceStatus) => void): void;
-        }
-        class AutocompleteService {
-          getPlacePredictions(request: any, callback: (predictions: any[] | null, status: PlacesServiceStatus) => void): void;
-        }
-        interface PlaceResult {
-          place_id?: string;
-          name?: string;
-          vicinity?: string;
-          geometry?: {
-            location: LatLng;
-          };
-        }
-        enum PlacesServiceStatus {
-          OK = 'OK',
-          ZERO_RESULTS = 'ZERO_RESULTS',
-        }
-      }
-      
-      // Interface for Library Returns (to handle casting)
-      interface MapsLibrary {
-        Map: typeof google.maps.Map;
-        LatLngBounds: typeof google.maps.LatLngBounds;
-      }
-      interface MarkerLibrary {
-        AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement;
-        PinElement: typeof google.maps.marker.PinElement;
-      }
-      interface PlacesLibrary {
-        PlacesService: typeof google.maps.places.PlacesService;
-        AutocompleteService: typeof google.maps.places.AutocompleteService;
-        PlacesServiceStatus: typeof google.maps.places.PlacesServiceStatus;
-      }
-    }
-  }
-
-  interface Window {
-    google: typeof google;
-  }
+/**
+ * PlaceResult - Compatible type for place search results
+ * Works with both Foursquare and Mapbox Geocoding APIs
+ */
+export interface PlaceResult {
+  place_id?: string;
+  name?: string;
+  vicinity?: string;
+  geometry?: {
+    location: {
+      lat: () => number;
+      lng: () => number;
+    };
+  };
+  // Optional additional fields
+  types?: string[];
+  icon?: string;
+  distance?: number;
 }
-
-export type GoogleMap = google.maps.Map;
-export type PlacesService = google.maps.places.PlacesService;
-export type AutocompleteService = google.maps.places.AutocompleteService;
-export type PlaceResult = google.maps.places.PlaceResult;
-
-
 
 export interface MapMember {
   uid: string;
@@ -345,3 +125,10 @@ export enum ViewState {
   MAP_MANAGEMENT = 'MAP_MANAGEMENT',
   SITE_MANAGEMENT = 'SITE_MANAGEMENT',
 }
+
+/**
+ * Type alias for Mapbox Map instance
+ * Use: import mapboxgl from 'mapbox-gl'; 
+ *      const map: MapboxMap = new mapboxgl.Map({...})
+ */
+export type MapboxMap = import('mapbox-gl').Map;

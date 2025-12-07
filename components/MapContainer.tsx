@@ -1,93 +1,50 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import mapboxgl from 'mapbox-gl';
+import Supercluster from 'supercluster';
 import { Place } from '../types';
 
+// Import Mapbox CSS in your index.html or here
+import 'mapbox-gl/dist/mapbox-gl.css';
+
 interface MapContainerProps {
-  apiKey: string;
+  accessToken: string;
   places: Place[];
   onMarkerClick: (place: Place) => void;
-  onMapLoad: (map: google.maps.Map) => void;
+  onMapLoad: (map: mapboxgl.Map) => void;
   onMapClick?: () => void;
   mapType?: 'satellite' | 'roadmap' | 'dark';
 }
 
-const DEFAULT_CENTER = { lat: 43.6532, lng: -79.3832 };
+const DEFAULT_CENTER: [number, number] = [-79.3832, 43.6532]; // [lng, lat] for Mapbox
 
-// Dark mode styles
-const DARK_MODE_STYLES: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#1d2c4d" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
-  { featureType: "administrative.country", elementType: "geometry.stroke", stylers: [{ color: "#4b6878" }] },
-  { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#64779e" }] },
-  { featureType: "administrative.province", elementType: "geometry.stroke", stylers: [{ color: "#4b6878" }] },
-  { featureType: "landscape.man_made", elementType: "geometry.stroke", stylers: [{ color: "#334e87" }] },
-  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#023e58" }] },
-  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#283d6a" }] },
-  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6f9ba5" }] },
-  { featureType: "poi", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
-  { featureType: "poi.park", elementType: "geometry.fill", stylers: [{ color: "#023e58" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#3C7680" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#304a7d" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#98a5be" }] },
-  { featureType: "road", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2c6675" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#255763" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#b0d5ce" }] },
-  { featureType: "road.highway", elementType: "labels.text.stroke", stylers: [{ color: "#023e58" }] },
-  { featureType: "transit", elementType: "labels.text.fill", stylers: [{ color: "#98a5be" }] },
-  { featureType: "transit", elementType: "labels.text.stroke", stylers: [{ color: "#1d2c4d" }] },
-  { featureType: "transit.line", elementType: "geometry.fill", stylers: [{ color: "#283d6a" }] },
-  { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#3a4762" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6d70" }] },
-];
-
-const EXPLORED_RADIUS = 300;
-
-const getCircleStyle = (isDarkMode: boolean, isSatellite: boolean) => {
-  if (isDarkMode) {
-    return {
-      fillColor: '#6366f1',
-      fillOpacity: 0.08,
-      strokeColor: '#818cf8',
-      strokeOpacity: 0.15,
-      strokeWeight: 1,
-    };
-  } else if (isSatellite) {
-    return {
-      fillColor: '#fbbf24',
-      fillOpacity: 0.1,
-      strokeColor: '#f59e0b',
-      strokeOpacity: 0.2,
-      strokeWeight: 1,
-    };
-  } else {
-    return {
-      fillColor: '#3b82f6',
-      fillOpacity: 0.06,
-      strokeColor: '#60a5fa',
-      strokeOpacity: 0.15,
-      strokeWeight: 1,
-    };
-  }
+// Mapbox style URLs
+const MAP_STYLES = {
+  satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
+  roadmap: 'mapbox://styles/mapbox/streets-v12',
+  dark: 'mapbox://styles/mapbox/dark-v11',
 };
 
+const EXPLORED_RADIUS = 300; // meters
+
 // Zoom-based scaling configuration
-// Markers stay at base size until zoomed out past threshold, then grow larger
 const ZOOM_SCALE_CONFIG = {
-  baseZoom: 14,       // Markers stay at base size above this zoom (when zoomed in)
-  maxScaleZoom: 6,    // Markers reach max size at this zoom (when fully zoomed out)
-  baseScale: 1.0,     // Base size when zoomed in (no scaling)
-  maxScale: 1.25,     // Maximum size when fully zoomed out (reduced from 1.5)
+  baseZoom: 14,
+  maxScaleZoom: 6,
+  baseScale: 1.0,
+  maxScale: 1.25,
 };
 
 // Clustering configuration
 const CLUSTER_CONFIG = {
-  gridSize: 90,          // Pixel grid size for clustering
-  minZoomForClustering: 15, // Start clustering below this zoom
-  maxPhotosInCluster: 4, // Max photos to show in cluster stack
-  transitionDuration: 450, // Animation duration in ms (slower transition)
+  radius: 60,
+  minZoom: 0,
+  maxZoom: 14,
+  minPoints: 2,
 };
+
+// Buffer multiplier for pre-loading markers outside visible bounds
+// 0.5 = 50% extra on each side, so total area is 2x2 = 4x the visible area
+const BOUNDS_BUFFER = 0.5;
 
 // Smooth easing function for scale interpolation
 const easeOutCubic = (t: number): number => {
@@ -96,261 +53,98 @@ const easeOutCubic = (t: number): number => {
 
 const getScaleForZoom = (zoom: number): number => {
   const { baseZoom, maxScaleZoom, baseScale, maxScale } = ZOOM_SCALE_CONFIG;
-  // Stay at base size when zoomed in (above threshold)
   if (zoom >= baseZoom) return baseScale;
-  // Max size when fully zoomed out
   if (zoom <= maxScaleZoom) return maxScale;
-  // Smooth interpolation using easing function
   const linearRatio = (baseZoom - zoom) / (baseZoom - maxScaleZoom);
   const easedRatio = easeOutCubic(linearRatio);
   return baseScale + easedRatio * (maxScale - baseScale);
 };
 
-// Create cluster element with stacked photos
-const createClusterElement = (
-  places: Place[],
-  onClick: () => void,
-  scale: number = 1
-): HTMLDivElement => {
-  const container = document.createElement('div');
-  container.style.cssText = `
-    position: absolute;
-    transform: translate(-50%, -100%) scale(${scale});
-    transform-origin: bottom center;
-    cursor: pointer;
-    z-index: 10;
-    transition: transform 0.2s ease-out, opacity ${CLUSTER_CONFIG.transitionDuration}ms ease-out;
-    opacity: 0;
-  `;
-  container.dataset.baseScale = String(scale);
+const getCircleStyle = (isDarkMode: boolean, isSatellite: boolean) => {
+  if (isDarkMode) {
+    return {
+      fillColor: 'rgba(99, 102, 241, 0.08)',
+      strokeColor: 'rgba(129, 140, 248, 0.15)',
+    };
+  } else if (isSatellite) {
+    return {
+      fillColor: 'rgba(251, 191, 36, 0.1)',
+      strokeColor: 'rgba(245, 158, 11, 0.2)',
+    };
+  } else {
+    return {
+      fillColor: 'rgba(59, 130, 246, 0.06)',
+      strokeColor: 'rgba(96, 165, 250, 0.15)',
+    };
+  }
+};
 
-  // Animate in after a brief delay
+// Keep Mapbox positioning transform intact; scale only the inner content
+const setMarkerScale = (el: HTMLElement | null, scale: number) => {
+  if (!el) return;
+  const content = el.querySelector<HTMLElement>('.mapbox-marker-content');
+  if (content) {
+    content.dataset.baseScale = String(scale);
+    content.style.transform = `scale(${scale})`;
+  }
+};
+
+const setClusterScale = (el: HTMLElement | null, scale: number) => {
+  if (!el) return;
+  const content = el.querySelector<HTMLElement>('.mapbox-cluster-content');
+  if (content) {
+    content.dataset.baseScale = String(scale);
+    content.style.transform = `scale(${scale})`;
+  }
+};
+
+// Generate stable cluster ID based on member place IDs (sorted for consistency)
+const generateStableClusterId = (placeIds: string[]): string => {
+  return `cluster-${[...placeIds].sort().join('-').substring(0, 100)}`;
+};
+
+// Create HTML element for single place marker with CSS transitions
+const createPinElement = (place: Place, scale: number = 1): HTMLDivElement => {
+  const container = document.createElement('div');
+  container.className = 'mapbox-place-marker';
+  container.style.cssText = `
+    cursor: pointer;
+    z-index: 1;
+    pointer-events: auto;
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+  `;
+  container.dataset.placeId = place.id;
+  
+  // Trigger fade-in after a microtask to ensure the transition works
   requestAnimationFrame(() => {
     container.style.opacity = '1';
   });
 
-  // Collect photos from all places
-  const photos: string[] = [];
-  for (const place of places) {
-    const visits = place.visits || [];
-    for (const visit of visits) {
-      const photoUrl = visit.photoDataUrl || visit.photos?.[0];
-      if (photoUrl && photos.length < CLUSTER_CONFIG.maxPhotosInCluster) {
-        photos.push(photoUrl);
-      }
-    }
-    if (photos.length >= CLUSTER_CONFIG.maxPhotosInCluster) break;
-  }
-
-  // Number of stacked cards based on place count (max 4 visible stacks)
-  const stackCount = Math.min(places.length, 4);
-  const totalCount = places.length;
-
-  // Generate stacked cards dynamically based on count
-  const generateStackedCards = () => {
-    let html = '';
-    
-    // Back cards (show based on stack count)
-    if (stackCount >= 4 && photos[3]) {
-      html += `
-        <div style="
-          position: absolute;
-          top: -2px;
-          left: 50%;
-          transform: translateX(-50%) rotate(18deg);
-          width: 50px;
-          height: 50px;
-          background: #fffef8;
-          border: 2px solid #d4c5a9;
-          border-radius: 6px;
-          overflow: hidden;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-        ">
-          <img src="${photos[3]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />
-        </div>
-      `;
-    }
-    
-    if (stackCount >= 3 && photos[2]) {
-      html += `
-        <div style="
-          position: absolute;
-          top: 2px;
-          left: 50%;
-          transform: translateX(-50%) rotate(12deg);
-          width: 52px;
-          height: 52px;
-          background: #fffef8;
-          border: 2px solid #d4c5a9;
-          border-radius: 7px;
-          overflow: hidden;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-        ">
-          <img src="${photos[2]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />
-        </div>
-      `;
-    }
-
-    if (stackCount >= 2 && photos[1]) {
-      html += `
-        <div style="
-          position: absolute;
-          top: 6px;
-          left: 50%;
-          transform: translateX(-50%) rotate(-6deg);
-          width: 56px;
-          height: 56px;
-          background: #fffef8;
-          border: 2px solid #d4c5a9;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        ">
-          <img src="${photos[1]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />
-        </div>
-      `;
-    }
-
-    return html;
-  };
-
-  // Create stacked photos cluster - sized to match individual markers for smooth transition
-  container.innerHTML = `
-    <div style="
-      position: relative;
-      width: 85px;
-      height: 100px;
-      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
-    ">
-      <!-- Dynamic stacked cards -->
-      ${generateStackedCards()}
-
-      <!-- Front card - same size as individual marker (65px) -->
-      <div style="
-        position: absolute;
-        top: 12px;
-        left: 50%;
-        transform: translateX(-50%) rotate(1deg);
-        width: 65px;
-        height: 65px;
-        background: #fffef8;
-        border: 3px solid #d4c5a9;
-        border-radius: 10px;
-        overflow: hidden;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-      ">
-        ${photos[0] ? `
-          <img src="${photos[0]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-          <div style="display:none;width:100%;height:100%;background:#f3f4f6;align-items:center;justify-content:center;font-size:24px;position:absolute;top:0;left:0;">🍽️</div>
-        ` : `
-          <div style="width:100%;height:100%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:24px;">🍽️</div>
-        `}
-      </div>
-
-      <!-- Count badge -->
-      ${totalCount > 1 ? `
-        <div style="
-          position: absolute;
-          top: 8px;
-          right: 2px;
-          background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
-          color: white;
-          font-size: 11px;
-          font-weight: bold;
-          min-width: 20px;
-          height: 20px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 0 5px;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-          border: 2px solid rgba(255,255,255,0.9);
-          z-index: 10;
-        ">${totalCount}</div>
-      ` : ''}
-
-      <!-- Pointer/tail -->
-      <div style="
-        position: absolute;
-        bottom: 0;
-        left: 50%;
-        transform: translateX(-50%);
-      ">
-        <div style="
-          width: 0;
-          height: 0;
-          border-left: 10px solid transparent;
-          border-right: 10px solid transparent;
-          border-top: 12px solid #d4c5a9;
-        "></div>
-        <div style="
-          width: 0;
-          height: 0;
-          border-left: 7px solid transparent;
-          border-right: 7px solid transparent;
-          border-top: 9px solid #fffef8;
-          margin-top: -12px;
-          margin-left: 3px;
-        "></div>
-      </div>
-    </div>
-  `;
-
-  // Hover effect
-  container.addEventListener('mouseenter', () => {
-    const baseScale = parseFloat(container.dataset.baseScale || '1');
-    container.style.transform = `translate(-50%, -100%) scale(${baseScale * 1.1})`;
-    container.style.zIndex = '1000';
-  });
-  container.addEventListener('mouseleave', () => {
-    const baseScale = parseFloat(container.dataset.baseScale || '1');
-    container.style.transform = `translate(-50%, -100%) scale(${baseScale})`;
-    container.style.zIndex = '10';
-  });
-
-  container.addEventListener('click', (e) => {
-    e.stopPropagation();
-    onClick();
-  });
-
-  return container;
-};
-
-// Create HTML element for custom pin
-const createPinElement = (place: Place, onClick: () => void, scale: number = 1): HTMLDivElement => {
-  const container = document.createElement('div');
-  container.style.cssText = `
-    position: absolute;
-    transform: translate(-50%, -100%) scale(${scale});
+  const content = document.createElement('div');
+  content.className = 'mapbox-marker-content';
+  content.dataset.baseScale = String(scale);
+  content.style.cssText = `
+    transform: scale(${scale});
     transform-origin: bottom center;
-    cursor: pointer;
-    z-index: 1;
-    transition: transform 0.2s ease-out, opacity ${CLUSTER_CONFIG.transitionDuration}ms ease-out;
-    opacity: 1;
+    transition: transform 0.15s ease-out;
   `;
-  container.dataset.baseScale = String(scale);
 
-  // Get data from place
   const visits = place.visits || [];
   const hasMultiplePosts = visits.length >= 2;
-
-  // Get photos from visits
   const firstVisit = visits[0];
   const secondVisit = visits[1];
   const photoUrl1 = firstVisit?.photoDataUrl || firstVisit?.photos?.[0] || '';
   const photoUrl2 = secondVisit?.photoDataUrl || secondVisit?.photos?.[0] || '';
-  
+
   if (hasMultiplePosts) {
-    // Stacked cards design for 2+ posts - front card matches single marker size (65px)
-    container.innerHTML = `
+    content.innerHTML = `
       <div style="
         position: relative;
         width: 85px;
         height: 95px;
         filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
       ">
-        <!-- Back card (rotated) -->
         <div style="
           position: absolute;
           top: 0;
@@ -364,21 +158,10 @@ const createPinElement = (place: Place, onClick: () => void, scale: number = 1):
           overflow: hidden;
         ">
           ${photoUrl2 ? `
-            <img src="${photoUrl2}" style="
-              width: 100%;
-              height: 100%;
-              object-fit: cover;
-            " onerror="this.style.display='none';" />
-          ` : `
-            <div style="
-              width: 100%;
-              height: 100%;
-              background: #f3f4f6;
-            "></div>
-          `}
+            <img src="${photoUrl2}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none';" />
+          ` : `<div style="width: 100%; height: 100%; background: #f3f4f6;"></div>`}
         </div>
         
-        <!-- Front card - same size as single marker (65px) -->
         <div style="
           position: absolute;
           top: 8px;
@@ -393,71 +176,24 @@ const createPinElement = (place: Place, onClick: () => void, scale: number = 1):
           box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         ">
           ${photoUrl1 ? `
-            <img src="${photoUrl1}" style="
-              width: 100%;
-              height: 100%;
-              object-fit: cover;
-            " onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-            <div style="
-              display: none;
-              width: 100%;
-              height: 100%;
-              background: #f3f4f6;
-              align-items: center;
-              justify-content: center;
-              font-size: 24px;
-              position: absolute;
-              top: 0;
-              left: 0;
-            ">🍽️</div>
-          ` : `
-            <div style="
-              width: 100%;
-              height: 100%;
-              background: #f3f4f6;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 24px;
-            ">🍽️</div>
-          `}
+            <img src="${photoUrl1}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+            <div style="display: none; width: 100%; height: 100%; background: #f3f4f6; align-items: center; justify-content: center; font-size: 24px; position: absolute; top: 0; left: 0;">📍</div>
+          ` : `<div style="width: 100%; height: 100%; background: #f3f4f6; display: flex; align-items: center; justify-content: center; font-size: 24px;">📍</div>`}
         </div>
         
-        <!-- Pointer/tail -->
-        <div style="
-          position: absolute;
-          bottom: 0;
-          left: 50%;
-          transform: translateX(-50%);
-        ">
-          <div style="
-            width: 0;
-            height: 0;
-            border-left: 10px solid transparent;
-            border-right: 10px solid transparent;
-            border-top: 12px solid #d4c5a9;
-          "></div>
-          <div style="
-            width: 0;
-            height: 0;
-            border-left: 7px solid transparent;
-            border-right: 7px solid transparent;
-            border-top: 9px solid #fffef8;
-            margin-top: -12px;
-            margin-left: 3px;
-          "></div>
+        <div style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);">
+          <div style="width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 12px solid #d4c5a9;"></div>
+          <div style="width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid #fffef8; margin-top: -12px; margin-left: 3px;"></div>
         </div>
       </div>
     `;
   } else {
-    // Single card design for 1 post
-    container.innerHTML = `
+    content.innerHTML = `
       <div style="
         position: relative;
         width: 65px;
         filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
       ">
-        <!-- Main card -->
         <div style="
           width: 65px;
           height: 65px;
@@ -467,634 +203,854 @@ const createPinElement = (place: Place, onClick: () => void, scale: number = 1):
           overflow: hidden;
           position: relative;
         ">
-          <!-- Photo -->
           ${photoUrl1 ? `
-            <img src="${photoUrl1}" style="
-              width: 100%;
-              height: 100%;
-              object-fit: cover;
-            " onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-            <div style="
-              display: none;
-              width: 100%;
-              height: 100%;
-              background: #f3f4f6;
-              align-items: center;
-              justify-content: center;
-              font-size: 24px;
-              position: absolute;
-              top: 0;
-              left: 0;
-            ">🍽️</div>
-          ` : `
-            <div style="
-              width: 100%;
-              height: 100%;
-              background: #f3f4f6;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 24px;
-            ">🍽️</div>
-          `}
+            <img src="${photoUrl1}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+            <div style="display: none; width: 100%; height: 100%; background: #f3f4f6; align-items: center; justify-content: center; font-size: 24px; position: absolute; top: 0; left: 0;">📍</div>
+          ` : `<div style="width: 100%; height: 100%; background: #f3f4f6; display: flex; align-items: center; justify-content: center; font-size: 24px;">📍</div>`}
         </div>
         
-        <!-- Pointer/tail -->
-        <div style="
-          width: 0;
-          height: 0;
-          border-left: 10px solid transparent;
-          border-right: 10px solid transparent;
-          border-top: 12px solid #d4c5a9;
-          margin: -1px auto 0;
-        "></div>
-        <div style="
-          width: 0;
-          height: 0;
-          border-left: 7px solid transparent;
-          border-right: 7px solid transparent;
-          border-top: 9px solid #fffef8;
-          margin: -12px auto 0;
-        "></div>
+        <div style="width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 12px solid #d4c5a9; margin: -1px auto 0;"></div>
+        <div style="width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid #fffef8; margin: -12px auto 0;"></div>
+      </div>
+    `;
+  }
+
+  // Hover effects
+  container.addEventListener('mouseenter', () => {
+    const baseScale = parseFloat(content.dataset.baseScale || '1');
+    content.style.transform = `scale(${baseScale * 1.15})`;
+    content.style.zIndex = '1000';
+  });
+  container.addEventListener('mouseleave', () => {
+    const baseScale = parseFloat(content.dataset.baseScale || '1');
+    content.style.transform = `scale(${baseScale})`;
+    content.style.zIndex = '1';
+  });
+
+  container.appendChild(content);
+  return container;
+};
+
+// Create cluster element with CSS transitions
+const createClusterElement = (
+  places: Place[],
+  scale: number = 1
+): HTMLDivElement => {
+  const container = document.createElement('div');
+  container.className = 'mapbox-cluster-marker';
+  container.style.cssText = `
+    cursor: pointer;
+    z-index: 1;
+    pointer-events: auto;
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+  `;
+  
+  // Trigger fade-in after a microtask to ensure the transition works
+  requestAnimationFrame(() => {
+    container.style.opacity = '1';
+  });
+  
+  const content = document.createElement('div');
+  content.className = 'mapbox-cluster-content';
+  content.dataset.baseScale = String(scale);
+  content.style.cssText = `
+    transform: scale(${scale});
+    transform-origin: bottom center;
+    transition: transform 0.15s ease-out;
+  `;
+
+  const photos: string[] = [];
+  for (const place of places) {
+    const visits = place.visits || [];
+    for (const visit of visits) {
+      const photoUrl = visit.photoDataUrl || visit.photos?.[0];
+      if (photoUrl && photos.length < 4) {
+        photos.push(photoUrl);
+      }
+    }
+    if (photos.length >= 4) break;
+  }
+
+  const stackCount = Math.min(places.length, 4);
+  const totalCount = places.length;
+
+  let stackedCards = '';
+  
+  if (stackCount >= 4 && photos[3]) {
+    stackedCards += `
+      <div style="position: absolute; top: -2px; left: 50%; transform: translateX(-50%) rotate(18deg); width: 50px; height: 50px; background: #fffef8; border: 2px solid #d4c5a9; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+        <img src="${photos[3]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />
       </div>
     `;
   }
   
-  // Hover effect - use base scale
+  if (stackCount >= 3 && photos[2]) {
+    stackedCards += `
+      <div style="position: absolute; top: 2px; left: 50%; transform: translateX(-50%) rotate(12deg); width: 52px; height: 52px; background: #fffef8; border: 2px solid #d4c5a9; border-radius: 7px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.15);">
+        <img src="${photos[2]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />
+      </div>
+    `;
+  }
+
+  if (stackCount >= 2 && photos[1]) {
+    stackedCards += `
+      <div style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%) rotate(-6deg); width: 56px; height: 56px; background: #fffef8; border: 2px solid #d4c5a9; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+        <img src="${photos[1]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';" />
+      </div>
+    `;
+  }
+
+  content.innerHTML = `
+    <div style="position: relative; width: 85px; height: 100px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));">
+      ${stackedCards}
+      <div style="position: absolute; top: 12px; left: 50%; transform: translateX(-50%) rotate(1deg); width: 65px; height: 65px; background: #fffef8; border: 3px solid #d4c5a9; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.25);">
+        ${photos[0] ? `
+          <img src="${photos[0]}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+          <div style="display:none;width:100%;height:100%;background:#f3f4f6;align-items:center;justify-content:center;font-size:24px;position:absolute;top:0;left:0;">📍</div>
+        ` : `<div style="width:100%;height:100%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:24px;">📍</div>`}
+      </div>
+      ${totalCount > 1 ? `
+        <div style="position: absolute; top: 8px; right: 2px; background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); color: white; font-size: 11px; font-weight: bold; min-width: 20px; height: 20px; border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 0 5px; box-shadow: 0 2px 6px rgba(0,0,0,0.4); border: 2px solid rgba(255,255,255,0.9); z-index: 10;">${totalCount}</div>
+      ` : ''}
+      <div style="position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);">
+        <div style="width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 12px solid #d4c5a9;"></div>
+        <div style="width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 9px solid #fffef8; margin-top: -12px; margin-left: 3px;"></div>
+      </div>
+    </div>
+  `;
+
+  // Hover effect
   container.addEventListener('mouseenter', () => {
-    const baseScale = parseFloat(container.dataset.baseScale || '1');
-    container.style.transform = `translate(-50%, -100%) scale(${baseScale * 1.15})`;
-    container.style.zIndex = '1000';
+    const baseScale = parseFloat(content.dataset.baseScale || '1');
+    content.style.transform = `scale(${baseScale * 1.1})`;
+    content.style.zIndex = '1000';
   });
   container.addEventListener('mouseleave', () => {
-    const baseScale = parseFloat(container.dataset.baseScale || '1');
-    container.style.transform = `translate(-50%, -100%) scale(${baseScale})`;
-    container.style.zIndex = '1';
+    const baseScale = parseFloat(content.dataset.baseScale || '1');
+    content.style.transform = `scale(${baseScale})`;
+    content.style.zIndex = '10';
   });
-  
-  container.addEventListener('click', (e) => {
-    e.stopPropagation();
-    onClick();
-  });
-  
+
+  container.appendChild(content);
   return container;
 };
 
-// Custom Overlay class factory - must be called after Google Maps is loaded
-let CustomMarkerOverlayClass: any = null;
-let ClusterOverlayClass: any = null;
-
-// Cluster overlay factory
-const getClusterOverlayClass = () => {
-  if (ClusterOverlayClass) return ClusterOverlayClass;
-
-  ClusterOverlayClass = class extends google.maps.OverlayView {
-    private position: google.maps.LatLng;
-    private container: HTMLDivElement;
-    private places: Place[];
-    private onClick: () => void;
-    private currentScale: number;
-
-    constructor(position: google.maps.LatLng, places: Place[], onClick: () => void, scale: number = 1) {
-      super();
-      this.position = position;
-      this.places = places;
-      this.onClick = onClick;
-      this.currentScale = scale;
-      this.container = createClusterElement(places, onClick, scale);
-    }
-
-    onAdd() {
-      const panes = this.getPanes();
-      panes?.overlayMouseTarget.appendChild(this.container);
-    }
-
-    draw() {
-      const projection = this.getProjection();
-      if (!projection) return;
-
-      const point = projection.fromLatLngToDivPixel(this.position);
-      if (point) {
-        this.container.style.left = point.x + 'px';
-        this.container.style.top = point.y + 'px';
-      }
-    }
-
-    onRemove() {
-      if (this.container.parentElement) {
-        this.container.parentElement.removeChild(this.container);
-      }
-    }
-
-    getPosition() {
-      return this.position;
-    }
-
-    updateScale(scale: number) {
-      this.currentScale = scale;
-      this.container.dataset.baseScale = String(scale);
-      // Smooth scaling via CSS transition
-      this.container.style.transform = `translate(-50%, -100%) scale(${scale})`;
-    }
-
-    getPlaces() {
-      return this.places;
-    }
-
-    getContainer() {
-      return this.container;
-    }
-  };
-
-  return ClusterOverlayClass;
+// Convert meters to pixels at a given latitude and zoom
+const metersToPixels = (meters: number, latitude: number, zoom: number): number => {
+  const earthCircumference = 40075016.686;
+  const latRadians = latitude * Math.PI / 180;
+  const metersPerPixel = earthCircumference * Math.cos(latRadians) / Math.pow(2, zoom + 8);
+  return meters / metersPerPixel;
 };
 
-const getCustomMarkerOverlayClass = () => {
-  if (CustomMarkerOverlayClass) return CustomMarkerOverlayClass;
-
-  CustomMarkerOverlayClass = class extends google.maps.OverlayView {
-    private position: google.maps.LatLng;
-    private container: HTMLDivElement;
-    private place: Place;
-    private onClick: () => void;
-    private currentScale: number;
-
-    constructor(position: google.maps.LatLng, place: Place, onClick: () => void, scale: number = 1) {
-      super();
-      this.position = position;
-      this.place = place;
-      this.onClick = onClick;
-      this.currentScale = scale;
-      this.container = createPinElement(place, onClick, scale);
-    }
-
-    onAdd() {
-      const panes = this.getPanes();
-      panes?.overlayMouseTarget.appendChild(this.container);
-    }
-
-    draw() {
-      const projection = this.getProjection();
-      if (!projection) return;
-
-      const point = projection.fromLatLngToDivPixel(this.position);
-      if (point) {
-        this.container.style.left = point.x + 'px';
-        this.container.style.top = point.y + 'px';
-      }
-    }
-
-    onRemove() {
-      if (this.container.parentElement) {
-        this.container.parentElement.removeChild(this.container);
-      }
-    }
-
-    getPosition() {
-      return this.position;
-    }
-
-    getContainer() {
-      return this.container;
-    }
-
-    updateContent(place: Place) {
-      this.place = place;
-      const newContainer = createPinElement(place, this.onClick, this.currentScale);
-      this.container.innerHTML = newContainer.innerHTML;
-    }
-
-    updateScale(scale: number) {
-      this.currentScale = scale;
-      this.container.dataset.baseScale = String(scale);
-      this.container.style.transform = `translate(-50%, -100%) scale(${scale})`;
-    }
-
-    getPlace() {
-      return this.place;
-    }
-  };
-
-  return CustomMarkerOverlayClass;
-};
-
-const MapContainer: React.FC<MapContainerProps> = ({ 
-  apiKey, 
-  places, 
-  onMarkerClick, 
-  onMapLoad, 
-  onMapClick, 
-  mapType = 'satellite' 
+const MapContainer: React.FC<MapContainerProps> = ({
+  accessToken,
+  places,
+  onMarkerClick,
+  onMapLoad,
+  onMapClick,
+  mapType = 'roadmap'
 }) => {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [isMapReady, setIsMapReady] = useState(false);
-
-  const overlaysRef = useRef<Map<string, any>>(new Map());
-  const circlesRef = useRef<Map<string, google.maps.Circle>>(new Map());
-  const clustersRef = useRef<any[]>([]);
-  const hiddenOverlaysRef = useRef<Set<string>>(new Set());
-  const currentMapTypeRef = useRef<string>(mapType);
-  const onMapClickRef = useRef(onMapClick);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const clusterMarkersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const superclusterRef = useRef<Supercluster | null>(null);
   const placesMapRef = useRef<Map<string, Place>>(new Map());
-  const zoomListenerRef = useRef<google.maps.MapsEventListener | null>(null);
-  const currentScaleRef = useRef<number>(1);
+  const [isMapReady, setIsMapReady] = useState(false);
+  const [initAttempts, setInitAttempts] = useState(0);
+  const currentMapTypeRef = useRef<string>(mapType);
+  const isUpdatingRef = useRef(false);
+  const initializingRef = useRef(false);
+  const lastPlacesHashRef = useRef<string>('');
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingRemovalsRef = useRef<Set<string>>(new Set());
 
-  // Clustering helper function
-  const computeClusters = (
-    map: google.maps.Map,
-    places: Place[],
-    zoom: number
-  ): { clusters: Place[][]; singles: Place[] } => {
-    if (zoom >= CLUSTER_CONFIG.minZoomForClustering) {
-      return { clusters: [], singles: places };
-    }
+  // Memoize places hash to detect actual changes
+  const placesHash = useMemo(() => {
+    return places.map(p => `${p.id}:${p.location?.lat}:${p.location?.lng}:${p.visits?.length || 0}`).join('|');
+  }, [places]);
 
-    const projection = map.getProjection();
-    if (!projection) return { clusters: [], singles: places };
-
-    // Convert to pixel coordinates
-    const points: { place: Place; pixel: google.maps.Point }[] = [];
-    for (const r of places) {
-      if (r.location) {
-        const latLng = new google.maps.LatLng(r.location.lat, r.location.lng);
-        const worldPoint = projection.fromLatLngToPoint(latLng);
-        if (worldPoint) {
-          const scale = Math.pow(2, zoom);
-          points.push({
-            place: r,
-            pixel: new google.maps.Point(worldPoint.x * scale, worldPoint.y * scale)
-          });
-        }
-      }
-    }
-
-    // Grid-based clustering
-    const gridSize = CLUSTER_CONFIG.gridSize;
-    const grid: Map<string, Place[]> = new Map();
-
-    for (const point of points) {
-      const cellX = Math.floor(point.pixel.x / gridSize);
-      const cellY = Math.floor(point.pixel.y / gridSize);
-      const key = `${cellX},${cellY}`;
-
-      if (!grid.has(key)) {
-        grid.set(key, []);
-      }
-      grid.get(key)!.push(point.place);
-    }
-
-    const clusters: Place[][] = [];
-    const singles: Place[] = [];
-
-    for (const [, group] of grid) {
-      if (group.length >= 2) {
-        clusters.push(group);
-      } else {
-        singles.push(...group);
-      }
-    }
-
-    return { clusters, singles };
-  };
-
-  // Update clusters and marker visibility with smooth transitions
-  const updateClustering = (map: google.maps.Map, scale: number) => {
-    const zoom = map.getZoom() || 13;
-    const places = Array.from(placesMapRef.current.values());
-    const { clusters, singles } = computeClusters(map, places, zoom);
-
-    // Track which places are in clusters
-    const clusteredIds = new Set<string>();
-    for (const cluster of clusters) {
-      for (const r of cluster) {
-        clusteredIds.add(r.id);
-      }
-    }
-
-    // Animate out old clusters before removing
-    const oldClusters = [...clustersRef.current];
-    for (const cluster of oldClusters) {
-      const container = cluster.getContainer?.();
-      if (container) {
-        container.style.opacity = '0';
-      }
-    }
-
-    // Animate markers that are joining clusters (fade out)
-    for (const [id, overlay] of overlaysRef.current) {
-      const container = overlay.getContainer();
-      if (clusteredIds.has(id)) {
-        // Fade out marker that's joining a cluster
-        container.style.opacity = '0';
-        container.style.pointerEvents = 'none';
-      } else if (hiddenOverlaysRef.current.has(id)) {
-        // Marker is coming back from cluster - fade in
-        container.style.display = '';
-        container.style.opacity = '0';
-        container.style.pointerEvents = 'auto';
-        requestAnimationFrame(() => {
-          container.style.opacity = '1';
-        });
-        hiddenOverlaysRef.current.delete(id);
-      }
-    }
-
-    // After animation delay, actually hide markers and remove old clusters
-    setTimeout(() => {
-      // Remove old clusters
-      for (const cluster of oldClusters) {
-        cluster.setMap(null);
-      }
-      
-      // Hide clustered markers (keep them in DOM for smooth transition back)
-      for (const [id, overlay] of overlaysRef.current) {
-        const container = overlay.getContainer();
-        if (clusteredIds.has(id)) {
-          container.style.display = 'none';
-          hiddenOverlaysRef.current.add(id);
-        }
-      }
-    }, CLUSTER_CONFIG.transitionDuration);
-
-    // Clear cluster ref after scheduling removal
-    clustersRef.current = [];
-
-    // Create new cluster overlays (they will fade in automatically)
-    const ClusterClass = getClusterOverlayClass();
-    for (const cluster of clusters) {
-      // Calculate center of cluster
-      let sumLat = 0, sumLng = 0;
-      for (const r of cluster) {
-        sumLat += r.location.lat;
-        sumLng += r.location.lng;
-      }
-      const centerLat = sumLat / cluster.length;
-      const centerLng = sumLng / cluster.length;
-
-      const clusterOverlay = new ClusterClass(
-        new google.maps.LatLng(centerLat, centerLng),
-        cluster,
-        () => {
-          // Zoom in to cluster on click
-          const bounds = new google.maps.LatLngBounds();
-          for (const r of cluster) {
-            bounds.extend(new google.maps.LatLng(r.location.lat, r.location.lng));
-          }
-          map.fitBounds(bounds, 60);
-        },
-        scale
-      );
-      clusterOverlay.setMap(map);
-      clustersRef.current.push(clusterOverlay);
-    }
-  };
-
-  useEffect(() => {
-    onMapClickRef.current = onMapClick;
-  }, [onMapClick]);
-
-  // Load Google Maps API
-  useEffect(() => {
-    if (!apiKey) return;
-
-    (window as any).gm_authFailure = () => {
-      const message = "Google Maps API Blocked. Please check your API Key Restrictions.";
-      setAuthError(message);
-      console.error(message);
-    };
-
-    const loadMaps = async () => {
-      if ((window as any).google?.maps?.Map) {
-        initMap();
-        return;
-      }
-
-      if (document.querySelector('script[src*="maps.googleapis.com"]')) {
-        const checkGoogle = setInterval(() => {
-          if ((window as any).google?.maps?.Map) {
-            clearInterval(checkGoogle);
-            initMap();
-          }
-        }, 100);
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMap`;
-      script.async = true;
-      script.defer = true;
-      
-      (window as any).initGoogleMap = () => {
-        initMap();
-      };
-      
-      document.head.appendChild(script);
-    };
-
-    loadMaps();
-  }, [apiKey]);
-
-  const initMap = async () => {
-    if (!mapRef.current) return;
-    if (!(window as any).google?.maps) {
-      console.error('Google Maps not loaded');
+  // Initialize Supercluster only when places actually change
+  const initializeSupercluster = useCallback(() => {
+    // Only reinitialize if places actually changed
+    if (lastPlacesHashRef.current === placesHash && superclusterRef.current) {
       return;
     }
+    
+    lastPlacesHashRef.current = placesHash;
+
+    // Update places map
+    placesMapRef.current.clear();
+    places.forEach(p => placesMapRef.current.set(p.id, p));
+
+    // Create GeoJSON features for Supercluster
+    const features = places
+      .filter(p => p.location && typeof p.location.lat === 'number' && typeof p.location.lng === 'number')
+      .map(p => ({
+        type: 'Feature' as const,
+        properties: { id: p.id },
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [p.location.lng, p.location.lat]
+        }
+      }));
+
+    // Create or reuse Supercluster
+    if (!superclusterRef.current) {
+      superclusterRef.current = new Supercluster({
+        radius: CLUSTER_CONFIG.radius,
+        minZoom: CLUSTER_CONFIG.minZoom,
+        maxZoom: CLUSTER_CONFIG.maxZoom,
+        minPoints: CLUSTER_CONFIG.minPoints,
+      });
+    }
+    superclusterRef.current.load(features);
+  }, [places, placesHash]);
+
+  // Initialize map with retry logic
+  useEffect(() => {
+    // Prevent multiple simultaneous initializations
+    if (initializingRef.current) return;
+    if (mapRef.current) return; // Already initialized
+    if (!accessToken) {
+      console.warn('MapContainer: No access token provided');
+      return;
+    }
+
+    const initMap = () => {
+      const container = mapContainerRef.current;
+      if (!container) {
+        console.warn('MapContainer: Container not ready, retrying...');
+        // Retry after a short delay
+        if (initAttempts < 5) {
+          setTimeout(() => setInitAttempts(a => a + 1), 200);
+        }
+        return;
+      }
+
+      // Check if container has dimensions
+      const rect = container.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        console.warn('MapContainer: Container has no dimensions, retrying...');
+        if (initAttempts < 5) {
+          setTimeout(() => setInitAttempts(a => a + 1), 200);
+        }
+        return;
+      }
+
+      initializingRef.current = true;
+
+      try {
+        mapboxgl.accessToken = accessToken;
+
+        const map = new mapboxgl.Map({
+          container: container,
+          style: MAP_STYLES[mapType],
+          center: DEFAULT_CENTER,
+          zoom: 13,
+          pitch: 45,
+          bearing: 0,
+          attributionControl: false,
+          pitchWithRotate: true,
+          dragRotate: true,
+          scrollZoom: {
+            speed: 1.5,
+            smooth: true,
+          },
+          touchZoomRotate: true,
+          touchPitch: true,
+          renderWorldCopies: false,
+          failIfMajorPerformanceCaveat: false, // Don't fail on low-end devices
+        });
+
+        // Handle load error
+        map.on('error', (e) => {
+          console.error('MapContainer: Map error', e);
+        });
+
+        // Add minimal attribution
+        map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
+
+        map.on('load', () => {
+          console.log('MapContainer: Map loaded successfully');
+          mapRef.current = map;
+          setIsMapReady(true);
+          initializingRef.current = false;
+          onMapLoad(map);
+
+          // Ensure desktop users can tilt/rotate with right mouse drag
+          map.dragRotate.enable();
+          map.touchZoomRotate.enable();
+          if ((map as any).touchPitch?.enable) {
+            (map as any).touchPitch.enable();
+          }
+          map.getCanvas().addEventListener('contextmenu', (e) => e.preventDefault());
+
+          // Add circle source for exploration areas
+          if (!map.getSource('exploration-circles')) {
+            map.addSource('exploration-circles', {
+              type: 'geojson',
+              data: { type: 'FeatureCollection', features: [] }
+            });
+          }
+
+          const isDarkMode = mapType === 'dark';
+          const isSatellite = mapType === 'satellite';
+          const circleStyle = getCircleStyle(isDarkMode, isSatellite);
+
+          if (!map.getLayer('exploration-circles-fill')) {
+            map.addLayer({
+              id: 'exploration-circles-fill',
+              type: 'fill',
+              source: 'exploration-circles',
+              paint: {
+                'fill-color': circleStyle.fillColor,
+              }
+            });
+          }
+
+          if (!map.getLayer('exploration-circles-stroke')) {
+            map.addLayer({
+              id: 'exploration-circles-stroke',
+              type: 'line',
+              source: 'exploration-circles',
+              paint: {
+                'line-color': circleStyle.strokeColor,
+                'line-width': 1,
+              }
+            });
+          }
+
+          // Add 3D buildings layer
+          const layers = map.getStyle()?.layers;
+          const labelLayerId = layers?.find(
+            (layer) => layer.type === 'symbol' && layer.layout?.['text-field']
+          )?.id;
+
+          if (!map.getLayer('3d-buildings')) {
+            map.addLayer(
+              {
+                id: '3d-buildings',
+                source: 'composite',
+                'source-layer': 'building',
+                filter: ['==', 'extrude', 'true'],
+                type: 'fill-extrusion',
+                minzoom: 12,
+                paint: {
+                  'fill-extrusion-color': isDarkMode ? '#1a1a2e' : isSatellite ? '#aaa' : '#ddd',
+                  'fill-extrusion-height': [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    12, 0,
+                    13, ['get', 'height']
+                  ],
+                  'fill-extrusion-base': [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    12, 0,
+                    13, ['get', 'min_height']
+                  ],
+                  'fill-extrusion-opacity': 0.7
+                }
+              },
+              labelLayerId
+            );
+          }
+        });
+
+        map.on('click', () => {
+          if (onMapClick) onMapClick();
+        });
+
+      } catch (error) {
+        console.error('MapContainer: Failed to initialize map', error);
+        initializingRef.current = false;
+        // Retry on failure
+        if (initAttempts < 5) {
+          setTimeout(() => setInitAttempts(a => a + 1), 500);
+        }
+      }
+    };
+
+    initMap();
+
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+      if (mapRef.current) {
+        // Clear all markers
+        markersRef.current.forEach(m => m.remove());
+        markersRef.current.clear();
+        clusterMarkersRef.current.forEach(m => m.remove());
+        clusterMarkersRef.current.clear();
+        
+        mapRef.current.remove();
+        mapRef.current = null;
+        setIsMapReady(false);
+        initializingRef.current = false;
+      }
+    };
+  }, [accessToken, initAttempts]);
+
+  // Update markers when places change or map moves
+  const updateMarkers = useCallback((forceFullLoad: boolean = false) => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+    
+    // Prevent concurrent updates
+    if (isUpdatingRef.current) return;
+    isUpdatingRef.current = true;
 
     try {
-      const map = new google.maps.Map(mapRef.current, {
-        center: DEFAULT_CENTER,
-        zoom: 13,
-        mapTypeId: 'satellite',
-        disableDefaultUI: true,
-        zoomControl: false,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        rotateControl: false,
-        scaleControl: false,
-        gestureHandling: 'greedy',
-        tilt: 0, // Disable 45° imagery to prevent console warning
-      });
+      // Initialize/update supercluster
+      initializeSupercluster();
 
-      map.addListener('click', () => {
-        if (onMapClickRef.current) {
-          onMapClickRef.current();
+      if (!superclusterRef.current) {
+        isUpdatingRef.current = false;
+        return;
+      }
+
+      const zoom = map.getZoom();
+      const scale = getScaleForZoom(zoom);
+
+      // Get clusters for current view with expanded bounds buffer
+      const bounds = map.getBounds();
+      if (!bounds) {
+        isUpdatingRef.current = false;
+        return;
+      }
+      
+      // Calculate expanded bounding box for pre-loading
+      const west = bounds.getWest();
+      const south = bounds.getSouth();
+      const east = bounds.getEast();
+      const north = bounds.getNorth();
+      
+      const lngSpan = east - west;
+      const latSpan = north - south;
+      
+      // Expand bounds by buffer (e.g., 50% on each side)
+      // For initial/force load, use world bounds to load everything
+      let bbox: [number, number, number, number];
+      if (forceFullLoad) {
+        // World bounds - load all markers
+        bbox = [-180, -85, 180, 85];
+      } else {
+        // Expanded bounds for pre-loading nearby markers
+        bbox = [
+          Math.max(-180, west - lngSpan * BOUNDS_BUFFER),
+          Math.max(-85, south - latSpan * BOUNDS_BUFFER),
+          Math.min(180, east + lngSpan * BOUNDS_BUFFER),
+          Math.min(85, north + latSpan * BOUNDS_BUFFER)
+        ];
+      }
+      
+      const clusters = superclusterRef.current.getClusters(bbox, Math.floor(zoom));
+
+      // Track current marker IDs to determine which to keep/remove
+      const currentMarkerIds = new Set<string>();
+      const currentClusterIds = new Set<string>();
+
+      // Process clusters and individual points
+      clusters.forEach(cluster => {
+        if (cluster.properties.cluster) {
+          // It's a cluster - get leaves to create stable ID
+          const clusterLeaves = superclusterRef.current!
+            .getLeaves(cluster.properties.cluster_id, Infinity);
+          const clusterPlaceIds = clusterLeaves.map((f: any) => f.properties.id as string);
+          
+          // Generate stable cluster ID based on member places
+          const stableClusterId = generateStableClusterId(clusterPlaceIds);
+          currentClusterIds.add(stableClusterId);
+          
+          // Cancel pending removal if this cluster is still needed
+          pendingRemovalsRef.current.delete(stableClusterId);
+          
+          const clusterPlaces = clusterPlaceIds
+            .map((id: string) => placesMapRef.current.get(id))
+            .filter((p: Place | undefined): p is Place => !!p);
+
+          if (clusterPlaces.length > 0) {
+            const [lng, lat] = cluster.geometry.coordinates;
+            
+            // Check if cluster marker already exists
+            const existingMarker = clusterMarkersRef.current.get(stableClusterId);
+            if (existingMarker) {
+              // Update position smoothly
+              existingMarker.setLngLat([lng, lat]);
+              // Update scale
+              const el = existingMarker.getElement();
+              setClusterScale(el, scale);
+              if (el) el.style.opacity = '1';
+            } else {
+              // Create new cluster marker
+              const element = createClusterElement(clusterPlaces, scale);
+              
+              // Store cluster_id for expansion zoom calculation
+              element.dataset.superclusterId = String(cluster.properties.cluster_id);
+              
+              element.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const scId = parseInt(element.dataset.superclusterId || '0', 10);
+                if (superclusterRef.current) {
+                  try {
+                    const expansionZoom = superclusterRef.current.getClusterExpansionZoom(scId);
+                    map.easeTo({
+                      center: [lng, lat],
+                      zoom: Math.min(expansionZoom, 18),
+                      duration: 300
+                    });
+                  } catch (err) {
+                    // Fallback: just zoom in
+                    map.easeTo({
+                      center: [lng, lat],
+                      zoom: Math.min(zoom + 2, 18),
+                      duration: 300
+                    });
+                  }
+                }
+              });
+
+              const marker = new mapboxgl.Marker({ element, anchor: 'bottom' })
+                .setLngLat([lng, lat])
+                .addTo(map);
+              
+              clusterMarkersRef.current.set(stableClusterId, marker);
+            }
+          }
+        } else {
+          // Individual place
+          const placeId = cluster.properties.id;
+          currentMarkerIds.add(placeId);
+          
+          // Cancel pending removal if this marker is still needed
+          pendingRemovalsRef.current.delete(placeId);
+          
+          const place = placesMapRef.current.get(placeId);
+          
+          if (place && place.location) {
+            const existingMarker = markersRef.current.get(placeId);
+            if (existingMarker) {
+              // Update position and scale
+              existingMarker.setLngLat([place.location.lng, place.location.lat]);
+              const el = existingMarker.getElement();
+              setMarkerScale(el, scale);
+              if (el) el.style.opacity = '1';
+            } else {
+              // Create new marker
+              const element = createPinElement(place, scale);
+              element.addEventListener('click', (e) => {
+                e.stopPropagation();
+                onMarkerClick(place);
+              });
+
+              const marker = new mapboxgl.Marker({ element, anchor: 'bottom' })
+                .setLngLat([place.location.lng, place.location.lat])
+                .addTo(map);
+              
+              markersRef.current.set(placeId, marker);
+            }
+          }
         }
       });
 
-      // Zoom listener for marker scaling and clustering
-      zoomListenerRef.current = map.addListener('zoom_changed', () => {
-        const zoom = map.getZoom() || 13;
-        const newScale = getScaleForZoom(zoom);
-        currentScaleRef.current = newScale;
-
-        // Update all overlay scales
-        for (const [, overlay] of overlaysRef.current) {
-          overlay.updateScale(newScale);
-        }
-
-        // Update cluster scales
-        for (const cluster of clustersRef.current) {
-          cluster.updateScale(newScale);
-        }
-
-        // Update clustering
-        updateClustering(map, newScale);
-      });
-
-      // Set initial scale
-      currentScaleRef.current = getScaleForZoom(13);
-
-      setMapInstance(map);
-      setIsMapReady(true);
-      onMapLoad(map);
-
-      console.log('Map initialized successfully');
-    } catch (e) {
-      console.error("Map initialization error:", e);
-    }
-  };
-
-  // Update markers when places change
-  useEffect(() => {
-    if (!mapInstance || !isMapReady) {
-      return;
-    }
-
-    const isDarkMode = mapType === 'dark';
-    const isSatellite = mapType === 'satellite';
-    const circleStyle = getCircleStyle(isDarkMode, isSatellite);
-
-    // Filter places with valid coordinates
-    const validPlaces = places.filter(r => 
-      r.location && 
-      typeof r.location.lat === 'number' && 
-      typeof r.location.lng === 'number'
-    );
-
-    console.log(`Processing ${validPlaces.length} valid places out of ${places.length}`);
-
-    const currentIds = new Set(validPlaces.map(r => r.id));
-
-    placesMapRef.current.clear();
-    validPlaces.forEach(r => placesMapRef.current.set(r.id, r));
-
-    // Remove old overlays not in current set
-    for (const [id, overlay] of overlaysRef.current) {
-      if (!currentIds.has(id)) {
-        overlay.setMap(null);
-        overlaysRef.current.delete(id);
-
-        const circle = circlesRef.current.get(id);
-        if (circle) {
-          circle.setMap(null);
-          circlesRef.current.delete(id);
+      // Remove markers no longer in current view/clusters with fade out
+      for (const [id, marker] of markersRef.current) {
+        if (!currentMarkerIds.has(id) && !pendingRemovalsRef.current.has(id)) {
+          pendingRemovalsRef.current.add(id);
+          const el = marker.getElement();
+          if (el) {
+            el.style.opacity = '0';
+            // Remove after transition
+            setTimeout(() => {
+              if (pendingRemovalsRef.current.has(id)) {
+                marker.remove();
+                markersRef.current.delete(id);
+                pendingRemovalsRef.current.delete(id);
+              }
+            }, 200);
+          } else {
+            marker.remove();
+            markersRef.current.delete(id);
+            pendingRemovalsRef.current.delete(id);
+          }
         }
       }
-    }
+      
+      // Remove old cluster markers with fade out
+      for (const [id, marker] of clusterMarkersRef.current) {
+        if (!currentClusterIds.has(id) && !pendingRemovalsRef.current.has(id)) {
+          pendingRemovalsRef.current.add(id);
+          const el = marker.getElement();
+          if (el) {
+            el.style.opacity = '0';
+            // Remove after transition
+            setTimeout(() => {
+              if (pendingRemovalsRef.current.has(id)) {
+                marker.remove();
+                clusterMarkersRef.current.delete(id);
+                pendingRemovalsRef.current.delete(id);
+              }
+            }, 200);
+          } else {
+            marker.remove();
+            clusterMarkersRef.current.delete(id);
+            pendingRemovalsRef.current.delete(id);
+          }
+        }
+      }
 
-    // Get current zoom scale
-    const currentZoom = mapInstance.getZoom() || 13;
-    const scale = getScaleForZoom(currentZoom);
-    currentScaleRef.current = scale;
-
-    // Add or update overlays
-    for (const place of validPlaces) {
-      if (!overlaysRef.current.has(place.id)) {
-        const position = new google.maps.LatLng(place.location.lat, place.location.lng);
-
-        const OverlayClass = getCustomMarkerOverlayClass();
-        const overlay = new OverlayClass(
-          position,
-          place,
-          () => onMarkerClick(place),
-          scale
-        );
-        overlay.setMap(mapInstance);
-        overlaysRef.current.set(place.id, overlay);
-
-        // Create exploration circle
-        const circle = new google.maps.Circle({
-          strokeColor: circleStyle.strokeColor,
-          strokeOpacity: circleStyle.strokeOpacity,
-          strokeWeight: circleStyle.strokeWeight,
-          fillColor: circleStyle.fillColor,
-          fillOpacity: circleStyle.fillOpacity,
-          map: mapInstance,
-          center: { lat: place.location.lat, lng: place.location.lng },
-          radius: EXPLORED_RADIUS,
-          clickable: false,
+      // Update exploration circles
+      const circleFeatures = places
+        .filter(p => p.location)
+        .map(p => {
+          const center = [p.location.lng, p.location.lat];
+          const points = 64;
+          const coordinates = [];
+          for (let i = 0; i <= points; i++) {
+            const angle = (i / points) * 2 * Math.PI;
+            const dx = EXPLORED_RADIUS * Math.cos(angle);
+            const dy = EXPLORED_RADIUS * Math.sin(angle);
+            const lat = p.location.lat + (dy / 111320);
+            const lng = p.location.lng + (dx / (111320 * Math.cos(p.location.lat * Math.PI / 180)));
+            coordinates.push([lng, lat]);
+          }
+          return {
+            type: 'Feature' as const,
+            geometry: {
+              type: 'Polygon' as const,
+              coordinates: [coordinates]
+            },
+            properties: { id: p.id }
+          };
         });
 
-        circlesRef.current.set(place.id, circle);
-      } else {
-        // Update existing overlay content
-        const overlay = overlaysRef.current.get(place.id)!;
-        overlay.updateContent(place);
+      const source = map.getSource('exploration-circles') as mapboxgl.GeoJSONSource;
+      if (source) {
+        source.setData({
+          type: 'FeatureCollection',
+          features: circleFeatures
+        });
       }
+    } finally {
+      isUpdatingRef.current = false;
     }
+  }, [places, isMapReady, onMarkerClick, initializeSupercluster]);
 
-    console.log(`Active overlays: ${overlaysRef.current.size}`);
-
-    // Update clustering after markers are created
-    updateClustering(mapInstance, scale);
-
-  }, [mapInstance, places, onMarkerClick, mapType, isMapReady]);
-
-  // Update map type/style
+  // Update markers on places change or map move
   useEffect(() => {
-    if (!mapInstance) return;
+    // Force full load on initial places load or when places change
+    updateMarkers(true);
+
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Handle map movement - load markers during panning for seamless experience
+    let moveThrottleTimeout: NodeJS.Timeout | null = null;
+    const handleMove = () => {
+      // Throttle move updates (more frequent than moveend for smooth loading)
+      if (moveThrottleTimeout) return;
+      moveThrottleTimeout = setTimeout(() => {
+        moveThrottleTimeout = null;
+        updateMarkers(false);
+      }, 100); // Update every 100ms during pan
+    };
+    
+    // Use 'moveend' for final cleanup after drag/zoom completes
+    const handleMoveEnd = () => {
+      // Clear throttle timeout
+      if (moveThrottleTimeout) {
+        clearTimeout(moveThrottleTimeout);
+        moveThrottleTimeout = null;
+      }
+      // Debounce final update
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+      updateTimeoutRef.current = setTimeout(() => {
+        updateMarkers(false);
+      }, 50);
+    };
+    
+    const handleZoom = () => {
+      const zoom = map.getZoom();
+      const scale = getScaleForZoom(zoom);
+      
+      // Update individual marker scales immediately for smooth feel
+      markersRef.current.forEach((marker) => {
+        const el = marker.getElement();
+        setMarkerScale(el, scale);
+      });
+      
+      // Update cluster scales
+      clusterMarkersRef.current.forEach((marker) => {
+        const el = marker.getElement();
+        setClusterScale(el, scale);
+      });
+    };
+
+    // Listen to both move and moveend for smooth loading
+    map.on('move', handleMove);
+    map.on('moveend', handleMoveEnd);
+    map.on('zoom', handleZoom);
+
+    return () => {
+      if (moveThrottleTimeout) {
+        clearTimeout(moveThrottleTimeout);
+      }
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+      map.off('move', handleMove);
+      map.off('moveend', handleMoveEnd);
+      map.off('zoom', handleZoom);
+    };
+  }, [updateMarkers]);
+
+  // Handle map type changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
     if (currentMapTypeRef.current === mapType) return;
 
     currentMapTypeRef.current = mapType;
-    const isDarkMode = mapType === 'dark';
-    const isSatellite = mapType === 'satellite';
-    const circleStyle = getCircleStyle(isDarkMode, isSatellite);
+    map.setStyle(MAP_STYLES[mapType]);
 
-    console.log('Switching map type to:', mapType);
+    // Re-add layers after style change
+    map.once('style.load', () => {
+      const isDarkMode = mapType === 'dark';
+      const isSatellite = mapType === 'satellite';
+      const circleStyle = getCircleStyle(isDarkMode, isSatellite);
 
-    if (mapType === 'satellite') {
-      mapInstance.setMapTypeId('satellite');
-      mapInstance.setOptions({ styles: [] });
-    } else if (mapType === 'roadmap') {
-      mapInstance.setMapTypeId('roadmap');
-      mapInstance.setOptions({ styles: [] });
-    } else if (mapType === 'dark') {
-      mapInstance.setMapTypeId('roadmap');
-      mapInstance.setOptions({ styles: DARK_MODE_STYLES });
-    }
+      if (!map.getSource('exploration-circles')) {
+        map.addSource('exploration-circles', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] }
+        });
+      }
 
-    // Update circles
-    for (const [, circle] of circlesRef.current) {
-      circle.setOptions({
-        fillColor: circleStyle.fillColor,
-        fillOpacity: circleStyle.fillOpacity,
-        strokeColor: circleStyle.strokeColor,
-        strokeOpacity: circleStyle.strokeOpacity,
-        strokeWeight: circleStyle.strokeWeight,
+      if (!map.getLayer('exploration-circles-fill')) {
+        map.addLayer({
+          id: 'exploration-circles-fill',
+          type: 'fill',
+          source: 'exploration-circles',
+          paint: { 'fill-color': circleStyle.fillColor }
+        });
+      } else {
+        map.setPaintProperty('exploration-circles-fill', 'fill-color', circleStyle.fillColor);
+      }
+
+      if (!map.getLayer('exploration-circles-stroke')) {
+        map.addLayer({
+          id: 'exploration-circles-stroke',
+          type: 'line',
+          source: 'exploration-circles',
+          paint: {
+            'line-color': circleStyle.strokeColor,
+            'line-width': 1,
+          }
+        });
+      } else {
+        map.setPaintProperty('exploration-circles-stroke', 'line-color', circleStyle.strokeColor);
+      }
+
+      // Re-add 3D buildings layer
+      if (!map.getLayer('3d-buildings')) {
+        const layers = map.getStyle().layers;
+        const labelLayerId = layers?.find(
+          (layer) => layer.type === 'symbol' && layer.layout?.['text-field']
+        )?.id;
+
+        map.addLayer(
+          {
+            id: '3d-buildings',
+            source: 'composite',
+            'source-layer': 'building',
+            filter: ['==', 'extrude', 'true'],
+            type: 'fill-extrusion',
+            minzoom: 12,
+            paint: {
+              'fill-extrusion-color': isDarkMode ? '#1a1a2e' : isSatellite ? '#aaa' : '#ddd',
+              'fill-extrusion-height': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, 0,
+                13, ['get', 'height']
+              ],
+              'fill-extrusion-base': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                12, 0,
+                13, ['get', 'min_height']
+              ],
+              'fill-extrusion-opacity': 0.7
+            }
+          },
+          labelLayerId
+        );
+      } else {
+        map.setPaintProperty('3d-buildings', 'fill-extrusion-color', 
+          isDarkMode ? '#1a1a2e' : isSatellite ? '#aaa' : '#ddd'
+        );
+      }
+
+      updateMarkers(true);
+    });
+  }, [mapType, isMapReady, updateMarkers]);
+
+  // Handle visibility changes - resize map when container becomes visible
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container || !mapRef.current) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      const map = mapRef.current;
+      if (map) {
+        // Trigger resize to handle visibility changes
+        map.resize();
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    // Also handle visibility change
+    const intersectionObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && mapRef.current) {
+          // Map became visible, trigger resize
+          setTimeout(() => {
+            mapRef.current?.resize();
+          }, 100);
+        }
       });
-    }
-  }, [mapType, mapInstance]);
+    }, { threshold: 0.1 });
 
-  if (authError) {
-    return (
-      <div className="w-full h-full bg-gray-900 flex items-center justify-center p-8">
-        <div className="bg-red-900/20 border border-red-500/50 p-6 rounded-xl max-w-md text-center">
-          <h3 className="text-red-400 font-bold text-lg mb-2">Map Loading Failed</h3>
-          <p className="text-gray-300 mb-4">{authError}</p>
-          <p className="text-xs text-gray-500">
-            If you are in preview mode, go to Google Cloud Console and set restrictions to "None" temporarily.
-          </p>
-        </div>
-      </div>
-    );
-  }
+    intersectionObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+      intersectionObserver.disconnect();
+    };
+  }, [isMapReady]);
+
+  const bgColor = mapType === 'satellite' ? '#1a1f1a' :
+                  mapType === 'dark' ? '#0e1626' : '#e8e6e1';
 
   return (
-    <div ref={mapRef} className="w-full h-full bg-gray-900" />
+    <div className="relative w-full h-full overflow-hidden">
+      <div
+        ref={mapContainerRef}
+        className="w-full h-full"
+        style={{ backgroundColor: bgColor, zIndex: 0 }}
+      />
+    </div>
   );
 };
 
