@@ -15,9 +15,6 @@ export const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-QX1QH1PGHZ"
 };
 
-// Google Maps API Key - separate from Firebase
-export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyDE4SM9roZ4PthOaAxpnToXMjLBEd99xD8";
-
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 

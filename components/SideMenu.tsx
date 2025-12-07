@@ -139,6 +139,8 @@ export const SideMenu: React.FC<SideMenuProps> = ({
             >
               {user?.photoURL ? (
                 <img src={user.photoURL} alt="User" className="w-10 h-10 rounded-full border-2 border-gray-700 group-hover:border-gray-600 transition-colors duration-200" referrerPolicy="no-referrer" />
+              ) : user?.uid === 'guest-user' ? (
+                <img src="/logo.svg" alt="Guest" className="w-10 h-10 rounded-full border-2 border-gray-700 group-hover:border-gray-600 transition-colors duration-200 bg-gray-800 p-1" />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-gray-800 group-hover:bg-gray-700 flex items-center justify-center transition-colors duration-200">
                   <UserIcon size={20} className="text-gray-400 group-hover:text-white transition-colors duration-200" />

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import mapboxgl from 'mapbox-gl';
 import { Place, UserMap } from '../types';
 
 export interface MapSearchSource {
@@ -18,9 +19,9 @@ interface UseSearchReturn {
   isSearchFocused: boolean;
   setIsSearchFocused: (focused: boolean) => void;
   isSearchClosing: boolean;
-  searchInputRef: React.RefObject<HTMLInputElement>;
+  searchInputRef: React.RefObject<HTMLInputElement | null>;
   closeSearch: () => void;
-  handleSearchSelect: (place: Place, mapInstance: google.maps.Map | null, onSelect: (p: Place) => void) => void;
+  handleSearchSelect: (place: Place, mapInstance: mapboxgl.Map | null, onSelect: (p: Place) => void) => void;
 }
 
 export function useSearch(
@@ -86,7 +87,7 @@ export function useSearch(
 
   const handleSearchSelect = useCallback((
     place: Place,
-    mapInstance: google.maps.Map | null,
+    mapInstance: mapboxgl.Map | null,
     onSelect: (p: Place) => void
   ) => {
     setSearchQuery('');
@@ -94,8 +95,11 @@ export function useSearch(
     setIsSearchFocused(false);
 
     if (mapInstance) {
-      mapInstance.setCenter(place.location);
-      mapInstance.setZoom(16);
+      mapInstance.flyTo({
+        center: [place.location.lng, place.location.lat],
+        zoom: 16,
+        duration: 1000
+      });
     }
 
     onSelect(place);
