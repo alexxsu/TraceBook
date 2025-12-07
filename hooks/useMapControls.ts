@@ -84,8 +84,15 @@ export function useMapControls(): UseMapControlsReturn {
   }, [mapInstance, mapType]);
 
   const handleLocateMe = useCallback(() => {
-    if (!navigator.geolocation || !mapInstance) {
+    console.log('handleLocateMe called, mapInstance:', !!mapInstance);
+    
+    if (!navigator.geolocation) {
       alert("Geolocation is not supported by this browser.");
+      return;
+    }
+    
+    if (!mapInstance) {
+      console.warn('Map instance not available yet');
       return;
     }
 
@@ -95,12 +102,15 @@ export function useMapControls(): UseMapControlsReturn {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         };
+        console.log('Got position:', pos);
         mapInstance.panTo(pos);
-        mapInstance.setZoom(16);
+        mapInstance.setZoom(17);
       },
-      () => {
+      (error) => {
+        console.error('Geolocation error:', error);
         alert("Could not access your location. Please check browser permissions.");
-      }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   }, [mapInstance]);
 
@@ -112,8 +122,15 @@ export function useMapControls(): UseMapControlsReturn {
   }, [mapInstance]);
 
   const handleZoomToMunicipality = useCallback(() => {
-    if (!navigator.geolocation || !mapInstance) {
+    console.log('handleZoomToMunicipality called, mapInstance:', !!mapInstance);
+    
+    if (!navigator.geolocation) {
       alert("Geolocation is not supported by this browser.");
+      return;
+    }
+    
+    if (!mapInstance) {
+      console.warn('Map instance not available yet');
       return;
     }
 
@@ -123,11 +140,14 @@ export function useMapControls(): UseMapControlsReturn {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         };
+        console.log('Got position for city zoom:', userPos);
 
         // Try geocoding, but fallback to simple zoom if it fails
         try {
           const geocoder = new google.maps.Geocoder();
           geocoder.geocode({ location: userPos }, (results, status) => {
+            console.log('Geocoding status:', status, 'results:', results?.length);
+            
             if (status === 'OK' && results && results.length > 0) {
               let municipalityResult = results.find(r =>
                 r.types.includes('locality') || r.types.includes('sublocality')
@@ -141,12 +161,14 @@ export function useMapControls(): UseMapControlsReturn {
               }
 
               if (municipalityResult && municipalityResult.geometry.bounds) {
+                console.log('Found municipality with bounds:', municipalityResult.formatted_address);
                 const center = municipalityResult.geometry.location;
                 mapInstance.panTo(center);
                 setTimeout(() => {
                   mapInstance.fitBounds(municipalityResult!.geometry.bounds!);
                 }, 300);
               } else if (municipalityResult && municipalityResult.geometry.viewport) {
+                console.log('Found municipality with viewport:', municipalityResult.formatted_address);
                 const center = municipalityResult.geometry.location;
                 mapInstance.panTo(center);
                 setTimeout(() => {
@@ -154,6 +176,7 @@ export function useMapControls(): UseMapControlsReturn {
                 }, 300);
               } else {
                 // Fallback: just pan to user location with city-level zoom
+                console.log('No municipality bounds found, using fallback zoom');
                 mapInstance.panTo(userPos);
                 setTimeout(() => {
                   mapInstance.setZoom(13);
@@ -177,9 +200,11 @@ export function useMapControls(): UseMapControlsReturn {
           }, 300);
         }
       },
-      () => {
+      (error) => {
+        console.error('Geolocation error:', error);
         alert("Could not access your location. Please check browser permissions.");
-      }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   }, [mapInstance]);
 

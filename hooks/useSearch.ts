@@ -40,12 +40,13 @@ export function useSearch(
 
     if (trimmed === '') {
       if (showAllWhenEmpty) {
+        // Show all maps, even those with 0 places
         const grouped = sources
           .map(source => ({
             map: source.map,
             matches: source.places
-          }))
-          .filter(group => group.matches.length > 0);
+          }));
+        // Don't filter out maps with 0 places - they should still appear in the list
         setSearchResults(grouped);
       } else {
         setSearchResults([]);

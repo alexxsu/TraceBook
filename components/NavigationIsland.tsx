@@ -1,0 +1,155 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, Users, Rss, Map } from 'lucide-react';
+
+export type NavigationPage = 'map' | 'friends' | 'feeds';
+
+interface NavigationIslandProps {
+  currentPage: NavigationPage;
+  onNavigate: (page: NavigationPage) => void;
+  onAddPress: () => void;
+  isAddModalOpen: boolean;
+  hideNavigation: boolean;
+  isModalActive?: boolean;
+}
+
+export const NavigationIsland: React.FC<NavigationIslandProps> = ({
+  currentPage,
+  onNavigate,
+  onAddPress,
+  isAddModalOpen,
+  hideNavigation,
+  isModalActive = false
+}) => {
+  const [shouldRender, setShouldRender] = useState(false);
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+  const [animatingTo, setAnimatingTo] = useState<NavigationPage | null>(null);
+  
+  const shouldBeVisible = !hideNavigation && !isModalActive;
+  
+  useEffect(() => {
+    if (shouldBeVisible) {
+      setShouldRender(true);
+      setIsAnimatingOut(false);
+    } else if (shouldRender) {
+      setIsAnimatingOut(true);
+      const timer = setTimeout(() => {
+        setShouldRender(false);
+        setIsAnimatingOut(false);
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldBeVisible, shouldRender]);
+
+  const handleNavigate = (page: NavigationPage) => {
+    if (page === currentPage) return;
+    setAnimatingTo(page);
+    setTimeout(() => {
+      onNavigate(page);
+      setAnimatingTo(null);
+    }, 150);
+  };
+
+  if (!shouldRender) return null;
+
+  const isOnMap = currentPage === 'map';
+
+  return (
+    <div 
+      className={`fixed bottom-8 inset-x-0 flex justify-center z-[60] pointer-events-none ${
+        isAnimatingOut ? 'animate-fade-out-down' : 'animate-fade-in-up'
+      }`}
+    >
+      {/* Navigation Island Container */}
+      <div 
+        className="pointer-events-auto flex items-center gap-2 px-3 py-2 bg-gray-900/80 backdrop-blur-xl border border-white/20 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
+        style={{
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
+        }}
+      >
+        {/* Friends Button (Left) */}
+        <button
+          onClick={() => handleNavigate('friends')}
+          className={`relative flex items-center justify-center rounded-full transition-all duration-300 ease-out ${
+            currentPage === 'friends'
+              ? 'w-14 h-14 bg-gradient-to-br from-purple-500 to-violet-600 shadow-lg shadow-purple-500/30'
+              : 'w-11 h-11 bg-gray-800/80 hover:bg-gray-700/80'
+          } ${animatingTo === 'friends' ? 'scale-110' : ''}`}
+        >
+          <Users 
+            size={currentPage === 'friends' ? 26 : 22} 
+            className={`transition-all duration-300 ${
+              currentPage === 'friends' ? 'text-white' : 'text-gray-400'
+            }`}
+          />
+          {currentPage === 'friends' && (
+            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" />
+          )}
+        </button>
+
+        {/* Center Button - Plus (on map) or Map icon (on other pages) */}
+        <button
+          data-tutorial="add-button"
+          onClick={() => {
+            if (isOnMap) {
+              onAddPress();
+            } else {
+              handleNavigate('map');
+            }
+          }}
+          className={`relative flex items-center justify-center rounded-full transition-all duration-300 ease-out active:scale-95 ${
+            isOnMap
+              ? isAddModalOpen
+                ? 'w-16 h-16 bg-red-500/80 border border-red-400/50 shadow-red-500/20'
+                : 'w-16 h-16 bg-gray-900/70 border border-white/30 hover:bg-gray-900/80 hover:shadow-blue-500/20 hover:scale-105'
+              : 'w-11 h-11 bg-gray-800/80 hover:bg-gray-700/80'
+          } ${animatingTo === 'map' ? 'scale-110' : ''}`}
+        >
+          {/* Gradient glow for map page add button */}
+          {isOnMap && !isAddModalOpen && (
+            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-yellow-400/30 via-red-400/20 to-blue-500/30 blur-md opacity-50 group-hover:opacity-80 transition-opacity" />
+          )}
+          
+          {/* Icon */}
+          <div className={`relative z-10 transition-transform duration-300 ease-out ${
+            isAddModalOpen ? 'rotate-[135deg]' : 'rotate-0'
+          }`}>
+            {isOnMap ? (
+              <Plus 
+                size={28} 
+                className="text-white" 
+                strokeWidth={2.5} 
+              />
+            ) : (
+              <Map 
+                size={22} 
+                className="text-gray-400"
+              />
+            )}
+          </div>
+        </button>
+
+        {/* Feeds Button (Right) */}
+        <button
+          onClick={() => handleNavigate('feeds')}
+          className={`relative flex items-center justify-center rounded-full transition-all duration-300 ease-out ${
+            currentPage === 'feeds'
+              ? 'w-14 h-14 bg-gradient-to-br from-orange-500 to-red-500 shadow-lg shadow-orange-500/30'
+              : 'w-11 h-11 bg-gray-800/80 hover:bg-gray-700/80'
+          } ${animatingTo === 'feeds' ? 'scale-110' : ''}`}
+        >
+          <Rss 
+            size={currentPage === 'feeds' ? 26 : 22} 
+            className={`transition-all duration-300 ${
+              currentPage === 'feeds' ? 'text-white' : 'text-gray-400'
+            }`}
+          />
+          {currentPage === 'feeds' && (
+            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default NavigationIsland;

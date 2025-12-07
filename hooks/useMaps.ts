@@ -140,6 +140,14 @@ export function useMaps(user: AppUser | null, userProfile: UserProfile | null): 
           updatedAt: d.updatedAt?.toDate?.().toISOString?.() || d.updatedAt,
         };
       });
+      
+      // Ensure demo map is included for admin visibility
+      const hasDemoMap = data.some(m => m.id === 'guest-demo-map');
+      if (!hasDemoMap) {
+        data.push(GUEST_DEMO_MAP);
+      }
+      
+      console.log('[useMaps] Admin: loaded', data.length, 'maps (including demo map)');
       setAllMaps(data);
     });
 
