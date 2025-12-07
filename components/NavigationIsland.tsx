@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Users, Rss, MapPin } from 'lucide-react';
+import { Plus, Users, Rss, Map } from 'lucide-react';
 
 export type NavigationPage = 'map' | 'friends' | 'feeds';
 
@@ -66,7 +66,7 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
           boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
         }}
       >
-        {/* Friends Button */}
+        {/* Friends Button (Left) */}
         <button
           onClick={() => handleNavigate('friends')}
           className={`relative flex items-center justify-center rounded-full transition-all duration-300 ease-out ${
@@ -86,7 +86,7 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
           )}
         </button>
 
-        {/* Center Button - Plus or Map */}
+        {/* Center Button - Plus (on map) or Map icon (on other pages) */}
         <button
           data-tutorial="add-button"
           onClick={() => {
@@ -101,10 +101,8 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
               ? isAddModalOpen
                 ? 'w-16 h-16 bg-red-500/80 border border-red-400/50 shadow-red-500/20'
                 : 'w-16 h-16 bg-gray-900/70 border border-white/30 hover:bg-gray-900/80 hover:shadow-blue-500/20 hover:scale-105'
-              : currentPage === 'map' || animatingTo === 'map'
-                ? 'w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30'
-                : 'w-11 h-11 bg-gray-800/80 hover:bg-gray-700/80'
-          }`}
+              : 'w-11 h-11 bg-gray-800/80 hover:bg-gray-700/80'
+          } ${animatingTo === 'map' ? 'scale-110' : ''}`}
         >
           {/* Gradient glow for map page add button */}
           {isOnMap && !isAddModalOpen && (
@@ -122,20 +120,15 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
                 strokeWidth={2.5} 
               />
             ) : (
-              <MapPin 
-                size={currentPage === 'map' ? 26 : 22} 
-                className={currentPage === 'map' ? 'text-white' : 'text-gray-400'}
+              <Map 
+                size={22} 
+                className="text-gray-400"
               />
             )}
           </div>
-          
-          {/* Active indicator glow */}
-          {!isOnMap && currentPage === 'map' && (
-            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/20 to-transparent pointer-events-none" />
-          )}
         </button>
 
-        {/* Feeds Button */}
+        {/* Feeds Button (Right) */}
         <button
           onClick={() => handleNavigate('feeds')}
           className={`relative flex items-center justify-center rounded-full transition-all duration-300 ease-out ${

@@ -343,6 +343,51 @@
       .animate-page-in-right { animation: pageSlideInRight 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
       .animate-page-out-left { animation: pageSlideOutLeft 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
       .animate-page-out-right { animation: pageSlideOutRight 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      
+      /* Card page animations - slide in from left/right with scale */
+      @keyframes cardSlideInLeft {
+        0% { transform: translateX(-30px) scale(0.95); opacity: 0; }
+        100% { transform: translateX(0) scale(1); opacity: 1; }
+      }
+      @keyframes cardSlideInRight {
+        0% { transform: translateX(30px) scale(0.95); opacity: 0; }
+        100% { transform: translateX(0) scale(1); opacity: 1; }
+      }
+      @keyframes cardSlideOutLeft {
+        0% { transform: translateX(0) scale(1); opacity: 1; }
+        100% { transform: translateX(-30px) scale(0.95); opacity: 0; }
+      }
+      @keyframes cardSlideOutRight {
+        0% { transform: translateX(0) scale(1); opacity: 1; }
+        100% { transform: translateX(30px) scale(0.95); opacity: 0; }
+      }
+      .animate-card-in-left { animation: cardSlideInLeft 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .animate-card-in-right { animation: cardSlideInRight 0.4s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .animate-card-out-left { animation: cardSlideOutLeft 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .animate-card-out-right { animation: cardSlideOutRight 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      
+      /* Tutorial highlight box animations */
+      @keyframes highlightPulse {
+        0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.3); }
+        50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.8), 0 0 60px rgba(59, 130, 246, 0.4); }
+      }
+      @keyframes highlightAppear {
+        0% { transform: scale(0.8); opacity: 0; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      @keyframes highlightDisappear {
+        0% { transform: scale(1); opacity: 1; }
+        100% { transform: scale(0.8); opacity: 0; }
+      }
+      .animate-highlight-appear { 
+        animation: highlightAppear 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      }
+      .animate-highlight-disappear { 
+        animation: highlightDisappear 0.2s ease-out forwards;
+      }
+      .animate-highlight-pulse {
+        animation: highlightPulse 2s ease-in-out infinite;
+      }
     </style>
   <script type="importmap">
 {

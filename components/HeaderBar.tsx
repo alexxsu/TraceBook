@@ -190,7 +190,52 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   };
 
   const categorizedResults = useMemo(() => {
-    // My Maps
+    // For admin: show all maps categorized by owner
+    // For normal user: "My Maps" (owned) vs "Other Maps" (joined/demo)
+    // For guest: just demo map
+    
+    if (isAdmin) {
+      // Admin view: Group ALL maps - "My Maps" for admin's own maps, "Other Maps" for everyone else's
+      const myDefault = searchResults.filter(g => 
+        currentUserUid && g.map.ownerUid === currentUserUid && g.map.isDefault
+      );
+      const myShared = searchResults.filter(g => 
+        currentUserUid && g.map.ownerUid === currentUserUid && !g.map.isDefault
+      );
+      
+      // For admin, "Other Maps" includes ALL other users' maps (both default and shared)
+      const otherUsersDefault = searchResults.filter(g => 
+        g.map.ownerUid !== currentUserUid && g.map.isDefault
+      );
+      const otherUsersShared = searchResults.filter(g => 
+        g.map.ownerUid !== currentUserUid && !g.map.isDefault
+      );
+      
+      const sections = [
+        { key: 'my-default', label: 'My Default Map', items: myDefault, isMyMaps: true },
+        { key: 'my-shared', label: 'My Shared Maps', items: myShared, isMyMaps: true },
+        { key: 'other-default', label: "Users' Default Maps", items: otherUsersDefault, isMyMaps: false },
+        { key: 'other-shared', label: "Users' Shared Maps", items: otherUsersShared, isMyMaps: false }
+      ].filter(section => section.items.length > 0);
+
+      const myMaps = sections.filter(s => s.isMyMaps);
+      const otherMaps = sections.filter(s => !s.isMyMaps);
+      
+      return { sections, myMaps, otherMaps };
+    }
+    
+    // For guest: everything goes to "Demo Maps"
+    if (isGuest) {
+      const demoMaps = searchResults.filter(g => g.map.visibility === 'public');
+      
+      const sections = [
+        { key: 'demo', label: 'Demo Maps', items: demoMaps, isMyMaps: false }
+      ].filter(section => section.items.length > 0);
+      
+      return { sections, myMaps: [], otherMaps: sections };
+    }
+    
+    // For normal users: My Maps (default + shared I created) vs Other Maps (joined)
     const myDefault = searchResults.filter(g => 
       currentUserUid && g.map.ownerUid === currentUserUid && g.map.isDefault
     );
@@ -198,19 +243,15 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       currentUserUid && g.map.ownerUid === currentUserUid && !g.map.isDefault
     );
     
-    // Other Maps - separate demo (public) from other users' shared
-    const demoMaps = searchResults.filter(g => 
-      g.map.ownerUid !== currentUserUid && g.map.visibility === 'public'
-    );
-    const otherUserMaps = searchResults.filter(g => 
-      g.map.ownerUid !== currentUserUid && g.map.visibility !== 'public'
+    // Maps I joined (not owned by me)
+    const joinedMaps = searchResults.filter(g => 
+      g.map.ownerUid !== currentUserUid && g.map.visibility === 'shared'
     );
 
     const sections = [
       { key: 'my-default', label: 'My Default Map', items: myDefault, isMyMaps: true },
       { key: 'my-shared', label: 'My Shared Maps', items: myShared, isMyMaps: true },
-      { key: 'demo', label: 'Demo Maps', items: demoMaps, isMyMaps: false },
-      { key: 'other-users', label: "Other Users' Maps", items: otherUserMaps, isMyMaps: false }
+      { key: 'joined', label: 'Joined Maps', items: joinedMaps, isMyMaps: false }
     ].filter(section => section.items.length > 0);
 
     // Group into categories
@@ -218,7 +259,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     const otherMaps = sections.filter(s => !s.isMyMaps);
     
     return { sections, myMaps, otherMaps };
-  }, [searchResults, currentUserUid]);
+  }, [searchResults, currentUserUid, isAdmin, isGuest]);
 
   const adminAura = useMemo(() => isAdmin ? 'shadow-[0_0_0_1px_rgba(148,163,255,0.35)] ring-1 ring-indigo-400/40 bg-gradient-to-r from-gray-800/90 via-gray-800/80 to-gray-900/90' : '', [isAdmin]);
   const adminGlow = isAdmin ? 'shadow-[0_12px_40px_-18px_rgba(99,102,241,0.45)]' : '';
@@ -408,7 +449,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             }}
           ></div>
           <div
-            className="mt-2 border-t border-gray-700 pt-2 max-h-72 overflow-y-scroll rounded-lg bg-gray-800/80 backdrop-blur-md relative z-20"
+            className="mt-2 border-t border-gray-700 pt-2 max-h-[60vh] overflow-y-auto rounded-lg bg-gray-800/80 backdrop-blur-md relative z-20"
             style={{ 
               scrollbarGutter: 'stable',
               willChange: 'opacity, transform',
@@ -464,8 +505,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                                   <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                                 </div>
                               </button>
-                              <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                                <div className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pr-1 pb-1">
+                              <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-[40vh] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                <div 
+                                  className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pb-1 overflow-y-auto"
+                                  style={{ maxHeight: 'calc(40vh - 20px)', scrollbarGutter: 'stable', paddingRight: '4px' }}
+                                >
                                   {group.matches.map(r => (
                                     <button
                                       key={r.id}
@@ -523,8 +567,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                                   <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                                 </div>
                               </button>
-                              <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                                <div className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pr-1 pb-1">
+                              <div className={`overflow-hidden transition-all duration-200 ease-out ${isOpen ? 'max-h-[40vh] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                <div 
+                                  className="mt-1 flex flex-col gap-0.5 ml-5 border-l-2 border-gray-700/50 pl-2 pb-1 overflow-y-auto"
+                                  style={{ maxHeight: 'calc(40vh - 20px)', scrollbarGutter: 'stable', paddingRight: '4px' }}
+                                >
                                   {group.matches.map(r => (
                                     <button
                                       key={r.id}

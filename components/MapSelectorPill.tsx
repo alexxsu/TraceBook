@@ -64,13 +64,13 @@ export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({
     if (visibility === 'public' || isGuest) {
       return 'bg-green-900/80 border-green-700 text-green-200 hover:bg-green-800/90 hover:border-green-600';
     }
+    // ALL shared maps (owned or joined) - purple
+    if (visibility === 'shared' || (!activeMap.isDefault && activeMap.ownerUid !== user?.uid)) {
+      return 'bg-purple-900/80 border-purple-700 text-purple-200 hover:bg-purple-800/90 hover:border-purple-600';
+    }
     if (activeMap.ownerUid === user?.uid && !activeMap.isDefault) {
       // User's own shared maps - purple
       return 'bg-purple-900/80 border-purple-700 text-purple-200 hover:bg-purple-800/90 hover:border-purple-600';
-    }
-    if (activeMap.ownerUid !== user?.uid && !activeMap.isDefault) {
-      // Joined shared maps (other users' maps) - green
-      return 'bg-green-900/80 border-green-700 text-green-200 hover:bg-green-800/90 hover:border-green-600';
     }
     // Default maps - gray (personal/private)
     return 'bg-gray-900/80 border-gray-700 text-gray-200 hover:bg-gray-800/90 hover:border-gray-600';
@@ -81,13 +81,13 @@ export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({
     if (visibility === 'public' || isGuest) {
       return <Globe size={16} className={isCompactCardOpen ? 'text-white' : 'text-green-400'} />;
     }
-    // User's own shared maps get Users (purple) - indicates sharing
-    if (activeMap.ownerUid === user?.uid && !activeMap.isDefault) {
+    // ALL shared maps (owned OR joined) get Users (purple) - indicates collaborative
+    if (visibility === 'shared' || (!activeMap.isDefault && activeMap.ownerUid !== user?.uid)) {
       return <Users size={16} className={isCompactCardOpen ? 'text-white' : 'text-purple-400'} />;
     }
-    // Other users' shared maps (joined maps) get Users (green) - indicates shared/collaborative
-    if (activeMap.ownerUid !== user?.uid && !activeMap.isDefault) {
-      return <Users size={16} className={isCompactCardOpen ? 'text-white' : 'text-green-400'} />;
+    // User's own shared maps get Users (purple)
+    if (activeMap.ownerUid === user?.uid && !activeMap.isDefault) {
+      return <Users size={16} className={isCompactCardOpen ? 'text-white' : 'text-purple-400'} />;
     }
     // Default maps get Lock (blue) - personal/private
     return <Lock size={16} className={isCompactCardOpen ? 'text-white' : 'text-blue-400'} />;
@@ -154,8 +154,8 @@ export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({
           <div className="flex items-center gap-2 text-xs text-gray-200">
             <span className={`inline-flex h-2 w-2 rounded-full flex-shrink-0 ${
               activeMap.visibility === 'public' ? 'bg-green-400' :
-              activeMap.ownerUid === user?.uid && !activeMap.isDefault ? 'bg-purple-400' :
-              activeMap.ownerUid !== user?.uid && !activeMap.isDefault ? 'bg-green-400' : 'bg-blue-400'
+              (activeMap.visibility === 'shared' || (!activeMap.isDefault && activeMap.ownerUid !== user?.uid)) ? 'bg-purple-400' :
+              activeMap.ownerUid === user?.uid && !activeMap.isDefault ? 'bg-purple-400' : 'bg-blue-400'
             }`} />
             <span className="truncate">
               Viewing: <span className="font-semibold">{activeMap.name}</span>
@@ -204,10 +204,10 @@ export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({
                 <div className="flex items-center gap-2 min-w-0">
                   {activeMap.visibility === 'public' ? (
                     <Globe size={14} className="text-green-400 flex-shrink-0" />
+                  ) : (activeMap.visibility === 'shared' || (!activeMap.isDefault && activeMap.ownerUid !== user?.uid)) ? (
+                    <Users size={14} className="text-purple-400 flex-shrink-0" />
                   ) : activeMap.ownerUid === user?.uid && !activeMap.isDefault ? (
                     <Users size={14} className="text-purple-400 flex-shrink-0" />
-                  ) : activeMap.ownerUid !== user?.uid && !activeMap.isDefault ? (
-                    <Users size={14} className="text-green-400 flex-shrink-0" />
                   ) : (
                     <Lock size={14} className="text-blue-400 flex-shrink-0" />
                   )}
@@ -297,11 +297,13 @@ export const MapSelectorPill: React.FC<MapSelectorPillProps> = ({
                                       }`}
                                     >
                                       <div className="flex items-center gap-2">
-                                        {/* Demo maps (public) get globe, other users' shared maps get Users icon */}
+                                        {/* Demo maps (public) get globe, other users' default maps get Lock, shared maps get Users */}
                                         {map.visibility === 'public' ? (
                                           <Globe size={14} className="text-green-400 flex-shrink-0" />
+                                        ) : map.isDefault ? (
+                                          <Lock size={14} className="text-blue-400 flex-shrink-0" />
                                         ) : (
-                                          <Users size={14} className="text-green-400 flex-shrink-0" />
+                                          <Users size={14} className="text-purple-400 flex-shrink-0" />
                                         )}
                                         <div className="flex flex-col leading-tight min-w-0">
                                           <span className="text-sm truncate">{map.name}</span>

@@ -615,9 +615,25 @@ const PlaceDetail: React.FC<PlaceDetailProps> = ({
             {currentUserUid !== GUEST_ID && (
               <button
                 onClick={onAddAnotherVisit}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3.5 rounded-xl transition shadow-lg"
+                className="w-full group relative overflow-hidden py-3.5 rounded-xl transition-all duration-300"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)',
+                  border: '1px solid rgba(139, 92, 246, 0.3)'
+                }}
               >
-                {language === 'zh' ? '在此添加另一个记忆' : 'Add Another Visit Here'}
+                {/* Subtle gradient glow on hover */}
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(139, 92, 246, 0.25) 100%)'
+                  }}
+                />
+                {/* Content */}
+                <div className="relative flex items-center justify-center gap-2">
+                  <span className="text-xl text-violet-400">+</span>
+                  <span className="font-medium text-gray-200 group-hover:text-white transition-colors">
+                    {language === 'zh' ? '在此添加另一个记忆' : 'Add Another Memory'}
+                  </span>
+                </div>
               </button>
             )}
           </div>

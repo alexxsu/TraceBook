@@ -381,8 +381,18 @@ export const Tutorial: React.FC<TutorialProps> = ({
       const nextStepId = steps[currentStepIndex + 1].id;
       
       // Open map management modal when moving to map_management_modal step
+      // Show content immediately so user sees the explanation as modal opens
       if (nextStepId === 'map_management_modal') {
         onOpenMapManagementRef.current?.();
+        // For map management, show content immediately (no fade out delay)
+        setHighlightRect(null);
+        setCurrentStep('map_management_modal');
+        // Small delay to sync with modal animation
+        setTimeout(() => {
+          setContentVisible(true);
+          setIsStepReady(true);
+        }, 100);
+        return;
       }
       
       // Close map management modal and side menu when leaving map_management_modal
@@ -1101,16 +1111,15 @@ export const Tutorial: React.FC<TutorialProps> = ({
 
         {highlightStyle && showOverlay && (
           <div
-            className={`absolute border-2 border-blue-400 pointer-events-none transition-opacity duration-300 ${isRoundHighlight ? '' : 'rounded-xl'}`}
+            className={`absolute border-2 border-blue-400 pointer-events-none ${isRoundHighlight ? '' : 'rounded-xl'} ${
+              contentVisible ? 'animate-highlight-appear animate-highlight-pulse' : 'animate-highlight-disappear'
+            }`}
             style={{
               top: highlightStyle.top,
               left: highlightStyle.left,
               width: highlightStyle.width,
               height: highlightStyle.height,
               borderRadius: isRoundHighlight ? '50%' : undefined,
-              opacity: contentVisible ? 1 : 0,
-              boxShadow: '0 0 20px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.3)',
-              animation: contentVisible ? 'pulse 2s ease-in-out infinite' : 'none'
             }}
           />
         )}
