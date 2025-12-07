@@ -4,23 +4,22 @@ import { Coordinates } from '../types';
 
 type MapType = 'satellite' | 'roadmap' | 'dark';
 
-// Mapbox style URLs
 const MAP_STYLES: Record<MapType, string> = {
   satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
   roadmap: 'mapbox://styles/mapbox/streets-v12',
   dark: 'mapbox://styles/mapbox/dark-v11',
 };
 
-// Default bounds for Toronto area
 const DEFAULT_BOUNDS: [[number, number], [number, number]] = [
-  [-79.80, 43.48], // SW [lng, lat]
-  [-79.00, 43.90]  // NE [lng, lat]
+  [-79.80, 43.48],
+  [-79.00, 43.90]
 ];
 
 interface UseMapControlsReturn {
   mapInstance: mapboxgl.Map | null;
   currentMapCenter: Coordinates;
   mapType: MapType;
+  isLocating: boolean;
   handleMapLoad: (map: mapboxgl.Map) => void;
   handleToggleMapType: () => void;
   handleLocateMe: () => void;
@@ -28,7 +27,6 @@ interface UseMapControlsReturn {
   handleZoomToMunicipality: () => void;
 }
 
-// Mapbox Geocoding API
 const MAPBOX_GEOCODING_URL = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
 
 interface GeocodingFeature {
@@ -49,6 +47,63 @@ interface GeocodingResponse {
   features: GeocodingFeature[];
 }
 
+// Helper to get user's current position with better error handling
+const getCurrentPosition = (): Promise<GeolocationPosition> => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported by this browser.'));
+      return;
+    }
+
+    // Check if we already have permission
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then((permissionStatus) => {
+        if (permissionStatus.state === 'denied') {
+          reject(new Error('Location permission was denied. Please enable location access in your browser settings.'));
+          return;
+        }
+        // Permission is granted or prompt - proceed with geolocation
+        requestLocation();
+      }).catch(() => {
+        // Permissions API not available, try anyway
+        requestLocation();
+      });
+    } else {
+      requestLocation();
+    }
+
+    function requestLocation() {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve(position);
+        },
+        (error) => {
+          let errorMessage = 'Could not get your location.';
+          
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access was denied. Please allow location access in your browser settings and try again.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location information is unavailable. Please check your device\'s location settings.';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out. Please try again.';
+              break;
+          }
+          
+          reject(new Error(errorMessage));
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000, // Increased timeout
+          maximumAge: 30000 // Allow cached position up to 30 seconds old
+        }
+      );
+    }
+  });
+};
+
 export function useMapControls(): UseMapControlsReturn {
   const getPreferredMapType = () => {
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -60,6 +115,7 @@ export function useMapControls(): UseMapControlsReturn {
   const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
   const [currentMapCenter, setCurrentMapCenter] = useState<Coordinates>({ lat: 43.6532, lng: -79.3832 });
   const [mapType, setMapType] = useState<MapType>(() => getPreferredMapType());
+  const [isLocating, setIsLocating] = useState(false);
   const styleLoadCallbackRef = useRef<(() => void) | null>(null);
 
   const handleMapLoad = useCallback((map: mapboxgl.Map) => {
@@ -83,7 +139,6 @@ export function useMapControls(): UseMapControlsReturn {
       newType = 'satellite';
     }
 
-    // Remove previous style load callback if any
     if (styleLoadCallbackRef.current) {
       mapInstance.off('style.load', styleLoadCallbackRef.current);
     }
@@ -92,39 +147,45 @@ export function useMapControls(): UseMapControlsReturn {
     setMapType(newType);
   }, [mapInstance, mapType]);
 
-  const handleLocateMe = useCallback(() => {
+  const handleLocateMe = useCallback(async () => {
     console.log('handleLocateMe called, mapInstance:', !!mapInstance);
-
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by this browser.");
-      return;
-    }
 
     if (!mapInstance) {
       console.warn('Map instance not available yet');
+      alert('Map is still loading. Please wait and try again.');
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const pos: [number, number] = [
-          position.coords.longitude,
-          position.coords.latitude,
-        ];
-        console.log('Got position:', pos);
-        mapInstance.flyTo({
-          center: pos,
-          zoom: 17,
-          duration: 1500
-        });
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        alert("Could not access your location. Please check browser permissions.");
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  }, [mapInstance]);
+    if (isLocating) {
+      console.log('Already locating, skipping');
+      return;
+    }
+
+    setIsLocating(true);
+
+    try {
+      const position = await getCurrentPosition();
+      
+      const pos: [number, number] = [
+        position.coords.longitude,
+        position.coords.latitude,
+      ];
+      
+      console.log('Got position:', pos, 'accuracy:', position.coords.accuracy);
+      
+      mapInstance.flyTo({
+        center: pos,
+        zoom: 17,
+        duration: 1500
+      });
+      
+    } catch (error: any) {
+      console.error('Location error:', error);
+      alert(error.message || 'Could not access your location. Please check browser permissions.');
+    } finally {
+      setIsLocating(false);
+    }
+  }, [mapInstance, isLocating]);
 
   const handleResetView = useCallback(() => {
     if (!mapInstance) return;
@@ -138,102 +199,102 @@ export function useMapControls(): UseMapControlsReturn {
   const handleZoomToMunicipality = useCallback(async () => {
     console.log('handleZoomToMunicipality called, mapInstance:', !!mapInstance);
 
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by this browser.");
+    if (!mapInstance) {
+      console.warn('Map instance not available yet');
+      alert('Map is still loading. Please wait and try again.');
       return;
     }
 
-    if (!mapInstance) {
-      console.warn('Map instance not available yet');
+    if (isLocating) {
+      console.log('Already locating, skipping');
       return;
     }
+
+    setIsLocating(true);
 
     const accessToken = mapboxgl.accessToken;
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const userPos = {
-          lng: position.coords.longitude,
-          lat: position.coords.latitude,
-        };
-        console.log('Got position for city zoom:', userPos);
+    try {
+      const position = await getCurrentPosition();
+      
+      const userPos = {
+        lng: position.coords.longitude,
+        lat: position.coords.latitude,
+      };
+      
+      console.log('Got position for city zoom:', userPos);
 
-        try {
-          // Reverse geocode to find municipality
-          const response = await fetch(
-            `${MAPBOX_GEOCODING_URL}/${userPos.lng},${userPos.lat}.json?types=place,locality&access_token=${accessToken}`
-          );
+      try {
+        const response = await fetch(
+          `${MAPBOX_GEOCODING_URL}/${userPos.lng},${userPos.lat}.json?types=place,locality&access_token=${accessToken}`
+        );
 
-          if (!response.ok) {
-            throw new Error(`Geocoding failed: ${response.status}`);
-          }
+        if (!response.ok) {
+          throw new Error(`Geocoding failed: ${response.status}`);
+        }
 
-          const data: GeocodingResponse = await response.json();
-          console.log('Geocoding results:', data.features.length);
+        const data: GeocodingResponse = await response.json();
+        console.log('Geocoding results:', data.features.length);
 
-          // Find municipality (place or locality)
-          const municipality = data.features.find(f => 
-            f.place_type.includes('place') || f.place_type.includes('locality')
-          );
+        const municipality = data.features.find(f => 
+          f.place_type.includes('place') || f.place_type.includes('locality')
+        );
 
-          if (municipality && municipality.bbox) {
-            console.log('Found municipality with bounds:', municipality.place_name);
-            
-            const bounds: [[number, number], [number, number]] = [
-              [municipality.bbox[0], municipality.bbox[1]], // SW
-              [municipality.bbox[2], municipality.bbox[3]]  // NE
-            ];
+        if (municipality && municipality.bbox) {
+          console.log('Found municipality with bounds:', municipality.place_name);
+          
+          const bounds: [[number, number], [number, number]] = [
+            [municipality.bbox[0], municipality.bbox[1]],
+            [municipality.bbox[2], municipality.bbox[3]]
+          ];
 
-            mapInstance.flyTo({
-              center: municipality.center,
-              duration: 500
+          mapInstance.flyTo({
+            center: municipality.center,
+            duration: 500
+          });
+
+          setTimeout(() => {
+            mapInstance.fitBounds(bounds, {
+              padding: 50,
+              duration: 1000
             });
-
-            setTimeout(() => {
-              mapInstance.fitBounds(bounds, {
-                padding: 50,
-                duration: 1000
-              });
-            }, 500);
-          } else if (municipality) {
-            // Has center but no bbox - just zoom to location
-            console.log('Found municipality without bounds:', municipality.place_name);
-            mapInstance.flyTo({
-              center: municipality.center,
-              zoom: 13,
-              duration: 1500
-            });
-          } else {
-            // No municipality found - fallback to user location
-            console.log('No municipality found, using fallback zoom');
-            mapInstance.flyTo({
-              center: [userPos.lng, userPos.lat],
-              zoom: 13,
-              duration: 1500
-            });
-          }
-        } catch (error) {
-          // Geocoding failed, fallback to simple zoom
-          console.warn('Geocoding API error, using fallback zoom:', error);
+          }, 500);
+        } else if (municipality) {
+          console.log('Found municipality without bounds:', municipality.place_name);
+          mapInstance.flyTo({
+            center: municipality.center,
+            zoom: 13,
+            duration: 1500
+          });
+        } else {
+          console.log('No municipality found, using fallback zoom');
           mapInstance.flyTo({
             center: [userPos.lng, userPos.lat],
             zoom: 13,
             duration: 1500
           });
         }
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        alert("Could not access your location. Please check browser permissions.");
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
-  }, [mapInstance]);
+      } catch (geocodeError) {
+        console.warn('Geocoding API error, using fallback zoom:', geocodeError);
+        mapInstance.flyTo({
+          center: [userPos.lng, userPos.lat],
+          zoom: 13,
+          duration: 1500
+        });
+      }
+    } catch (error: any) {
+      console.error('Location error:', error);
+      alert(error.message || 'Could not access your location. Please check browser permissions.');
+    } finally {
+      setIsLocating(false);
+    }
+  }, [mapInstance, isLocating]);
 
   return {
     mapInstance,
     currentMapCenter,
     mapType,
+    isLocating,
     handleMapLoad,
     handleToggleMapType,
     handleLocateMe,

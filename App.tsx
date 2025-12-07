@@ -285,6 +285,7 @@ function App() {
     mapInstance,
     currentMapCenter,
     mapType,
+    isLocating,
     handleMapLoad,
     handleToggleMapType,
     handleLocateMe,
@@ -882,6 +883,7 @@ function App() {
             onLocateUser={handleLocateMe}
             onZoomToCity={handleZoomToMunicipality}
             onToggleMapType={handleToggleMapType}
+            isLocating={isLocating}
           />
 
           {/* Member Avatars */}
