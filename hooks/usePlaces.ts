@@ -71,6 +71,37 @@ export function usePlaces(
     return () => unsubscribe();
   }, [user, viewState, activeMap, onViewStateChange]);
 
+  // Helper function to calculate distance between two coordinates in meters
+  const getDistanceInMeters = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lng2 - lng1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  // Find a nearby existing place (within threshold meters)
+  const findNearbyPlace = useCallback((location: { lat: number; lng: number }, threshold: number = 50): Place | null => {
+    for (const place of places) {
+      if (place.location) {
+        const distance = getDistanceInMeters(
+          location.lat, 
+          location.lng, 
+          place.location.lat, 
+          place.location.lng
+        );
+        if (distance <= threshold) {
+          return place;
+        }
+      }
+    }
+    return null;
+  }, [places]);
+
   const saveVisit = useCallback(async (placeInfo: Place, visit: Visit) => {
     if (!user || !activeMap) throw new Error("No active user or map");
 
@@ -96,18 +127,32 @@ export function usePlaces(
       creatorPhotoURL: creatorPhotoURL
     };
 
-    // Note: Firestore collection is named 'restaurants' for backward compatibility
-    const placeRef = doc(db, "maps", activeMap.id, "restaurants", placeInfo.id);
-    const exists = places.some(p => p.id === placeInfo.id);
+    // Check for nearby existing place (handles Google Maps vs Geoapify ID mismatch)
+    // If there's a place within 50 meters, add the visit to that place instead
+    const nearbyPlace = placeInfo.location ? findNearbyPlace(placeInfo.location, 50) : null;
+    
+    // Also check for exact ID match
+    const existsById = places.some(p => p.id === placeInfo.id);
 
-    if (exists) {
+    // Note: Firestore collection is named 'restaurants' for backward compatibility
+    if (nearbyPlace && !existsById) {
+      // Found a nearby place with different ID - add visit to existing place
+      const placeRef = doc(db, "maps", activeMap.id, "restaurants", nearbyPlace.id);
+      await updateDoc(placeRef, { visits: arrayUnion(fullVisit) });
+      console.log(`Added visit to nearby existing place: ${nearbyPlace.name} (was: ${placeInfo.name})`);
+    } else if (existsById) {
+      // Exact ID match - add visit to existing place
+      const placeRef = doc(db, "maps", activeMap.id, "restaurants", placeInfo.id);
       await updateDoc(placeRef, { visits: arrayUnion(fullVisit) });
     } else {
+      // New place - create it
+      const placeRef = doc(db, "maps", activeMap.id, "restaurants", placeInfo.id);
       const newPlace = { ...placeInfo, visits: [fullVisit] };
       await setDoc(placeRef, newPlace);
     }
 
     // Send notifications to other members if this is a shared map
+    const placeName = nearbyPlace ? nearbyPlace.name : placeInfo.name;
     if (activeMap.visibility === 'shared' && activeMap.members && activeMap.members.length > 1) {
       const notificationsRef = collection(db, 'notifications');
       const batch = writeBatch(db);
@@ -119,7 +164,7 @@ export function usePlaces(
           batch.set(newNotifRef, {
             recipientUid: memberUid,
             type: 'post_added',
-            message: `${creatorDisplayName} added a memory at "${placeInfo.name}" to "${activeMap.name}"`,
+            message: `${creatorDisplayName} added a memory at "${placeName}" to "${activeMap.name}"`,
             mapId: activeMap.id,
             mapName: activeMap.name,
             actorUid: user.uid,
@@ -132,7 +177,7 @@ export function usePlaces(
 
       await batch.commit();
     }
-  }, [user, userProfile, activeMap, places]);
+  }, [user, userProfile, activeMap, places, findNearbyPlace]);
 
   const updateVisit = useCallback(async (placeId: string, oldVisit: Visit, newVisit: Visit) => {
     if (!user || !activeMap) return;

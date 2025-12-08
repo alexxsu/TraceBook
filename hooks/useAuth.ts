@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, updateProfile, setPersistence, browserSessionPersistence } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, googleProvider, db, storage, signInAsGuest } from '../firebaseConfig';
 import { UserProfile, UserMap, ViewState } from '../types';
@@ -53,16 +53,19 @@ export function useAuth(): UseAuthReturn {
     return () => unsubscribe();
   }, []);
 
-  // Check user approval status for real users and normalize profile structure
+  // Real-time listener for user profile - listens for changes including approval status
   useEffect(() => {
-    const checkStatus = async () => {
-      if (!user || user.isAnonymous) return;
+    if (!user || user.isAnonymous) {
+      setUserProfile(null);
+      return;
+    }
 
-      setIsCheckingStatus(true);
+    setIsCheckingStatus(true);
+    const userRef = doc(db, "users", user.uid);
+    
+    // Use onSnapshot for real-time updates (e.g., when admin approves the user)
+    const unsubscribe = onSnapshot(userRef, async (userSnap) => {
       try {
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
-
         if (userSnap.exists()) {
           const rawProfile = userSnap.data();
           const updates: Partial<UserProfile> = {};
@@ -148,11 +151,12 @@ export function useAuth(): UseAuthReturn {
       } finally {
         setIsCheckingStatus(false);
       }
-    };
+    }, (err) => {
+      console.error("Error in user profile listener:", err);
+      setIsCheckingStatus(false);
+    });
 
-    if (user && !user.isAnonymous) {
-      checkStatus();
-    }
+    return () => unsubscribe();
   }, [user]);
 
   const login = async () => {

@@ -42,7 +42,7 @@ function __rest(s, e) {
   return t;
 }
 
-// node_modules/firebase/node_modules/@firebase/auth/dist/esm2017/index-68602d24.js
+// node_modules/@firebase/auth/dist/esm2017/index-68602d24.js
 var FactorId = {
   /** Phone as second factor */
   PHONE: "phone",

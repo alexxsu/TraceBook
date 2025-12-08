@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Users, Search, UserPlus, Clock } from 'lucide-react';
 import { useLanguage } from '../hooks/useLanguage';
 
@@ -7,7 +7,69 @@ interface FriendsPageProps {
   isAnimatingIn: boolean;
 }
 
-export const FriendsPage: React.FC<FriendsPageProps> = ({
+// Memoized background styles to prevent recalculation
+const backgroundStyle = {
+  background: `
+    /* Ocean/water areas - deep blues */
+    radial-gradient(ellipse 80% 50% at 15% 85%, rgba(20, 50, 90, 0.9) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 75% 20%, rgba(25, 60, 100, 0.8) 0%, transparent 45%),
+    radial-gradient(ellipse 50% 30% at 90% 70%, rgba(18, 45, 85, 0.7) 0%, transparent 40%),
+    
+    /* Land masses - greens and browns */
+    radial-gradient(ellipse 70% 60% at 40% 30%, rgba(34, 85, 45, 0.85) 0%, transparent 40%),
+    radial-gradient(ellipse 55% 45% at 60% 55%, rgba(45, 75, 35, 0.8) 0%, transparent 35%),
+    radial-gradient(ellipse 40% 35% at 25% 60%, rgba(55, 90, 50, 0.7) 0%, transparent 30%),
+    radial-gradient(ellipse 45% 40% at 70% 40%, rgba(40, 70, 40, 0.75) 0%, transparent 35%),
+    
+    /* Desert/dry areas - tans and browns */
+    radial-gradient(ellipse 35% 30% at 50% 45%, rgba(120, 100, 70, 0.5) 0%, transparent 40%),
+    radial-gradient(ellipse 25% 20% at 35% 35%, rgba(100, 85, 60, 0.4) 0%, transparent 35%),
+    
+    /* Mountain shadows - darker patches */
+    radial-gradient(ellipse 20% 15% at 45% 50%, rgba(30, 45, 30, 0.6) 0%, transparent 50%),
+    radial-gradient(ellipse 15% 20% at 65% 35%, rgba(25, 40, 28, 0.5) 0%, transparent 45%),
+    
+    /* Cloud hints - subtle white patches */
+    radial-gradient(ellipse 30% 20% at 80% 25%, rgba(200, 210, 220, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 25% 15% at 20% 45%, rgba(190, 200, 210, 0.1) 0%, transparent 45%),
+    
+    /* Base layer - deep earth tone */
+    linear-gradient(160deg, #1a2d1a 0%, #152818 25%, #0d1f1a 50%, #142030 75%, #0f1a25 100%)
+  `,
+  filter: 'blur(2px) saturate(1.1)',
+};
+
+const textureStyle = {
+  backgroundImage: `
+    radial-gradient(circle at 20% 30%, rgba(255,255,255,0.03) 0%, transparent 2%),
+    radial-gradient(circle at 60% 70%, rgba(255,255,255,0.02) 0%, transparent 1.5%),
+    radial-gradient(circle at 80% 20%, rgba(255,255,255,0.025) 0%, transparent 1.8%),
+    radial-gradient(circle at 40% 80%, rgba(255,255,255,0.02) 0%, transparent 1.2%)
+  `,
+  backgroundSize: '100px 100px',
+};
+
+const cardBaseStyle: React.CSSProperties = {
+  borderRadius: '24px',
+  background: 'rgba(17, 24, 39, 0.95)',
+  backdropFilter: 'blur(24px)',
+  WebkitBackdropFilter: 'blur(24px)',
+  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.1)',
+  border: '1px solid rgba(255,255,255,0.1)',
+};
+
+// Friends is on the LEFT side of nav, so:
+// - Entering: slide in from LEFT
+// - Exiting to Map: slide out to LEFT
+// - Exiting to Feeds: slide out to LEFT (since Feeds is on the right)
+const animationTransforms = {
+  entering: { transform: 'translateX(-100%)', opacity: 0 },
+  visible: { transform: 'translateX(0)', opacity: 1 },
+  exiting: { transform: 'translateX(-100%)', opacity: 0 },
+  hidden: { transform: 'translateX(-100%)', opacity: 0 },
+};
+
+export const FriendsPage: React.FC<FriendsPageProps> = React.memo(({
   isVisible,
   isAnimatingIn
 }) => {
@@ -17,11 +79,14 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
 
   useEffect(() => {
     if (isVisible && isAnimatingIn) {
-      // Entering
+      // Entering - use requestAnimationFrame for smoother animation
       setShouldRender(true);
       setAnimationState('entering');
-      const timer = setTimeout(() => setAnimationState('visible'), 50);
-      return () => clearTimeout(timer);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setAnimationState('visible');
+        });
+      });
     } else if (isVisible && !isAnimatingIn) {
       // Staying visible
       setShouldRender(true);
@@ -32,41 +97,27 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
       const timer = setTimeout(() => {
         setShouldRender(false);
         setAnimationState('hidden');
-      }, 400);
+      }, 350);
       return () => clearTimeout(timer);
     }
   }, [isVisible, isAnimatingIn, shouldRender]);
 
-  if (!shouldRender) return null;
-
-  // Animation styles based on state
-  const getAnimationStyle = () => {
-    switch (animationState) {
-      case 'entering':
-        return {
-          transform: 'translateX(-100%) rotate(-8deg) scale(0.95)',
-          opacity: 0,
-        };
-      case 'visible':
-        return {
-          transform: 'translateX(0) rotate(0deg) scale(1)',
-          opacity: 1,
-        };
-      case 'exiting':
-        return {
-          transform: 'translateX(-120%) translateY(5%) rotate(-12deg) scale(0.9)',
-          opacity: 0,
-        };
-      default:
-        return {
-          transform: 'translateX(-100%) rotate(-8deg) scale(0.95)',
-          opacity: 0,
-        };
-    }
-  };
-
-  const animStyle = getAnimationStyle();
+  // Memoize animation style to prevent object recreation
+  const animStyle = useMemo(() => animationTransforms[animationState], [animationState]);
   const isExiting = animationState === 'exiting';
+
+  // Memoize card style with animation
+  const cardStyle = useMemo((): React.CSSProperties => ({
+    ...cardBaseStyle,
+    ...animStyle,
+    transition: isExiting
+      ? 'transform 0.35s cubic-bezier(0.4, 0, 0.6, 1), opacity 0.3s ease-in'
+      : 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease-out',
+    transformOrigin: 'left center',
+    willChange: 'transform, opacity',
+  }), [animStyle, isExiting]);
+
+  if (!shouldRender) return null;
 
   return (
     <div 
@@ -75,68 +126,19 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
       {/* Realistic blurred satellite map background */}
       <div 
         className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `
-            /* Ocean/water areas - deep blues */
-            radial-gradient(ellipse 80% 50% at 15% 85%, rgba(20, 50, 90, 0.9) 0%, transparent 50%),
-            radial-gradient(ellipse 60% 40% at 75% 20%, rgba(25, 60, 100, 0.8) 0%, transparent 45%),
-            radial-gradient(ellipse 50% 30% at 90% 70%, rgba(18, 45, 85, 0.7) 0%, transparent 40%),
-            
-            /* Land masses - greens and browns */
-            radial-gradient(ellipse 70% 60% at 40% 30%, rgba(34, 85, 45, 0.85) 0%, transparent 40%),
-            radial-gradient(ellipse 55% 45% at 60% 55%, rgba(45, 75, 35, 0.8) 0%, transparent 35%),
-            radial-gradient(ellipse 40% 35% at 25% 60%, rgba(55, 90, 50, 0.7) 0%, transparent 30%),
-            radial-gradient(ellipse 45% 40% at 70% 40%, rgba(40, 70, 40, 0.75) 0%, transparent 35%),
-            
-            /* Desert/dry areas - tans and browns */
-            radial-gradient(ellipse 35% 30% at 50% 45%, rgba(120, 100, 70, 0.5) 0%, transparent 40%),
-            radial-gradient(ellipse 25% 20% at 35% 35%, rgba(100, 85, 60, 0.4) 0%, transparent 35%),
-            
-            /* Mountain shadows - darker patches */
-            radial-gradient(ellipse 20% 15% at 45% 50%, rgba(30, 45, 30, 0.6) 0%, transparent 50%),
-            radial-gradient(ellipse 15% 20% at 65% 35%, rgba(25, 40, 28, 0.5) 0%, transparent 45%),
-            
-            /* Cloud hints - subtle white patches */
-            radial-gradient(ellipse 30% 20% at 80% 25%, rgba(200, 210, 220, 0.15) 0%, transparent 50%),
-            radial-gradient(ellipse 25% 15% at 20% 45%, rgba(190, 200, 210, 0.1) 0%, transparent 45%),
-            
-            /* Base layer - deep earth tone */
-            linear-gradient(160deg, #1a2d1a 0%, #152818 25%, #0d1f1a 50%, #142030 75%, #0f1a25 100%)
-          `,
-          filter: 'blur(2px) saturate(1.1)',
-        }}
+        style={backgroundStyle}
       />
       
       {/* Subtle texture overlay for realism */}
       <div 
         className="absolute inset-0 pointer-events-none opacity-30"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 20% 30%, rgba(255,255,255,0.03) 0%, transparent 2%),
-            radial-gradient(circle at 60% 70%, rgba(255,255,255,0.02) 0%, transparent 1.5%),
-            radial-gradient(circle at 80% 20%, rgba(255,255,255,0.025) 0%, transparent 1.8%),
-            radial-gradient(circle at 40% 80%, rgba(255,255,255,0.02) 0%, transparent 1.2%)
-          `,
-          backgroundSize: '100px 100px',
-        }}
+        style={textureStyle}
       />
       
       {/* Card Container */}
       <div 
         className="relative w-full h-full max-w-lg pointer-events-auto overflow-hidden"
-        style={{
-          ...animStyle,
-          transition: isExiting
-            ? 'transform 0.4s cubic-bezier(0.4, 0, 0.9, 0.4), opacity 0.35s ease-in'
-            : 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease-out',
-          transformOrigin: 'left center',
-          borderRadius: '24px',
-          background: 'rgba(17, 24, 39, 0.95)',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.1)',
-          border: '1px solid rgba(255,255,255,0.1)',
-        }}
+        style={cardStyle}
       >
         {/* Header */}
         <div className="sticky top-0 z-10 bg-gray-900/80 backdrop-blur-md border-b border-gray-700/50 px-4 py-4">
@@ -256,6 +258,8 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({
       </div>
     </div>
   );
-};
+});
+
+FriendsPage.displayName = 'FriendsPage';
 
 export default FriendsPage;

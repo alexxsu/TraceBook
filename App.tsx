@@ -315,25 +315,33 @@ function App() {
   const [friendsPageAnimating, setFriendsPageAnimating] = useState(false);
   const [feedsPageAnimating, setFeedsPageAnimating] = useState(false);
   const [mapRevealAnimating, setMapRevealAnimating] = useState(false);
+  
+  // Track transition state to prevent rapid switching issues
+  const isTransitioningRef = useRef(false);
 
-  // Navigation handlers
+  // Navigation handlers - optimized for faster transitions
   const handleNavigation = useCallback((page: NavigationPage) => {
-    if (page === currentNavPage) return;
+    if (page === currentNavPage || isTransitioningRef.current) return;
     
-    // Handle all possible transitions
+    isTransitioningRef.current = true;
+    
+    // Handle all possible transitions with optimized timing
     if (page === 'map') {
       // Going TO map from Friends or Feeds
-      // Trigger exit animation on current page, show earth loader
       setMapRevealAnimating(true);
       
+      // Trigger exit animation immediately
       if (currentNavPage === 'friends') {
-        setFriendsPageAnimating(false); // Trigger exit
+        setFriendsPageAnimating(false);
       } else if (currentNavPage === 'feeds') {
-        setFeedsPageAnimating(false); // Trigger exit
+        setFeedsPageAnimating(false);
       }
       
-      // Wait for exit animation, then switch page
-      setTimeout(() => setCurrentNavPage(page), 350);
+      // Switch page faster (reduced from 350ms)
+      setTimeout(() => {
+        setCurrentNavPage(page);
+        isTransitioningRef.current = false;
+      }, 280);
       
     } else if (page === 'friends') {
       // Going TO friends
@@ -342,12 +350,19 @@ function App() {
         setFeedsPageAnimating(false);
         setTimeout(() => {
           setCurrentNavPage(page);
-          setFriendsPageAnimating(true);
-        }, 300);
+          // Use requestAnimationFrame for smoother animation start
+          requestAnimationFrame(() => {
+            setFriendsPageAnimating(true);
+            isTransitioningRef.current = false;
+          });
+        }, 250); // Reduced from 300ms
       } else {
-        // From map: just enter friends
-        setFriendsPageAnimating(true);
-        setTimeout(() => setCurrentNavPage(page), 50);
+        // From map: enter friends immediately
+        setCurrentNavPage(page);
+        requestAnimationFrame(() => {
+          setFriendsPageAnimating(true);
+          isTransitioningRef.current = false;
+        });
       }
       
     } else if (page === 'feeds') {
@@ -357,12 +372,19 @@ function App() {
         setFriendsPageAnimating(false);
         setTimeout(() => {
           setCurrentNavPage(page);
-          setFeedsPageAnimating(true);
-        }, 300);
+          // Use requestAnimationFrame for smoother animation start
+          requestAnimationFrame(() => {
+            setFeedsPageAnimating(true);
+            isTransitioningRef.current = false;
+          });
+        }, 250); // Reduced from 300ms
       } else {
-        // From map: just enter feeds
-        setFeedsPageAnimating(true);
-        setTimeout(() => setCurrentNavPage(page), 50);
+        // From map: enter feeds immediately
+        setCurrentNavPage(page);
+        requestAnimationFrame(() => {
+          setFeedsPageAnimating(true);
+          isTransitioningRef.current = false;
+        });
       }
     }
   }, [currentNavPage]);
