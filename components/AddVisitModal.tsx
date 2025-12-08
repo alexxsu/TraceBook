@@ -29,6 +29,7 @@ interface SuggestionItem {
   description: string;
   isPrediction: boolean;
   location?: { lat: number; lng: number };
+  isExisting?: boolean; // Flag for existing places on the map
 }
 
 // ========================================

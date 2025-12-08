@@ -34,12 +34,15 @@ const ZOOM_SCALE_CONFIG = {
   maxScale: 1.25,
 };
 
-// Clustering configuration
+// Clustering configuration - increased radius for better grouping
 const CLUSTER_CONFIG = {
-  radius: 60,
+  radius: 80, // Increased from 60 for more consistent clustering
   minZoom: 0,
-  maxZoom: 14,
+  maxZoom: 16, // Increased to allow clustering at higher zoom levels
   minPoints: 2,
+  // Use extent to help with clustering at edges
+  extent: 512,
+  nodeSize: 64,
 };
 
 // Buffer multiplier for pre-loading markers outside visible bounds
@@ -63,20 +66,84 @@ const getScaleForZoom = (zoom: number): number => {
 const getCircleStyle = (isDarkMode: boolean, isSatellite: boolean) => {
   if (isDarkMode) {
     return {
-      fillColor: 'rgba(99, 102, 241, 0.08)',
-      strokeColor: 'rgba(129, 140, 248, 0.15)',
+      // Inner ring (most visible)
+      innerFillColor: 'rgba(99, 102, 241, 0.12)',
+      // Middle ring
+      middleFillColor: 'rgba(99, 102, 241, 0.06)',
+      // Outer ring (faded edge)
+      outerFillColor: 'rgba(99, 102, 241, 0.02)',
+      // Legacy stroke (now very subtle)
+      strokeColor: 'rgba(129, 140, 248, 0.08)',
     };
   } else if (isSatellite) {
     return {
-      fillColor: 'rgba(251, 191, 36, 0.1)',
-      strokeColor: 'rgba(245, 158, 11, 0.2)',
+      innerFillColor: 'rgba(251, 191, 36, 0.15)',
+      middleFillColor: 'rgba(251, 191, 36, 0.08)',
+      outerFillColor: 'rgba(251, 191, 36, 0.03)',
+      strokeColor: 'rgba(245, 158, 11, 0.1)',
     };
   } else {
     return {
-      fillColor: 'rgba(59, 130, 246, 0.06)',
-      strokeColor: 'rgba(96, 165, 250, 0.15)',
+      innerFillColor: 'rgba(59, 130, 246, 0.1)',
+      middleFillColor: 'rgba(59, 130, 246, 0.05)',
+      outerFillColor: 'rgba(59, 130, 246, 0.02)',
+      strokeColor: 'rgba(96, 165, 250, 0.08)',
     };
   }
+};
+
+// Helper to create a circle polygon around a center point
+const createCirclePolygon = (
+  centerLng: number,
+  centerLat: number,
+  radiusMeters: number,
+  numPoints: number = 64
+): number[][] => {
+  const coordinates: number[][] = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const angle = (i / numPoints) * 2 * Math.PI;
+    const dx = radiusMeters * Math.cos(angle);
+    const dy = radiusMeters * Math.sin(angle);
+    const lat = centerLat + (dy / 111320);
+    const lng = centerLng + (dx / (111320 * Math.cos(centerLat * Math.PI / 180)));
+    coordinates.push([lng, lat]);
+  }
+  return coordinates;
+};
+
+// Calculate the bounding circle for a set of coordinates
+const calculateBoundingCircle = (
+  coordinates: { lng: number; lat: number }[]
+): { center: { lng: number; lat: number }; radius: number } => {
+  if (coordinates.length === 0) {
+    return { center: { lng: 0, lat: 0 }, radius: 0 };
+  }
+  
+  if (coordinates.length === 1) {
+    return { center: coordinates[0], radius: EXPLORED_RADIUS };
+  }
+  
+  // Calculate centroid
+  const sumLng = coordinates.reduce((sum, c) => sum + c.lng, 0);
+  const sumLat = coordinates.reduce((sum, c) => sum + c.lat, 0);
+  const center = {
+    lng: sumLng / coordinates.length,
+    lat: sumLat / coordinates.length
+  };
+  
+  // Calculate max distance from centroid to any point (in meters)
+  let maxDistance = 0;
+  for (const coord of coordinates) {
+    const dLat = (coord.lat - center.lat) * 111320;
+    const dLng = (coord.lng - center.lng) * 111320 * Math.cos(center.lat * Math.PI / 180);
+    const distance = Math.sqrt(dLat * dLat + dLng * dLng);
+    maxDistance = Math.max(maxDistance, distance);
+  }
+  
+  // Add the base exploration radius to the max distance
+  const radius = maxDistance + EXPLORED_RADIUS;
+  
+  return { center, radius };
 };
 
 // Keep Mapbox positioning transform intact; scale only the inner content
@@ -103,8 +170,17 @@ const generateStableClusterId = (placeIds: string[]): string => {
   return `cluster-${[...placeIds].sort().join('-').substring(0, 100)}`;
 };
 
+// Check if two clusters share any places (indicating a merge/split)
+const clustersOverlap = (placeIds1: string[], placeIds2: string[]): boolean => {
+  const set1 = new Set(placeIds1);
+  return placeIds2.some(id => set1.has(id));
+};
+
 // Create HTML element for single place marker with CSS transitions
-const createPinElement = (place: Place, scale: number = 1): HTMLDivElement => {
+const createPinElement = (
+  place: Place, 
+  scale: number = 1
+): HTMLDivElement => {
   const container = document.createElement('div');
   container.className = 'mapbox-place-marker';
   container.style.cssText = `
@@ -112,14 +188,14 @@ const createPinElement = (place: Place, scale: number = 1): HTMLDivElement => {
     z-index: 1;
     pointer-events: auto;
     opacity: 0;
-    transition: opacity 0.3s ease-out;
+    transition: opacity 0.4s ease-in-out;
   `;
   container.dataset.placeId = place.id;
   
-  // Trigger fade-in after a microtask to ensure the transition works
-  requestAnimationFrame(() => {
+  // Slight delay before fade-in to let clusters start fading out first
+  setTimeout(() => {
     container.style.opacity = '1';
-  });
+  }, 80);
 
   const content = document.createElement('div');
   content.className = 'mapbox-marker-content';
@@ -234,7 +310,8 @@ const createPinElement = (place: Place, scale: number = 1): HTMLDivElement => {
 // Create cluster element with CSS transitions
 const createClusterElement = (
   places: Place[],
-  scale: number = 1
+  scale: number = 1,
+  pointCount?: number // Add optional point count from Supercluster
 ): HTMLDivElement => {
   const container = document.createElement('div');
   container.className = 'mapbox-cluster-marker';
@@ -243,13 +320,13 @@ const createClusterElement = (
     z-index: 1;
     pointer-events: auto;
     opacity: 0;
-    transition: opacity 0.3s ease-out;
+    transition: opacity 0.4s ease-in-out;
   `;
   
-  // Trigger fade-in after a microtask to ensure the transition works
-  requestAnimationFrame(() => {
+  // Slight delay before fade-in to let markers start fading out first
+  setTimeout(() => {
     container.style.opacity = '1';
-  });
+  }, 80);
   
   const content = document.createElement('div');
   content.className = 'mapbox-cluster-content';
@@ -273,7 +350,8 @@ const createClusterElement = (
   }
 
   const stackCount = Math.min(places.length, 4);
-  const totalCount = places.length;
+  // Use pointCount from Supercluster if provided, otherwise fall back to places.length
+  const totalCount = pointCount ?? places.length;
 
   let stackedCards = '';
   
@@ -356,6 +434,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const clusterMarkersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
+  const clusterMembershipRef = useRef<Map<string, string[]>>(new Map()); // clusterId -> placeIds
   const superclusterRef = useRef<Supercluster | null>(null);
   const placesMapRef = useRef<Map<string, Place>>(new Map());
   const [isMapReady, setIsMapReady] = useState(false);
@@ -397,13 +476,15 @@ const MapContainer: React.FC<MapContainerProps> = ({
         }
       }));
 
-    // Create or reuse Supercluster
+    // Create or reuse Supercluster with improved settings
     if (!superclusterRef.current) {
       superclusterRef.current = new Supercluster({
         radius: CLUSTER_CONFIG.radius,
         minZoom: CLUSTER_CONFIG.minZoom,
         maxZoom: CLUSTER_CONFIG.maxZoom,
         minPoints: CLUSTER_CONFIG.minPoints,
+        extent: CLUSTER_CONFIG.extent,
+        nodeSize: CLUSTER_CONFIG.nodeSize,
       });
     }
     superclusterRef.current.load(features);
@@ -488,9 +569,21 @@ const MapContainer: React.FC<MapContainerProps> = ({
           }
           map.getCanvas().addEventListener('contextmenu', (e) => e.preventDefault());
 
-          // Add circle source for exploration areas
-          if (!map.getSource('exploration-circles')) {
-            map.addSource('exploration-circles', {
+          // Add circle sources for exploration areas (3 layers for gradient effect)
+          if (!map.getSource('exploration-circles-outer')) {
+            map.addSource('exploration-circles-outer', {
+              type: 'geojson',
+              data: { type: 'FeatureCollection', features: [] }
+            });
+          }
+          if (!map.getSource('exploration-circles-middle')) {
+            map.addSource('exploration-circles-middle', {
+              type: 'geojson',
+              data: { type: 'FeatureCollection', features: [] }
+            });
+          }
+          if (!map.getSource('exploration-circles-inner')) {
+            map.addSource('exploration-circles-inner', {
               type: 'geojson',
               data: { type: 'FeatureCollection', features: [] }
             });
@@ -500,25 +593,52 @@ const MapContainer: React.FC<MapContainerProps> = ({
           const isSatellite = mapType === 'satellite';
           const circleStyle = getCircleStyle(isDarkMode, isSatellite);
 
-          if (!map.getLayer('exploration-circles-fill')) {
+          // Outer ring (most faded - largest)
+          if (!map.getLayer('exploration-circles-outer-fill')) {
             map.addLayer({
-              id: 'exploration-circles-fill',
+              id: 'exploration-circles-outer-fill',
               type: 'fill',
-              source: 'exploration-circles',
+              source: 'exploration-circles-outer',
               paint: {
-                'fill-color': circleStyle.fillColor,
+                'fill-color': circleStyle.outerFillColor,
               }
             });
           }
 
+          // Middle ring
+          if (!map.getLayer('exploration-circles-middle-fill')) {
+            map.addLayer({
+              id: 'exploration-circles-middle-fill',
+              type: 'fill',
+              source: 'exploration-circles-middle',
+              paint: {
+                'fill-color': circleStyle.middleFillColor,
+              }
+            });
+          }
+
+          // Inner ring (most visible - smallest)
+          if (!map.getLayer('exploration-circles-inner-fill')) {
+            map.addLayer({
+              id: 'exploration-circles-inner-fill',
+              type: 'fill',
+              source: 'exploration-circles-inner',
+              paint: {
+                'fill-color': circleStyle.innerFillColor,
+              }
+            });
+          }
+
+          // Subtle stroke on outer edge only
           if (!map.getLayer('exploration-circles-stroke')) {
             map.addLayer({
               id: 'exploration-circles-stroke',
               type: 'line',
-              source: 'exploration-circles',
+              source: 'exploration-circles-outer',
               paint: {
                 'line-color': circleStyle.strokeColor,
                 'line-width': 1,
+                'line-blur': 2,
               }
             });
           }
@@ -655,6 +775,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
       // Track current marker IDs to determine which to keep/remove
       const currentMarkerIds = new Set<string>();
       const currentClusterIds = new Set<string>();
+      const newClusterMembership = new Map<string, string[]>(); // For tracking this frame
 
       // Process clusters and individual points
       clusters.forEach(cluster => {
@@ -667,6 +788,7 @@ const MapContainer: React.FC<MapContainerProps> = ({
           // Generate stable cluster ID based on member places
           const stableClusterId = generateStableClusterId(clusterPlaceIds);
           currentClusterIds.add(stableClusterId);
+          newClusterMembership.set(stableClusterId, clusterPlaceIds);
           
           // Cancel pending removal if this cluster is still needed
           pendingRemovalsRef.current.delete(stableClusterId);
@@ -677,6 +799,8 @@ const MapContainer: React.FC<MapContainerProps> = ({
 
           if (clusterPlaces.length > 0) {
             const [lng, lat] = cluster.geometry.coordinates;
+            // Get the actual point count from Supercluster
+            const pointCount = cluster.properties.point_count || clusterLeaves.length;
             
             // Check if cluster marker already exists
             const existingMarker = clusterMarkersRef.current.get(stableClusterId);
@@ -687,9 +811,36 @@ const MapContainer: React.FC<MapContainerProps> = ({
               const el = existingMarker.getElement();
               setClusterScale(el, scale);
               if (el) el.style.opacity = '1';
+              
+              // Update the count badge if it changed
+              const countBadge = el.querySelector('div[style*="min-width: 20px"]');
+              if (countBadge && countBadge.textContent !== String(pointCount)) {
+                countBadge.textContent = String(pointCount);
+              }
             } else {
-              // Create new cluster marker
-              const element = createClusterElement(clusterPlaces, scale);
+              // Check if this new cluster is formed from merging existing clusters AND/OR markers
+              // Find old clusters that share places with this new cluster
+              const mergingFromClusters: { id: string; marker: mapboxgl.Marker }[] = [];
+              for (const [oldClusterId, oldPlaceIds] of clusterMembershipRef.current) {
+                if (oldClusterId !== stableClusterId && clustersOverlap(clusterPlaceIds, oldPlaceIds)) {
+                  const oldMarker = clusterMarkersRef.current.get(oldClusterId);
+                  if (oldMarker && !pendingRemovalsRef.current.has(oldClusterId)) {
+                    mergingFromClusters.push({ id: oldClusterId, marker: oldMarker });
+                  }
+                }
+              }
+              
+              // Find individual markers that are being absorbed into this cluster
+              const mergingFromMarkers: { id: string; marker: mapboxgl.Marker }[] = [];
+              for (const placeId of clusterPlaceIds) {
+                const existingMarker = markersRef.current.get(placeId);
+                if (existingMarker && !pendingRemovalsRef.current.has(placeId)) {
+                  mergingFromMarkers.push({ id: placeId, marker: existingMarker });
+                }
+              }
+              
+              // Create new cluster marker with correct count
+              const element = createClusterElement(clusterPlaces, scale, pointCount);
               
               // Store cluster_id for expansion zoom calculation
               element.dataset.superclusterId = String(cluster.properties.cluster_id);
@@ -721,6 +872,53 @@ const MapContainer: React.FC<MapContainerProps> = ({
                 .addTo(map);
               
               clusterMarkersRef.current.set(stableClusterId, marker);
+              
+              // Animate merging clusters (cluster + cluster → bigger cluster)
+              if (mergingFromClusters.length > 0) {
+                mergingFromClusters.forEach(({ id: oldId, marker: oldMarker }) => {
+                  if (!pendingRemovalsRef.current.has(oldId)) {
+                    pendingRemovalsRef.current.add(oldId);
+                    const oldEl = oldMarker.getElement();
+                    if (oldEl) {
+                      // Fade out the merging cluster
+                      oldEl.style.transition = 'opacity 0.35s ease-in-out';
+                      oldEl.style.opacity = '0';
+                    }
+                    // Remove after animation
+                    setTimeout(() => {
+                      if (pendingRemovalsRef.current.has(oldId)) {
+                        oldMarker.remove();
+                        clusterMarkersRef.current.delete(oldId);
+                        clusterMembershipRef.current.delete(oldId);
+                        pendingRemovalsRef.current.delete(oldId);
+                      }
+                    }, 350);
+                  }
+                });
+              }
+              
+              // Animate merging markers (marker joins cluster)
+              if (mergingFromMarkers.length > 0) {
+                mergingFromMarkers.forEach(({ id: markerId, marker: markerToMerge }) => {
+                  if (!pendingRemovalsRef.current.has(markerId)) {
+                    pendingRemovalsRef.current.add(markerId);
+                    const markerEl = markerToMerge.getElement();
+                    if (markerEl) {
+                      // Fade out the marker being absorbed
+                      markerEl.style.transition = 'opacity 0.35s ease-in-out';
+                      markerEl.style.opacity = '0';
+                    }
+                    // Remove after animation
+                    setTimeout(() => {
+                      if (pendingRemovalsRef.current.has(markerId)) {
+                        markerToMerge.remove();
+                        markersRef.current.delete(markerId);
+                        pendingRemovalsRef.current.delete(markerId);
+                      }
+                    }, 350);
+                  }
+                });
+              }
             }
           }
         } else {
@@ -759,21 +957,23 @@ const MapContainer: React.FC<MapContainerProps> = ({
         }
       });
 
-      // Remove markers no longer in current view/clusters with fade out
+      // Remove markers no longer in current view/clusters with smooth fade out
       for (const [id, marker] of markersRef.current) {
         if (!currentMarkerIds.has(id) && !pendingRemovalsRef.current.has(id)) {
           pendingRemovalsRef.current.add(id);
           const el = marker.getElement();
           if (el) {
+            // Smooth fade out - overlaps with new element fade in for crossfade effect
+            el.style.transition = 'opacity 0.35s ease-in-out';
             el.style.opacity = '0';
-            // Remove after transition
+            // Remove after transition completes
             setTimeout(() => {
               if (pendingRemovalsRef.current.has(id)) {
                 marker.remove();
                 markersRef.current.delete(id);
                 pendingRemovalsRef.current.delete(id);
               }
-            }, 200);
+            }, 350);
           } else {
             marker.remove();
             markersRef.current.delete(id);
@@ -782,60 +982,138 @@ const MapContainer: React.FC<MapContainerProps> = ({
         }
       }
       
-      // Remove old cluster markers with fade out
+      // Remove old cluster markers with smooth fade out (skip ones already handled by merge logic)
       for (const [id, marker] of clusterMarkersRef.current) {
         if (!currentClusterIds.has(id) && !pendingRemovalsRef.current.has(id)) {
           pendingRemovalsRef.current.add(id);
           const el = marker.getElement();
           if (el) {
+            // Smooth fade out - overlaps with new element fade in for crossfade effect
+            el.style.transition = 'opacity 0.35s ease-in-out';
             el.style.opacity = '0';
-            // Remove after transition
+            // Remove after transition completes
             setTimeout(() => {
               if (pendingRemovalsRef.current.has(id)) {
                 marker.remove();
                 clusterMarkersRef.current.delete(id);
+                clusterMembershipRef.current.delete(id);
                 pendingRemovalsRef.current.delete(id);
               }
-            }, 200);
+            }, 350);
           } else {
             marker.remove();
             clusterMarkersRef.current.delete(id);
+            clusterMembershipRef.current.delete(id);
             pendingRemovalsRef.current.delete(id);
           }
         }
       }
+      
+      // Update cluster membership tracking for next frame
+      for (const [clusterId, placeIds] of newClusterMembership) {
+        clusterMembershipRef.current.set(clusterId, placeIds);
+      }
 
-      // Update exploration circles
-      const circleFeatures = places
-        .filter(p => p.location)
-        .map(p => {
-          const center = [p.location.lng, p.location.lat];
-          const points = 64;
-          const coordinates = [];
-          for (let i = 0; i <= points; i++) {
-            const angle = (i / points) * 2 * Math.PI;
-            const dx = EXPLORED_RADIUS * Math.cos(angle);
-            const dy = EXPLORED_RADIUS * Math.sin(angle);
-            const lat = p.location.lat + (dy / 111320);
-            const lng = p.location.lng + (dx / (111320 * Math.cos(p.location.lat * Math.PI / 180)));
-            coordinates.push([lng, lat]);
+      // Update exploration circles based on current clusters
+      // Create gradient rings: outer (100% radius), middle (75% radius), inner (50% radius)
+      const outerFeatures: any[] = [];
+      const middleFeatures: any[] = [];
+      const innerFeatures: any[] = [];
+
+      // Process clusters to create merged exploration areas
+      clusters.forEach(cluster => {
+        if (cluster.properties.cluster) {
+          // It's a cluster - create a bounding circle around all places in it
+          const clusterLeaves = superclusterRef.current!
+            .getLeaves(cluster.properties.cluster_id, Infinity);
+          
+          const coordinates = clusterLeaves
+            .map((leaf: any) => {
+              const place = placesMapRef.current.get(leaf.properties.id);
+              return place?.location;
+            })
+            .filter((loc): loc is { lng: number; lat: number } => !!loc);
+          
+          if (coordinates.length > 0) {
+            const { center, radius } = calculateBoundingCircle(coordinates);
+            
+            // Create three concentric rings for gradient effect
+            outerFeatures.push({
+              type: 'Feature' as const,
+              geometry: {
+                type: 'Polygon' as const,
+                coordinates: [createCirclePolygon(center.lng, center.lat, radius * 1.0)]
+              },
+              properties: { id: `cluster-outer-${cluster.properties.cluster_id}` }
+            });
+            
+            middleFeatures.push({
+              type: 'Feature' as const,
+              geometry: {
+                type: 'Polygon' as const,
+                coordinates: [createCirclePolygon(center.lng, center.lat, radius * 0.75)]
+              },
+              properties: { id: `cluster-middle-${cluster.properties.cluster_id}` }
+            });
+            
+            innerFeatures.push({
+              type: 'Feature' as const,
+              geometry: {
+                type: 'Polygon' as const,
+                coordinates: [createCirclePolygon(center.lng, center.lat, radius * 0.5)]
+              },
+              properties: { id: `cluster-inner-${cluster.properties.cluster_id}` }
+            });
           }
-          return {
-            type: 'Feature' as const,
-            geometry: {
-              type: 'Polygon' as const,
-              coordinates: [coordinates]
-            },
-            properties: { id: p.id }
-          };
-        });
+        } else {
+          // Individual place - create standard exploration circle with gradient
+          const place = placesMapRef.current.get(cluster.properties.id);
+          if (place?.location) {
+            const { lat, lng } = place.location;
+            
+            outerFeatures.push({
+              type: 'Feature' as const,
+              geometry: {
+                type: 'Polygon' as const,
+                coordinates: [createCirclePolygon(lng, lat, EXPLORED_RADIUS * 1.0)]
+              },
+              properties: { id: `place-outer-${place.id}` }
+            });
+            
+            middleFeatures.push({
+              type: 'Feature' as const,
+              geometry: {
+                type: 'Polygon' as const,
+                coordinates: [createCirclePolygon(lng, lat, EXPLORED_RADIUS * 0.75)]
+              },
+              properties: { id: `place-middle-${place.id}` }
+            });
+            
+            innerFeatures.push({
+              type: 'Feature' as const,
+              geometry: {
+                type: 'Polygon' as const,
+                coordinates: [createCirclePolygon(lng, lat, EXPLORED_RADIUS * 0.5)]
+              },
+              properties: { id: `place-inner-${place.id}` }
+            });
+          }
+        }
+      });
 
-      const source = map.getSource('exploration-circles') as mapboxgl.GeoJSONSource;
-      if (source) {
-        source.setData({
-          type: 'FeatureCollection',
-          features: circleFeatures
-        });
+      // Update all three circle sources
+      const outerSource = map.getSource('exploration-circles-outer') as mapboxgl.GeoJSONSource;
+      const middleSource = map.getSource('exploration-circles-middle') as mapboxgl.GeoJSONSource;
+      const innerSource = map.getSource('exploration-circles-inner') as mapboxgl.GeoJSONSource;
+      
+      if (outerSource) {
+        outerSource.setData({ type: 'FeatureCollection', features: outerFeatures });
+      }
+      if (middleSource) {
+        middleSource.setData({ type: 'FeatureCollection', features: middleFeatures });
+      }
+      if (innerSource) {
+        innerSource.setData({ type: 'FeatureCollection', features: innerFeatures });
       }
     } finally {
       isUpdatingRef.current = false;
@@ -927,32 +1205,72 @@ const MapContainer: React.FC<MapContainerProps> = ({
       const isSatellite = mapType === 'satellite';
       const circleStyle = getCircleStyle(isDarkMode, isSatellite);
 
-      if (!map.getSource('exploration-circles')) {
-        map.addSource('exploration-circles', {
+      // Add sources for gradient exploration circles
+      if (!map.getSource('exploration-circles-outer')) {
+        map.addSource('exploration-circles-outer', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] }
+        });
+      }
+      if (!map.getSource('exploration-circles-middle')) {
+        map.addSource('exploration-circles-middle', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] }
+        });
+      }
+      if (!map.getSource('exploration-circles-inner')) {
+        map.addSource('exploration-circles-inner', {
           type: 'geojson',
           data: { type: 'FeatureCollection', features: [] }
         });
       }
 
-      if (!map.getLayer('exploration-circles-fill')) {
+      // Outer ring layer
+      if (!map.getLayer('exploration-circles-outer-fill')) {
         map.addLayer({
-          id: 'exploration-circles-fill',
+          id: 'exploration-circles-outer-fill',
           type: 'fill',
-          source: 'exploration-circles',
-          paint: { 'fill-color': circleStyle.fillColor }
+          source: 'exploration-circles-outer',
+          paint: { 'fill-color': circleStyle.outerFillColor }
         });
       } else {
-        map.setPaintProperty('exploration-circles-fill', 'fill-color', circleStyle.fillColor);
+        map.setPaintProperty('exploration-circles-outer-fill', 'fill-color', circleStyle.outerFillColor);
       }
 
+      // Middle ring layer
+      if (!map.getLayer('exploration-circles-middle-fill')) {
+        map.addLayer({
+          id: 'exploration-circles-middle-fill',
+          type: 'fill',
+          source: 'exploration-circles-middle',
+          paint: { 'fill-color': circleStyle.middleFillColor }
+        });
+      } else {
+        map.setPaintProperty('exploration-circles-middle-fill', 'fill-color', circleStyle.middleFillColor);
+      }
+
+      // Inner ring layer
+      if (!map.getLayer('exploration-circles-inner-fill')) {
+        map.addLayer({
+          id: 'exploration-circles-inner-fill',
+          type: 'fill',
+          source: 'exploration-circles-inner',
+          paint: { 'fill-color': circleStyle.innerFillColor }
+        });
+      } else {
+        map.setPaintProperty('exploration-circles-inner-fill', 'fill-color', circleStyle.innerFillColor);
+      }
+
+      // Subtle stroke on outer edge
       if (!map.getLayer('exploration-circles-stroke')) {
         map.addLayer({
           id: 'exploration-circles-stroke',
           type: 'line',
-          source: 'exploration-circles',
+          source: 'exploration-circles-outer',
           paint: {
             'line-color': circleStyle.strokeColor,
             'line-width': 1,
+            'line-blur': 2,
           }
         });
       } else {

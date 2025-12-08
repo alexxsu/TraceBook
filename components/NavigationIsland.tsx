@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Users, Rss, MapPin } from 'lucide-react';
 
 export type NavigationPage = 'map' | 'friends' | 'feeds';
@@ -12,7 +12,7 @@ interface NavigationIslandProps {
   isModalActive?: boolean;
 }
 
-export const NavigationIsland: React.FC<NavigationIslandProps> = ({
+export const NavigationIsland: React.FC<NavigationIslandProps> = React.memo(({
   currentPage,
   onNavigate,
   onAddPress,
@@ -40,14 +40,29 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
     }
   }, [shouldBeVisible, shouldRender]);
 
-  const handleNavigate = (page: NavigationPage) => {
-    if (page === currentPage) return;
+  const handleNavigate = useCallback((page: NavigationPage) => {
+    if (page === currentPage || animatingTo) return;
     setAnimatingTo(page);
+    // Reduced delay for faster response
     setTimeout(() => {
       onNavigate(page);
       setAnimatingTo(null);
-    }, 150);
-  };
+    }, 100);
+  }, [currentPage, animatingTo, onNavigate]);
+
+  const handleCenterPress = useCallback(() => {
+    if (currentPage === 'map') {
+      onAddPress();
+    } else {
+      handleNavigate('map');
+    }
+  }, [currentPage, onAddPress, handleNavigate]);
+
+  // Memoize container style to prevent recalculation
+  const containerStyle = useMemo(() => ({
+    boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+    willChange: 'transform' as const,
+  }), []);
 
   if (!shouldRender) return null;
 
@@ -62,9 +77,7 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
       {/* Navigation Island Container - slimmer and longer */}
       <div 
         className="pointer-events-auto flex items-center gap-4 px-4 py-1.5 bg-gray-900/80 backdrop-blur-xl border border-white/20 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
-        style={{
-          boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
-        }}
+        style={containerStyle}
       >
         {/* Friends Button */}
         <button
@@ -89,13 +102,7 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
         {/* Center Button - Plus or Map */}
         <button
           data-tutorial="add-button"
-          onClick={() => {
-            if (isOnMap) {
-              onAddPress();
-            } else {
-              handleNavigate('map');
-            }
-          }}
+          onClick={handleCenterPress}
           className={`relative flex items-center justify-center rounded-full transition-all duration-300 ease-out active:scale-95 ${
             isOnMap
               ? isAddModalOpen
@@ -157,6 +164,8 @@ export const NavigationIsland: React.FC<NavigationIslandProps> = ({
       </div>
     </div>
   );
-};
+});
+
+NavigationIsland.displayName = 'NavigationIsland';
 
 export default NavigationIsland;

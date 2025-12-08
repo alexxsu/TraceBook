@@ -264,20 +264,28 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       {/* Animated glow border - CSS animation approach for reliability */}
       <style>{`
         @keyframes headerGlowRotate {
-          0%, 25% { transform: translate(-50%, -50%) rotate(0deg); }
-          50% { transform: translate(-50%, -50%) rotate(180deg); }
-          50.1%, 75% { transform: translate(-50%, -50%) rotate(180deg); }
+          0% { transform: translate(-50%, -50%) rotate(0deg); }
           100% { transform: translate(-50%, -50%) rotate(360deg); }
         }
-        .header-glow-mobile .glow-spinner {
-          animation: headerGlowRotate 6s ease-in-out infinite;
+        @keyframes headerGlowPulse {
+          0%, 100% { opacity: 0.6; }
+          50% { opacity: 0.9; }
         }
+        /* Mobile: continuous rotation */
+        .header-glow-mobile .glow-spinner {
+          animation: headerGlowRotate 8s linear infinite;
+        }
+        /* Desktop: slow continuous rotation, speed up on hover */
         .header-glow-desktop .glow-spinner {
-          transform: translate(-50%, -50%) rotate(0deg);
-          transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+          animation: headerGlowRotate 12s linear infinite;
+          transition: animation-duration 0.3s ease;
         }
         .header-glow-desktop:hover .glow-spinner {
-          transform: translate(-50%, -50%) rotate(180deg);
+          animation-duration: 3s;
+        }
+        /* Glow pulse for both */
+        .header-glow-container {
+          animation: headerGlowPulse 4s ease-in-out infinite;
         }
         
         /* Animated TraceBook title - reversed: dark base, blue fill */
@@ -319,7 +327,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       `}</style>
       
       <div
-        className={`absolute -inset-[3px] rounded-[14px] pointer-events-none z-0 ${isMobile ? 'header-glow-mobile' : 'header-glow-desktop'}`}
+        className={`absolute -inset-[3px] rounded-[14px] pointer-events-none z-0 header-glow-container ${isMobile ? 'header-glow-mobile' : 'header-glow-desktop'}`}
         style={{
           opacity: 1,
         }}

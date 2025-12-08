@@ -1,94 +1,106 @@
 {
-  "hash": "604e4e41",
-  "configHash": "35199c55",
-  "lockfileHash": "c5050b8f",
-  "browserHash": "48d83c6a",
+  "hash": "a6b17467",
+  "configHash": "5dc5a513",
+  "lockfileHash": "4cd643d1",
+  "browserHash": "60164dbb",
   "optimized": {
-    "react/jsx-dev-runtime": {
-      "src": "../../node_modules/react/jsx-dev-runtime.js",
-      "file": "react_jsx-dev-runtime.js",
-      "fileHash": "05b9deb5",
-      "needsInterop": true
-    },
     "react": {
       "src": "../../node_modules/react/index.js",
       "file": "react.js",
-      "fileHash": "977d0d37",
+      "fileHash": "9a5195e9",
       "needsInterop": true
-    },
-    "react-dom/client": {
-      "src": "../../node_modules/react-dom/client.js",
-      "file": "react-dom_client.js",
-      "fileHash": "35c038ef",
-      "needsInterop": true
-    },
-    "lucide-react": {
-      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
-      "file": "lucide-react.js",
-      "fileHash": "58366de1",
-      "needsInterop": false
-    },
-    "@googlemaps/markerclusterer": {
-      "src": "../../node_modules/@googlemaps/markerclusterer/dist/index.esm.mjs",
-      "file": "@googlemaps_markerclusterer.js",
-      "fileHash": "ed19b647",
-      "needsInterop": false
     },
     "react-dom": {
       "src": "../../node_modules/react-dom/index.js",
       "file": "react-dom.js",
-      "fileHash": "b38800c4",
+      "fileHash": "79371f0a",
       "needsInterop": true
     },
-    "firebase/storage": {
-      "src": "../../node_modules/firebase/storage/dist/esm/index.esm.js",
-      "file": "firebase_storage.js",
-      "fileHash": "071fee59",
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "331f1619",
+      "needsInterop": true
+    },
+    "react/jsx-runtime": {
+      "src": "../../node_modules/react/jsx-runtime.js",
+      "file": "react_jsx-runtime.js",
+      "fileHash": "b4f9b7a9",
+      "needsInterop": true
+    },
+    "exifr": {
+      "src": "../../node_modules/exifr/dist/full.esm.mjs",
+      "file": "exifr.js",
+      "fileHash": "c314d4a2",
       "needsInterop": false
-    },
-    "heic2any": {
-      "src": "../../node_modules/heic2any/dist/heic2any.js",
-      "file": "heic2any.js",
-      "fileHash": "ad1db5ce",
-      "needsInterop": true
     },
     "firebase/app": {
       "src": "../../node_modules/firebase/app/dist/esm/index.esm.js",
       "file": "firebase_app.js",
-      "fileHash": "412b9b5f",
+      "fileHash": "4c469bd2",
       "needsInterop": false
     },
     "firebase/auth": {
       "src": "../../node_modules/firebase/auth/dist/esm/index.esm.js",
       "file": "firebase_auth.js",
-      "fileHash": "e908a1e5",
+      "fileHash": "016e3211",
       "needsInterop": false
     },
     "firebase/firestore": {
       "src": "../../node_modules/firebase/firestore/dist/esm/index.esm.js",
       "file": "firebase_firestore.js",
-      "fileHash": "f3f60bd0",
+      "fileHash": "3caf4077",
       "needsInterop": false
+    },
+    "firebase/storage": {
+      "src": "../../node_modules/firebase/storage/dist/esm/index.esm.js",
+      "file": "firebase_storage.js",
+      "fileHash": "5753c606",
+      "needsInterop": false
+    },
+    "heic2any": {
+      "src": "../../node_modules/heic2any/dist/heic2any.js",
+      "file": "heic2any.js",
+      "fileHash": "c0acd47b",
+      "needsInterop": true
     },
     "html2canvas": {
       "src": "../../node_modules/html2canvas/dist/html2canvas.esm.js",
       "file": "html2canvas.js",
-      "fileHash": "e2e42f4a",
+      "fileHash": "7a5a0f26",
       "needsInterop": false
     },
-    "exifr": {
-      "src": "../../node_modules/exifr/dist/full.esm.mjs",
-      "file": "exifr.js",
-      "fileHash": "e21f2434",
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "27e900c1",
+      "needsInterop": false
+    },
+    "mapbox-gl": {
+      "src": "../../node_modules/mapbox-gl/dist/mapbox-gl.js",
+      "file": "mapbox-gl.js",
+      "fileHash": "3f309dc6",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "bd3def4e",
+      "needsInterop": true
+    },
+    "supercluster": {
+      "src": "../../node_modules/supercluster/index.js",
+      "file": "supercluster.js",
+      "fileHash": "3b981314",
       "needsInterop": false
     }
   },
   "chunks": {
-    "chunk-K7US7FQN": {
-      "file": "chunk-K7US7FQN.js"
+    "chunk-PYTBLAOA": {
+      "file": "chunk-PYTBLAOA.js"
     },
-    "chunk-QTVD6AVW": {
-      "file": "chunk-QTVD6AVW.js"
+    "chunk-JNQLSLE2": {
+      "file": "chunk-JNQLSLE2.js"
     },
     "chunk-5CMO42JT": {
       "file": "chunk-5CMO42JT.js"

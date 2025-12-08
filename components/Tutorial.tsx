@@ -1094,6 +1094,45 @@ export const Tutorial: React.FC<TutorialProps> = ({
 
   return (
     <>
+      {/* Highlight box animation styles */}
+      <style>{`
+        @keyframes highlight-appear {
+          0% {
+            opacity: 0;
+            transform: scale(0.8);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        @keyframes highlight-disappear {
+          0% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: scale(0.9);
+          }
+        }
+        @keyframes highlight-pulse {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.5), 0 0 20px rgba(96, 165, 250, 0.3);
+          }
+          50% {
+            box-shadow: 0 0 0 8px rgba(96, 165, 250, 0), 0 0 30px rgba(96, 165, 250, 0.5);
+          }
+        }
+        .highlight-box-enter {
+          animation: highlight-appear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+                     highlight-pulse 2s ease-in-out 0.4s infinite;
+        }
+        .highlight-box-exit {
+          animation: highlight-disappear 0.3s ease-out forwards;
+        }
+      `}</style>
+
       {/* Full-screen celebration overlay - outside main tutorial container */}
       <CelebrationOverlay 
         show={showCelebration && !celebrationFaded} 
@@ -1112,7 +1151,7 @@ export const Tutorial: React.FC<TutorialProps> = ({
         {highlightStyle && showOverlay && (
           <div
             className={`absolute border-2 border-blue-400 pointer-events-none ${isRoundHighlight ? '' : 'rounded-xl'} ${
-              contentVisible ? 'animate-highlight-appear animate-highlight-pulse' : 'animate-highlight-disappear'
+              contentVisible ? 'highlight-box-enter' : 'highlight-box-exit'
             }`}
             style={{
               top: highlightStyle.top,

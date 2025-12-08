@@ -106,7 +106,7 @@ const PlaceDetail: React.FC<PlaceDetailProps> = ({
     });
   };
 
-  // Drag Handlers
+  // Drag Handlers - improved for mobile
   const onTouchStart = (e: React.TouchEvent) => {
     startYRef.current = e.touches[0].clientY;
     setIsDragging(true);
@@ -117,18 +117,24 @@ const PlaceDetail: React.FC<PlaceDetailProps> = ({
     const currentY = e.touches[0].clientY;
     const diff = currentY - startYRef.current;
 
+    // Always allow dragging - prevent default to stop scroll interference
     if (e.cancelable) {
       e.preventDefault();
     }
 
-    if (!isExpanded && diff < 0) {
+    // When not expanded: allow drag up (negative) or down (positive)
+    // When expanded: only allow drag down (positive)
+    if (!isExpanded) {
+      // Not expanded - allow both directions
       setDragY(diff);
-    } else if (diff > 0) {
+    } else if (isExpanded && diff > 0) {
+      // Expanded - only allow dragging down
       setDragY(diff);
     }
   };
 
   const onTouchEnd = () => {
+    if (!isDragging) return;
     setIsDragging(false);
 
     const vibrate = (duration: number = 10) => {
@@ -137,33 +143,38 @@ const PlaceDetail: React.FC<PlaceDetailProps> = ({
       }
     };
 
+    // Swipe UP to expand (when not expanded and dragged up enough)
     if (!isExpanded && dragY < SWIPE_UP_THRESHOLD) {
       vibrate(15);
       setDragY(0);
-      setTimeout(() => {
-        setIsExpanding(true);
+      setIsExpanding(true);
+      requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setIsExpanded(true);
-            setTimeout(() => {
-              setIsExpanding(false);
-            }, MODAL_TRANSITION_DURATION);
-          });
+          setIsExpanded(true);
+          setTimeout(() => {
+            setIsExpanding(false);
+          }, MODAL_TRANSITION_DURATION);
         });
-      }, DRAG_RESET_DELAY);
+      });
     }
+    // Swipe DOWN to collapse (when expanded and dragged down enough)
     else if (isExpanded && dragY > SWIPE_DOWN_THRESHOLD) {
       vibrate(15);
       setDragY(0);
-      setIsExpanded(false);
-      setTimeout(() => {
-        setIsExpanding(false);
-      }, MODAL_TRANSITION_DURATION);
+      setIsExpanding(true);
+      requestAnimationFrame(() => {
+        setIsExpanded(false);
+        setTimeout(() => {
+          setIsExpanding(false);
+        }, MODAL_TRANSITION_DURATION);
+      });
     }
+    // Swipe DOWN to close (when not expanded and dragged down enough)
     else if (!isExpanded && dragY > SWIPE_DOWN_THRESHOLD) {
       vibrate(20);
-      setTimeout(() => handleClose('down'), 100);
+      handleClose('down');
     }
+    // Reset drag if threshold not met
     else {
       setDragY(0);
     }
@@ -312,16 +323,16 @@ const PlaceDetail: React.FC<PlaceDetailProps> = ({
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop - z-50 to be above header (z-30) and tutorial button (z-30) */}
       <div
-        className={`fixed inset-0 bg-black/50 z-10 transition-opacity duration-300 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
+        className={`fixed inset-0 bg-black/50 z-50 transition-opacity duration-300 ${isClosing ? 'opacity-0' : 'opacity-100'}`}
         onClick={() => handleClose('down')}
       />
 
-      {/* Floating Card Container */}
+      {/* Floating Card Container - z-[51] to be above backdrop */}
       <div
         className={`
-          fixed z-20
+          fixed z-[51]
           sm:h-full sm:top-0 sm:left-auto sm:right-0 sm:w-[400px] sm:rounded-none
           ${animationClass}
         `}
@@ -337,38 +348,71 @@ const PlaceDetail: React.FC<PlaceDetailProps> = ({
       >
         <div className="bg-gray-900 h-full flex flex-col rounded-3xl sm:rounded-none overflow-hidden border border-gray-700/50 sm:border-0 shadow-2xl">
           
-          {/* Mobile drag handle */}
+          {/* Photo Banner with drag handle - entire top section is draggable on mobile */}
           <div
-            className="sm:hidden py-3 cursor-grab active:cursor-grabbing"
+            className="relative sm:cursor-default cursor-grab active:cursor-grabbing touch-none select-none"
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
+            style={{ touchAction: 'none' }}
           >
-            <div className="w-10 h-1 bg-gray-600 rounded-full mx-auto" />
-          </div>
-
-          {/* Header with place info */}
-          <div className="px-4 pt-1 sm:pt-4 pb-3 border-b border-gray-700/50">
-            <div className="flex justify-between items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-bold text-white truncate">{place.name}</h2>
-                <p className="text-sm text-gray-400 truncate mt-0.5">{place.address}</p>
+            {/* Photo Background with fade effects */}
+            <div className="relative h-32 sm:h-40 overflow-hidden">
+              {/* Background Photo */}
+              {sortedVisits[0]?.photoDataUrl || sortedVisits[0]?.photos?.[0] ? (
+                <div 
+                  className="absolute inset-0 bg-cover bg-center"
+                  style={{ 
+                    backgroundImage: `url(${sortedVisits[0]?.photoDataUrl || sortedVisits[0]?.photos?.[0]})`,
+                  }}
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900" />
+              )}
+              
+              {/* Gradient overlays for fading effect */}
+              <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-gray-900/30" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent" />
+              
+              {/* Vignette effect */}
+              <div className="absolute inset-0" style={{ 
+                background: 'radial-gradient(ellipse at center, transparent 0%, rgba(17,24,39,0.4) 100%)' 
+              }} />
+              
+              {/* Mobile drag handle indicator */}
+              <div className="sm:hidden absolute top-3 left-1/2 -translate-x-1/2 z-10">
+                <div className={`w-10 h-1 rounded-full transition-all duration-150 ${isDragging ? 'bg-white/60 w-14' : 'bg-white/40'}`} />
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-2xl ${getGradeColor(avgGrade)} bg-gray-800 border border-gray-700`}>
+              
+              {/* Desktop close button */}
+              <button
+                onClick={() => handleClose()}
+                className="hidden sm:flex absolute top-3 right-3 p-2 bg-black/40 hover:bg-black/60 rounded-full text-white/80 hover:text-white transition z-10"
+              >
+                <X size={18} />
+              </button>
+              
+              {/* Grade badge */}
+              <div className="absolute top-3 right-3 sm:top-auto sm:bottom-4 sm:right-4 z-10">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-3xl ${getGradeColor(avgGrade)} bg-gray-900/80 backdrop-blur-sm border border-white/20 shadow-lg`}>
                   {avgGrade}
                 </div>
-                <button
-                  onClick={() => handleClose()}
-                  className="hidden sm:flex p-2 hover:bg-gray-700 rounded-full text-gray-400 hover:text-white transition"
-                >
-                  <X size={20} />
-                </button>
+              </div>
+              
+              {/* Place info at bottom of banner */}
+              <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
+                <h2 className="text-xl font-bold text-white drop-shadow-lg truncate pr-16">{place.name}</h2>
+                <p className="text-sm text-gray-300 truncate mt-0.5 drop-shadow flex items-center gap-1">
+                  <MapPin size={12} className="flex-shrink-0" />
+                  {place.address}
+                </p>
               </div>
             </div>
+          </div>
 
-            {/* Tabs */}
-            <div className="flex gap-1 mt-4 bg-gray-800/50 p-1 rounded-xl">
+          {/* Tabs - NOT part of drag area */}
+          <div className="px-4 py-2 border-b border-gray-700/50 bg-gray-900">
+            <div className="flex gap-1 bg-gray-800/50 p-1 rounded-xl">
               <button
                 onClick={() => setActiveTab('timeline')}
                 className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${
